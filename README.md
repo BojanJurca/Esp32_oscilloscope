@@ -8,7 +8,7 @@ ESP32 oscilloscope is build upon Esp32_web_ftp_telnet_server_template (https://g
 
 - **webServer** for HTTP and WS requests (oscilloscope uses WebSockets).
 
-- **ftpServer** for uploading oscilloscope.html to ESP32 (it uses SPIFSS file system).
+- **ftpServer** for uploading oscilloscope.html to ESP32 (it uses SPIFFS file system).
 
 ## Setup instructions
 
