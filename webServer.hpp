@@ -1,6 +1,6 @@
 /*
  * 
- * WebServer.hpp 
+ * webServer.hpp 
  * 
  *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
  * 
@@ -24,15 +24,35 @@
  *          - added webClient function,
  *            added basic support for web sockets
  *            May, 19, 2019, Bojan Jurca
+ *          - minor structural changes,
+ *            the use of dmesg
+ *            September 14, 2019, Bojan Jurca
+ *          - added webClientCallMAC function
+ *            September, 27, Bojan Jurca
+ *          - separation of httpHandler and wsHandler
+ *            October 30, 2019, Bojan Jurca
  *
  */
 
 #ifndef __WEB_SERVER__
   #define __WEB_SERVER__
 
-  #include "file_system.h"        // webServer.hpp needs file_system.h
-  #include "user_management.h"    // webServer.hpp needs user_management.h
-  #include "TcpServer.hpp"        // webServer.hpp is built upon TcpServer.hpp
+  // ----- includes, definitions and supporting functions -----
+
+  #include <WiFi.h>
+  #include "TcpServer.hpp"        // webServer.hpp is built upon TcpServer.hpp  
+  #include "user_management.h"    // webServer.hpp needs user_management.h to get www home directory
+  #include "file_system.h"        // webServer.hpp needs file_system.h to read files  from home directory
+  #include <esp_wifi.h>
+
+  void __webDmesg__ (String message) { 
+    #ifdef __TELNET_SERVER__ // use dmesg from telnet server if possible
+      dmesg (message);
+    #else
+      Serial.println (message); 
+    #endif
+  }
+  void (* webDmesg) (String) = __webDmesg__; // use this pointer to display / record system messages  
 
   // missing C function in Arduino, but we are going to need it
   char *stristr (char *haystack, char *needle) { 
@@ -93,19 +113,19 @@
                                                         // compose websocket accept reply and send it back to the client
                                                         char buffer  [255]; // this will do
                                                         sprintf (buffer, "HTTP/1.1 101 Switching Protocols \r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: %s\r\n\r\n", s3);
-                                                        if (connection->sendData (buffer, strlen (buffer))) {
+                                                        if (connection->sendData (buffer)) {
                                                           // Serial.printf ("[webSocket] connection confirmed\n");
                                                         } else {
-                                                          log_e ("[webSocket] couldn't send accept key back to browser\n");
+                                                          // log_e ("[webSocket] couldn't send accept key back to browser\n");
                                                         }
                                                       } else { // |key| > 24
-                                                        log_e ("[webSocket] key in wsRequest too long\n");
+                                                        // log_e ("[webSocket] key in wsRequest too long\n");
                                                       }
                                                     } else { // j == -1
-                                                      log_e ("[webSocket] key not found in weRequest\n");
+                                                      // log_e ("[webSocket] key not found in webRequest\n");
                                                     }
                                                   } else { // i == -1
-                                                    log_e ("[webSocket] key not found in weRequest\n");
+                                                    // log_e ("[webSocket] key not found in webRequest\n");
                                                   }
                                                   
                                                   // we won't do the checking if everythingg was sucessfull in constructor,
@@ -367,20 +387,23 @@ readingPayload:
   
     public:
   
-      webServer (String (* httpRequestHandler) (String httpRequest, WebSocket *webSocket),  // httpRequestHandler callback function provided by calling program
-                 unsigned int stackSize,                                                    // stack size of httpRequestHandler thread, usually 4 KB will do 
-                 char *serverIP,                                                            // web server IP address, 0.0.0.0 for all available IP addresses - 15 characters at most!
-                 int serverPort,                                                            // web server port
-                 bool (* firewallCallback) (char *)                                         // a reference to callback function that will be celled when new connection arrives 
+      webServer (String (* httpRequestHandler) (String httpRequest),                  // httpRequestHandler callback function provided by calling program
+                 void (* wsRequestHandler) (String wsRequest, WebSocket *webSocket),  // httpRequestHandler callback function provided by calling program      
+                 unsigned int stackSize,                                              // stack size of httpRequestHandler thread, usually 4 KB will do 
+                 char *serverIP,                                                      // web server IP address, 0.0.0.0 for all available IP addresses - 15 characters at most!
+                 int serverPort,                                                      // web server port
+                 bool (* firewallCallback) (char *)                                   // a reference to callback function that will be celled when new connection arrives 
                 )                               {
-                                                  char *p = getUserHomeDirectory ("webserver"); 
+                                                  this->__httpRequestHandler__ = httpRequestHandler;
+                                                  this->__wsRequestHandler__ = wsRequestHandler; 
+                                                  char homeDir [33];
+                                                  char *p = getUserHomeDirectory (homeDir, "webserver"); 
                                                   if (p && strlen (p) < sizeof (this->__webHomeDirectory__)) strcpy (this->__webHomeDirectory__, p);
                                                   
                                                   if (*this->__webHomeDirectory__) { 
-                                                  
                                                     // start TCP server
                                                     this->__tcpServer__ = new TcpServer ( __webConnectionHandler__, // worker function
-                                                                                          (void *) httpRequestHandler,       // tell TcpServer to pass reference callback function to __webConnectionHandler__
+                                                                                          this,                     // pass "this" pointer to static member function
                                                                                           stackSize,                // usually 4 KB will do for webConnectionHandler
                                                                                           5000,                     // close connection if inactive for more than 1,5 seconds
                                                                                           serverIP,                 // accept incomming connections on on specified addresses
@@ -390,11 +413,16 @@ readingPayload:
                                                   } else {
                                                     Serial.printf ("[web] home directory for webserver system account is not set\n");
                                                   }
-                                                  if (this->started ()) Serial.printf ("[web] server started\n");
-                                                  else                  Serial.printf ("[web] couldn't start web server\n");
+                                                  if (this->started ()) webDmesg ("[WEB] server started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
+                                                  else                  webDmesg ("[WEB] couldn't start web server.");
                                                 }
       
-      ~webServer ()                             { if (this->__tcpServer__) delete (this->__tcpServer__); }
+      ~webServer ()                             { 
+                                                  if (this->__tcpServer__) {
+                                                    webDmesg ("[WEB] server stopped.");
+                                                    delete (this->__tcpServer__); 
+                                                  }
+                                                }
       
       bool started ()                           { return this->__tcpServer__ && this->__tcpServer__->started (); } 
 
@@ -402,41 +430,42 @@ readingPayload:
 
     private:
 
-      char __webHomeDirectory__ [33] = {};                                // webServer system account home directory
-      TcpServer *__tcpServer__ = NULL;                                    // pointer to (threaded) TcpServer instance
-      
-  };
+      String (* __httpRequestHandler__) (String httpRequest);                 // httpRequestHandler callback function provided by calling program
+      void (* __wsRequestHandler__) (String wsRequest, WebSocket *webSocket); // wsRequestHandler callback function provided by calling program
+      char __webHomeDirectory__ [33] = {};                                    // webServer system account home directory
+      TcpServer *__tcpServer__ = NULL;                                        // pointer to (threaded) TcpServer instance
 
-      void __webConnectionHandler__ (TcpConnection *connection, void *httpRequestHandler) {  // connectionHandler callback function
-        log_v ("[Thread:%i][Core:%i] connection has started\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());  
+      static void __webConnectionHandler__ (TcpConnection *connection, void *thisWebServer) {  // connectionHandler callback function
+        webServer *ths = (webServer *) thisWebServer; // this is how you pass "this" pointer to static memeber function
+        // log_v ("[Thread:%i][Core:%i] connection has started\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());  
         char buffer [1024];  // make sure there is enough space for each type of use but be modest - this buffer uses thread stack
         int receivedTotal = buffer [0] = 0;
         while (int received = connection->recvData (buffer + receivedTotal, sizeof (buffer) - receivedTotal - 1)) { // this loop may not seem necessary but TCP protocol does not guarantee that a whole request arrives in a single data block althought it usually does
           buffer [receivedTotal += received] = 0; // mark the end of received request
           if (strstr (buffer, "\r\n\r\n")) { // is the end of HTTP request is reached?
-            log_v ("[Thread:%i][Core:%i] new request:\n%s", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), buffer);
+            // log_v ("[Thread:%i][Core:%i] new request:\n%s", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), buffer);
 
             // ----- make a String copy of http request -----
-            String httpRequest = String (buffer);
+            String request = String (buffer);
 
             // ----- first check if this is a websocket request -----
 
             if (stristr (buffer, "CONNECTION: UPGRADE")) {
               
               connection->setTimeOut (300000); // set time-out to 5 minutes fro WebSockets
-              WebSocket webSocket (connection, httpRequest); 
-              if (httpRequestHandler) ((String (*) (String, WebSocket *)) httpRequestHandler) (httpRequest, &webSocket);
+              WebSocket webSocket (connection, request); 
+              if (ths->__wsRequestHandler__) ths->__wsRequestHandler__ (request, &webSocket);
               goto closeWebConnection;
             }
 
             // ----- then ask httpRequestHandler (if it is provided by the calling program) if it is going to handle this HTTP request -----
 
-            log_v ("[Thread:%i][Core:%i] trying to get a reply from calling program\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+            // log_v ("[Thread:%i][Core:%i] trying to get a reply from calling program\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
             String httpReply;
-            unsigned long timeOutMillis = connection->getTimeOut (); connection->setTimeOut (TCP_SERVER_INFINITE_TIMEOUT); // disable time-out checking while proessing httpRequestHandler to allow longer processing times
-            if (httpRequestHandler && (httpReply = ((String (*) (String, WebSocket *)) httpRequestHandler) (httpRequest, NULL)) != "") {
+            unsigned long timeOutMillis = connection->getTimeOut (); connection->setTimeOut (TcpConnection::INFINITE); // disable time-out checking while proessing httpRequestHandler to allow longer processing times
+            if (ths->__httpRequestHandler__ && (httpReply = ths->__httpRequestHandler__ (request)) != "") {
               httpReply = "HTTP/1.0 200 OK\r\nContent-Type:text/html;\r\nCache-control:no-cache\r\nContent-Length:" + String (httpReply.length ()) + "\r\n\r\n" + httpReply; // add HTTP header
-              connection->sendData ((char *) httpReply.c_str (), httpReply.length ()); // send everything to the client
+              connection->sendData (httpReply); // send everything to the client
               connection->setTimeOut (timeOutMillis); // restore time-out checking before sending reply back to the client
               goto closeWebConnection;
             }
@@ -449,28 +478,29 @@ readingPayload:
             if (buffer == strstr (buffer, "GET ")) {
               char *p; if ((p = strstr (buffer + 4, " ")) && (p - buffer) < (sizeof (htmlFile) + 4)) memcpy (htmlFile, buffer + 4, p - buffer - 4);
               if (*htmlFile == '/') strcpy (htmlFile, htmlFile + 1); if (!*htmlFile) strcpy (htmlFile, "index.html");
-              if (p = getUserHomeDirectory ("webserver")) {
+              char homeDir [33];
+              if (p = getUserHomeDirectory (homeDir, "webserver")) {
                 if (strlen (p) + strlen (htmlFile) < sizeof (fullHtmlFilePath)) strcat (strcpy (fullHtmlFilePath, p), htmlFile);
                 
                 xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
                 
-                log_v ("[Thread:%i][Core:%i] trying to find file %s\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), fullHtmlFilePath);
+                // log_v ("[Thread:%i][Core:%i] trying to find file %s\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), fullHtmlFilePath);
                 File file;                
                 if ((bool) (file = SPIFFS.open (fullHtmlFilePath, FILE_READ))) {
                   if (!file.isDirectory ()) {
-                    log_v ("GET %s\n", fullHtmlFilePath);  
-                    char *buff = (char *) malloc (2048); // get 2 KB of memory from heap (not from the stack)
+                    // log_v ("GET %s\n", fullHtmlFilePath);  
+                    char *buff = (char *) malloc (4096); // get 4 KB of memory from heap (not from the stack)
                     if (buff) {
                       sprintf (buff, "HTTP/1.0 200 OK\r\nContent-Type:text/html;\r\nCache-control:no-cache\r\nContent-Length:%i\r\n\r\n", file.size ());
                       int i = strlen (buff);
                       while (file.available ()) {
                         *(buff + i++) = file.read ();
-                        if (i == 2048) { connection->sendData ((char *) buff, 2048); i = 0; }
+                        if (i == 4096) { connection->sendData ((char *) buff, 4096); i = 0; }
                       }
                       if (i) { connection->sendData ((char *) buff, i); }
                       free (buff);
                     } else {
-                      log_e ("[Thread:%i][Core:%i] malloc error\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                      // log_e ("[Thread:%i][Core:%i] malloc error\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                     }
                     file.close ();                    
                     
@@ -491,7 +521,7 @@ readingPayload:
             if (!strcmp (htmlFile, "index.html")) {
               sprintf (buffer + 200, "Please use FTP, loggin as webadmin / webadminpassword and upload *.html and *.png files found in Esp32_web_ftp_telnet_server_template package into webserver home directory.");
               sprintf (buffer, "HTTP/1.0 200 OK\r\nContent-Type:text/html;\r\nCache-control:no-cache\r\nContent-Length:%i\r\n\r\n%s", strlen (buffer + 200), buffer + 200);
-              connection->sendData (buffer, strlen (buffer));
+              connection->sendData (buffer);
               goto closeWebConnection;
             } 
 
@@ -500,18 +530,21 @@ reply404:
             // ----- 404 page not found reply -----
             
             #define response404 "HTTP/1.0 404 Not found\r\nContent-Type:text/html;\r\nContent-Length:20\r\n\r\nPage does not exist." // HTTP header and content
-            connection->sendData (response404, strlen (response404)); // send response
-            log_v ("response:\n%s\n", response404);   
+            connection->sendData (response404); // send response
+            // log_v ("response:\n%s\n", response404);   
             
           } // is the end of HTTP request is reached?
         }
       
       closeWebConnection:
-        log_v ("[Thread:%i][Core:%i] connection has ended\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());    
+        ;
+        // log_v ("[Thread:%i][Core:%i] connection has ended\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());    
       }
+      
+  };
 
 
-  // webClient function doesn't really belong to webServer, but it may come handy every now and then
+  // webClient function doesn't really belong to webServer, but it may came handy every now and then
   
   String webClient (char *serverIP, int serverPort, unsigned int timeOutMillis, String httpRequest) {
     char buffer [256]; *buffer = 0; // reserve some space to hold the response
@@ -522,7 +555,7 @@ reply404:
     // test if connection is established
     if (myConnection) {
       httpRequest += " \r\n\r\n"; // make sure HTTP request ends properly
-      int sendTotal = myConnection->sendData ((char *) httpRequest.c_str (), httpRequest.length ()); // send HTTP request
+      int sendTotal = myConnection->sendData (httpRequest); // send HTTP request
       // read response in a loop untill 0 bytes arrive - this is a sign that connection has ended 
       // if the response is short enough it will normally arrive in one data block although
       // TCP does not guarantee that it would
@@ -541,6 +574,37 @@ reply404:
       }
     }      
     return ""; // return String (buffer); // response arrived, it may evend be OK but it doesn't match content-length field
+  }
+
+  #define webClientCallIP webClient
+
+  // webClientCallMAC works like webClient with exception that it calls station connected to AP network interface by its 
+  // MAC address instead of IP (please note that only stations connected to AP are addressed this way and not the 
+  // devices that could be addressed by their MAC addresses through router - meaning through STA interface)
+  // since we do not have 100 % influence to which connecting MAC addresses which IP numbers are assigned
+  // this may be more reliable way to adress connected stations in some cases (for example if other ESPs connect
+  // to this ESP and you want to send a request to specitif ESP regardles which IP it has been assigned
+  // Thanks to: https://techtutorialsx.com/2019/09/22/esp32-arduino-soft-ap-obtaining-ip-address-of-connected-stations/
+
+  String MacAddressAsString (byte *MacAddress, byte addressLength);
+  
+  String webClientCallMAC (char *serverMAC, int serverPort, unsigned int timeOutMillis, String httpRequest) {
+    // first scan through a list of connected stations, then call webClient if MAC address and its corresponding IP is found
+    wifi_sta_list_t wifi_sta_list = {};
+    tcpip_adapter_sta_list_t adapter_sta_list = {};
+   
+    esp_wifi_ap_get_sta_list (&wifi_sta_list);
+    tcpip_adapter_get_sta_list (&wifi_sta_list, &adapter_sta_list);
+    for (int i = 0; i < adapter_sta_list.num; i++) {
+      tcpip_adapter_sta_info_t station = adapter_sta_list.sta [i];
+      if (!strcmp (serverMAC, (char *) (MacAddressAsString ((byte *) &station.mac, 6)).c_str ())) { // serverMAC found in adapter_sta_list
+        char ip [16];
+        strcpy (ip, ip4addr_ntoa (&(station.ip)));
+        // Serial.printf ("[webClient] connected device with MAC %s has IP %s\n", serverMAC, ip);
+        return webClientCallIP (ip, serverPort, timeOutMillis, httpRequest);
+      }
+    }
+    return ""; // serverMAC not found in adapter_sta_list
   }
 
 #endif

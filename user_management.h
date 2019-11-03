@@ -1,6 +1,6 @@
 /*
  * 
- * User_management.h 
+ * user_management.h 
  * 
  *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
  * 
@@ -17,63 +17,82 @@
  *          - added SPIFFSsemaphore to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
  *            simplified installation,
  *            April 13, 2019, Bojan Jurca
+ *          - fixed bug in getUserHomeDirectory - it got additional parameter homeDir
+ *            added functions userAdd and userDel
+ *            September 4th, Bojan Jurca
  *  
+ *  Unix user management references:
+ *          - https://www.cyberciti.biz/faq/understanding-etcpasswd-file-format/
+ *          - https://www.cyberciti.biz/faq/understanding-etcshadow-file/
+ *          
  */
- 
+
+
+// change this definition according to your needs
+
+#define NO_USER_MANAGEMENT                    1   // everyone is allowed to use FTP anf Telnet
+#define HARDCODED_USER_MANAGEMENT             2   // define user name nad password that will be hard coded into program
+#define UNIX_LIKE_USER_MANAGEMENT             3   // user names and passwords will be stored in UNIX like configuration files and checked by user_management.h functions
+
+#ifndef USER_MANAGEMENT
+  #define USER_MANAGEMENT                     UNIX_LIKE_USER_MANAGEMENT // one of the above
+#endif
 
 #ifndef __USER_MANAGEMENT__
   #define __USER_MANAGEMENT__
 
+  // ----- includes, definitions and supporting functions -----
 
-  // change this definitions according to your needs
-
-  #define NO_USER_MANAGEMENT                    1   // everyone is allowed to use FTP anf Telnet
-  #define HARDCODED_USER_MANAGEMENT             2   // define user name nad password that will be hard coded into program
-  #define UNIX_LIKE_USER_MANAGEMENT             3   // user name and password will be checked by user_management.h
-  // select one of the above login methods
-#ifndef USER_MANAGEMENT
-  #define USER_MANAGEMENT                       UNIX_LIKE_USER_MANAGEMENT // change to one of the above definitions as you wish
-#endif
+  #include <WiFi.h>
+  
 
   #if USER_MANAGEMENT == NO_USER_MANAGEMENT           // ----- NO_USER_MANAGEMENT -----
-  
+
+    // max 32 characters including terminating /
     #define USER_HOME_DIRECTORY "/"                                                 // (home direcotry for FTP and Telnet user) change according to your needs
     #define WEBSERVER_HOME_DIRECTORY "/var/www/html/"                               // (where .html files are located) change according to your needs
     #define TELNETSERVER_HOME_DIRECTORY "/var/telnet/"                              // (where telnet help file is located) change according to your needs
     
     void usersInitialization () {;}                                                 // don't need to initialize users in this mode, we are not going to use user name and password at all
     bool checkUserNameAndPassword (char *userName, char *password) { return true; } // everyone can logg in
-    char *getUserHomeDirectory (char *userName) { 
-                                                  if (!strcmp (userName, "webserver"))         return WEBSERVER_HOME_DIRECTORY;
-                                                  else if (!strcmp (userName, "telnetserver")) return TELNETSERVER_HOME_DIRECTORY;
-                                                  else                                         return USER_HOME_DIRECTORY;
-                                                }
+    // homeDir buffer must have at least 33 bytes
+    char *getUserHomeDirectory (char *homeDir, char *userName) { 
+                                                                 if (!strcmp (userName, "webserver"))         strcpy (homeDir, WEBSERVER_HOME_DIRECTORY);
+                                                                 else if (!strcmp (userName, "telnetserver")) strcpy (homeDir, TELNETSERVER_HOME_DIRECTORY);
+                                                                 else                                         strcpy (homeDir, USER_HOME_DIRECTORY);
+                                                                 return homeDir;
+                                                               }
   #endif  
 
   #if USER_MANAGEMENT == HARDCODED_USER_MANAGEMENT    // ----- HARDCODED_USER_MANAGEMENT -----
 
-#ifndef USERNAME
-    #define USERNAME "root"                           // change according to your needs
-#endif
-#ifndef PASSWORD
-    #define PASSWORD "rootpassword"                   // change according to your needs
-#endif
+    #ifndef USERNAME
+      #define USERNAME "root"                         // change according to your needs
+    #endif
+    #ifndef PASSWORD
+      #define PASSWORD "rootpassword"                 // change according to your needs
+    #endif
+    // max 32 characters including terminating /
     #define USER_HOME_DIRECTORY "/"                                                 // (home direcotry for FTP and Telnet user) change according to your needs
     #define WEBSERVER_HOME_DIRECTORY "/var/www/html/"                               // (where .html files are located) change according to your needs
     #define TELNETSERVER_HOME_DIRECTORY "/var/telnet/"                              // (where telnet help file is located) change according to your needs
     
     void usersInitialization () {;}                                                 // don't need to initialize users in this mode, we are not going to use user name and password at all
     bool checkUserNameAndPassword (char *userName, char *password) { return (!strcmp (userName, USERNAME) && !strcmp (password, PASSWORD)); }
-    char *getUserHomeDirectory (char *userName) { 
-                                                  if (!strcmp (userName, "webserver"))         return WEBSERVER_HOME_DIRECTORY;
-                                                  else if (!strcmp (userName, "telnetserver")) return TELNETSERVER_HOME_DIRECTORY;
-                                                  else                                         return USER_HOME_DIRECTORY;
-                                                }
+    // homeDir buffer must have at least 33 bytes
+    char *getUserHomeDirectory (char *homeDir, char *userName) { 
+                                                                 if (!strcmp (userName, "webserver"))         strcpy (homeDir, WEBSERVER_HOME_DIRECTORY);
+                                                                 else if (!strcmp (userName, "telnetserver")) strcpy (homeDir, TELNETSERVER_HOME_DIRECTORY);
+                                                                 else                                         strcpy (homeDir, USER_HOME_DIRECTORY);
+                                                                 return homeDir;
+                                                               }
   #endif
 
   #if USER_MANAGEMENT == UNIX_LIKE_USER_MANAGEMENT    // ----- UNIX_LIKE_USER_MANAGEMENT -----
   
-    #include "file_system.h"  // user_management.h needs file_system.h
+    #include "file_system.h"  // user_management.h needs file_system.h to read/store configuration files
+    #include "TcpServer.hpp"  // user_management.h needs SPIFFSsemaphore for SPIFFS file operations (already #included in file_system.h anyway) 
+    
     #include <mbedtls/md.h>   // needed to calculate hashed passwords
   
     static char *__sha256__ (char *clearText) { // converts clearText into 265 bit SHA, returns character representation in hexadecimal format of hash value
@@ -93,55 +112,36 @@
   
     void usersInitialization () {                                            // creates user management files with "root", "webadmin" and "webserver" users
                                                                              // only 3 fields are used: user name, hashed password and home directory
-      if (!SPIFFSmounted) { Serial.printf ("[user_management] can't manage users configuration files since file system is not mounted"); return; }
-      
-      File file;
-      bool fileExists;
-      
-      xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
 
-      // create /etc/passwd if it doesn't exist
+      String fileContent = "";
       
-      fileExists = (bool) (file = SPIFFS.open ("/etc/passwd", FILE_READ)) && !file.isDirectory ();
-      file.close (); 
-      if (!fileExists) {
-        Serial.printf ("[user_management] /etc/passwd does noes exist, creating new one ... ");
-        if (File file = SPIFFS.open ("/etc/passwd", FILE_WRITE)) { 
-          if (file.printf ("root:x:0:::/:\r\n") != 15)                     {file.close (); goto userInitializationError;}; // create "root" user with ID = 0 and home direcory = / (ID is not used, you can also skip it)
-          if (file.printf ("webserver::100:::/var/www/html/:\r\n") != 34)  {file.close (); goto userInitializationError;}; // create "webserver" user with ID = 100 and home directory /var/www/html/ (ID is not used, you can also skip it)
-          if (file.printf ("telnetserver::101:::/var/telnet/:\r\n") != 35) {file.close (); goto userInitializationError;}; // create "telnetserver" user with ID = 100 and home directory /var/tlnet/ (ID is not used, you can also skip it)
-          if (file.printf ("webadmin:x:1000:::/var/www/html/:\r\n") != 35) {file.close (); goto userInitializationError;}; // create "web-admin" user with ID = 1000 and home directory /var/www/html/
-          // add entries for each additional user (with ID >= 1000 to comply with UNIX but it doesn't really matter here)
-          file.close ();
-          Serial.printf ("created.\n");
-        } else {
-userInitializationError:          
-          Serial.printf ("error.\n");
-        }
+      // create /etc/passwd if it doesn't exist
+      readEntireFile (&fileContent, "/etc/passwd");
+      if (fileContent == "") {
+        Serial.printf ("[user_management] /etc/passwd does not exist or it is empty, creating a new one ... ");
+
+        fileContent = "root:x:0:::/:\r\n"
+                      "webserver::100:::/var/www/html/:\r\n"    // system user needed just to determine home directory
+                      "telnetserver::101:::/var/telnet/:\r\n"   // system user needed just to determine home directory
+                      "webadmin:x:1000:::/var/www/html/:\r\n";
+                      // TO DO: add additional users if needed
+
+        if (writeEntireFile (fileContent, "/etc/passwd")) Serial.printf ("created.\n");
+        else                                              Serial.printf ("error creating /etc/passwd.\n");
       }
 
       // create /etc/shadow if it doesn't exist
+      readEntireFile (&fileContent, "/etc/shadow");
+      if (fileContent == "") {
+        Serial.printf ("[user_management] /etc/shadow does not exist or it is empty, creating a new one ... ");
 
-      fileExists = (bool) (file = SPIFFS.open ("/etc/shadow", FILE_READ)) && !file.isDirectory ();
-      file.close (); 
-      if (!fileExists) {
-        Serial.printf ("[user_management] /etc/shadow does noes exist, creating new one ... ");
-        if (File file = SPIFFS.open ("/etc/shadow", FILE_WRITE)) { 
-          if (file.printf ("root:$5$%s:::::::\r\n", __sha256__ ("rootpassword")) != 81)         {file.close (); goto passwordInitializationError;}; // create "root" password_ <user>:$5$<sha_256 ("rootpassword")>
-          // webserver is a system account that doesn't need password
-          if (file.printf ("webadmin:$5$%s:::::::\r\n", __sha256__ ("webadminpassword")) != 85) {file.close (); goto passwordInitializationError;}; // create "webadmin" password_ <user>:$5$<sha_256 ("webadminpassword")> 
-          // TO DO: change "root" and "webadmin" password in the line above, add entries for additional users
-          // add entries for each additional user (with ID >= 1000 to comply with UNIX but it doesn't really matter here)
-          file.close ();
-          Serial.printf ("created.\n");
-        } else {
-passwordInitializationError:          
-          Serial.printf ("error.\n");
-        }
-      }      
+        fileContent = "root:$5$" + String (__sha256__ ("rootpassword")) + ":::::::\r\n"
+                      "webadmin:$5$" + String (__sha256__ ("webadminpassword")) + ":::::::\r\n";
+                      // TO DO: add additional users if needed or change default passwords
 
-      xSemaphoreGive (SPIFFSsemaphore);
- 
+        if (writeEntireFile (fileContent, "/etc/shadow")) Serial.printf ("created.\n");
+        else                                              Serial.printf ("error creating /etc/shadow.\n");        
+      }
     }
     
     bool checkUserNameAndPassword (char *userName, char *password) { // scan through /etc/shadow file for (user name, pasword) pair and return true if found
@@ -187,10 +187,13 @@ passwordInitializationError:
         return false;
       } // failure
     } 
-    
-    static char *getUserHomeDirectory (char *userName) { // scans through /etc/passwd file for userName and returns home direcory of the user or NULL if not found
-      static char homeDir [33]; *homeDir = 0; // SPIFFS_OBJ_NAME_LEN + 1
-      
+
+    // scans through /etc/passwd file for userName and returns home direcory of the user or NULL if not found
+    // homeDir buffer sholud have at least 33 bytes (31 for longest SPIFFS directory name and terminating 0 and 1 for closing /)
+    // SPIFFS_OBJ_NAME_LEN = 32
+    char *getUserHomeDirectory (char *homeDir, char *userName) { 
+      *homeDir = 0;
+
       xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
       
       File file;
@@ -202,7 +205,7 @@ passwordInitializationError:
             *q = 0;
             if (!strcmp (userName, line)) if (char *p = strchr (q + 1, ':')) if (q = strchr (p + 1, ':')) if (p = strchr (q + 1, ':')) if (q = strchr (p + 1, ':')) if (p = strchr (q + 1, ':')) {
               *p = 0;
-              if (strlen (q + 1) < sizeof (homeDir)) strcpy (homeDir, q + 1);
+              if (strlen (q + 1) < 31) strcpy (homeDir, q + 1);
             }
           }
           if (*homeDir) {
@@ -227,47 +230,174 @@ passwordInitializationError:
         return NULL;
       } // failure
     }
-
-    bool changeUserPassword (char *userName, char *newPassword) {
-      String s = "";
-      char c;
+    
+    bool passwd (String userName, String newPassword) {
+      // --- remove userName from /etc/shadow ---
+      String fileContent;
+      bool retVal = true;
       
-      xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
-      
-      File file;
-      if ((bool) (file = SPIFFS.open ("/etc/shadow", "r+")) && !file.isDirectory ()) {
-        while (file.available ()) if ((c = file.read ()) != '\r') s += String (c);
-        int i = s.indexOf (String (userName) + ":$5$");
-        if (i >= 0) { 
-          s = s.substring (0, i + strlen (userName) + 4) + String (__sha256__ (newPassword)) + s.substring (i + strlen (userName) + 68);
-          file.seek (0, SeekSet);
-          if (file.printf (s.c_str ()) != s.length ()) {
-            file.close ();
-            
-            xSemaphoreGive (SPIFFSsemaphore);
-            
-            return false;  
-          } else {
-            file.close ();
-            
-            xSemaphoreGive (SPIFFSsemaphore);
-            
-            return true;           
-          }          
-        } else {
-          file.close ();
-          
-          xSemaphoreGive (SPIFFSsemaphore);
-          
-          return false;
+      if (__readEntireFileWithoutSemaphore__ (&fileContent, "/etc/shadow")) {
+        fileContent.trim (); // just in case ...
+        char c; int l; 
+        while ((l = fileContent.length ()) && (c = fileContent.charAt (l - 1)) && (c == '\n' || c == '\r')) fileContent.remove (l - 1); // just in case ...
+        // Serial.println (fileContent);
+  
+        // --- find the line with userName in fileContent and replace it ---
+        int i = fileContent.indexOf (userName + ":"); // find userName
+        if (i == 0 || (i > 0 && fileContent.charAt (i - 1) == '\n')) { // userName found at i
+          int j = fileContent.indexOf ("\n", i); // find end of line
+          if (j > 0) fileContent = fileContent.substring (0, i) + userName + ":$5$" + String (__sha256__ ((char *) newPassword.c_str ())) + ":::::::\r\n" + fileContent.substring (j + 1) + "\r\n"; // end of line found
+          else       fileContent = fileContent.substring (0, i) + userName + ":$5$" + String (__sha256__ ((char *) newPassword.c_str ())) + ":::::::\r\n"; // end of line not found
+          // Serial.println (fileContent);
+  
+          if (!__writeEntireFileWithoutSemaphore__ (fileContent, "/etc/shadow")) { // writing a file wasn't successfull
+            Serial.printf ("[user_management] passwd: error writing /etc/shadow\n");
+            retVal = false;
+          }
+        } else { // userName not found in fileContent
+          Serial.printf ("[user_management] passwd: userName does not exist in /etc/shadow\n");
+          retVal = false;
         }
-      } else {
-        
-        xSemaphoreGive (SPIFFSsemaphore);
-        
-        Serial.printf ("[user_management] can't read /etc/shadow\n");
-        return false;
+      } else { // reading a file wasn't successfull
+        Serial.printf ("[user_management] passwd: error reading /etc/shadow\n");
+        retVal = false;
       }
+      // --- finished processing /etc/shadow ---
+      
+      return retVal;
+    }
+
+    // adds userName, userId, userHomeDirectory into /etc/passwd and /etc/shadow, returns success (it is possible that only the first insert is successfull which leaves database in an undefined state)
+    bool userAdd (String userName, String userId, String userHomeDirectory) {
+      String fileContent;
+      bool retVal = true;
+
+      xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
+
+      // --- add userName, userId and userHomeDirectory into /etc/passwd ---
+      if (__readEntireFileWithoutSemaphore__ (&fileContent, "/etc/passwd")) {
+        // Serial.println (fileContent);
+
+        // check if userName or userId already exist
+        int i = fileContent.indexOf (userName + ":");
+        if (!(i == 0 || (i > 0 && fileContent.charAt (i - 1) == '\n')) && fileContent.indexOf (":" + userId + ":") < 0) { // userName and userId not found
+          fileContent.trim (); // just in case ...
+          char c; int l; 
+          while ((l = fileContent.length ()) && (c = fileContent.charAt (l - 1)) && (c == '\n' || c == '\r')) fileContent.remove (l - 1); // just in case ...
+          fileContent += "\r\n" + String (userName) + ":x:" + String (userId) + ":::" + String (userHomeDirectory) + ":\r\n";
+          // Serial.println (fileContent);
+
+          if (!__writeEntireFileWithoutSemaphore__ (fileContent, "/etc/passwd")) { // writing a file wasn't successfull
+            Serial.printf ("[user_management] userAdd: error writing /etc/passwd\n");
+            retVal = false;
+          }
+
+            // --- add default password into /etc/shadow ---
+            if (__readEntireFileWithoutSemaphore__ (&fileContent, "/etc/shadow")) {
+              // Serial.println (fileContent);
+      
+              // chekc if userName already exist
+              int i = fileContent.indexOf (userName + ":");
+              if (!(i == 0 || (i > 0 && fileContent.charAt (i - 1) == '\n')) ) { // userName not found
+                fileContent.trim (); // just in case ...
+                char c; int l; 
+                while ((l = fileContent.length ()) && (c = fileContent.charAt (l - 1)) && (c == '\n' || c == '\r')) fileContent.remove (l - 1); // just in case ...
+                fileContent += "\r\n" + userName + ":$5$" + String (__sha256__ ("changeimmediatelly")) + ":::::::\r\n";
+                // Serial.println (fileContent);
+      
+                if (!__writeEntireFileWithoutSemaphore__ (fileContent, "/etc/shadow")) { // writing a file wasn't successfull
+                  Serial.printf ("[user_management] userAdd: error writing /etc/shadow\n");
+                  retVal = false;
+                }
+              } else {
+                Serial.printf ("[user_management] userAdd: userName already exist in /etc/shadow\n");
+                retVal = false;                      
+              }
+            } else { // reading a file wasn't successfull
+              Serial.printf ("[user_management] userAdd: error reading /etc/shadow\n");
+              retVal = false;
+            }
+            // --- finished processing /etc/shadow ---
+
+        } else {
+          Serial.printf ("[user_management] userAdd: userName or userId already exist in /etc/passwd\n");
+          retVal = false;                      
+        }
+      } else { // reading a file wasn't successfull
+        Serial.printf ("[user_management] userAdd: error reading /etc/passwd\n");
+        retVal = false;
+      }
+      // --- finished processing /etc/passwd ---
+      
+      xSemaphoreGive (SPIFFSsemaphore);
+      
+      return retVal;
+    }
+
+    // deletes userName from /etc/passwd and /etc/shadow, returns success (it is possible that only the first deletion is successfull which leaves database in an undefined state)
+    bool userDel (String userName) {
+      String fileContent;
+      bool retVal = true;
+
+      xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
+
+      // --- remove userName from /etc/passwd ---
+      if (__readEntireFileWithoutSemaphore__ (&fileContent, "/etc/passwd")) {
+        // Serial.println (fileContent);
+ 
+        // find the line with userName in fileContent and remove it
+        int i = fileContent.indexOf (userName + ":"); // find userName
+        if (i == 0 || (i > 0 && fileContent.charAt (i - 1) == '\n')) { // userName found at i
+          int j = fileContent.indexOf ("\n", i); // find end of line
+          if (j > 0) fileContent = fileContent.substring (0, i) + fileContent.substring (j + 1); // end of line found
+          else       fileContent = fileContent.substring (0, i); // end of line not found
+          // Serial.println (fileContent);
+
+          if (!__writeEntireFileWithoutSemaphore__ (fileContent, "/etc/passwd")) { // writing a file wasn't successfull
+            Serial.printf ("[user_management] userDel: error writing /etc/passwd\n");
+            retVal = false;            
+          } else {
+
+            // --- remove userName from /etc/shadow ---
+            if (__readEntireFileWithoutSemaphore__ (&fileContent, "/etc/shadow")) {
+              // Serial.println (fileContent);
+       
+              // --- find the line with userName in fileContent and remove it ---
+              int i = fileContent.indexOf (userName + ":"); // find userName
+              if (i == 0 || (i > 0 && fileContent.charAt (i - 1) == '\n')) { // userName found at i
+                int j = fileContent.indexOf ("\n", i); // find end of line
+                if (j > 0) fileContent = fileContent.substring (0, i) + fileContent.substring (j + 1); // end of line found
+                else       fileContent = fileContent.substring (0, i); // end of line not found
+                // Serial.println (fileContent);
+      
+                if (!__writeEntireFileWithoutSemaphore__ (fileContent, "/etc/shadow")) { // writing a file wasn't successfull
+                  Serial.printf ("[user_management] userDel: error writing /etc/shadow\n");
+                  retVal = false;
+                }
+              } else { // userName not found in fileContent
+                Serial.printf ("[user_management] userDel: userName does not exist in /etc/shadow\n");
+                retVal = false;
+              }
+            } else { // reading a file wasn't successfull
+              Serial.printf ("[user_management] userDel: error reading /etc/shadow\n");
+              retVal = false;
+            }
+            // --- finished processing /etc/shadow ---
+
+          }
+        } else { // userName not found in fileContent
+          Serial.printf ("[user_management] userDel: userName does not exist in /etc/passwd\n");
+          retVal = false;
+        }
+      } else { // reading a file wasn't successfull
+        Serial.printf ("[user_management] userDel: error reading /etc/passwd\n");
+        retVal = false;
+      }
+      // --- finished processing /etc/passwd ---
+      
+      xSemaphoreGive (SPIFFSsemaphore);
+      
+      return retVal;
     }
     
   #endif

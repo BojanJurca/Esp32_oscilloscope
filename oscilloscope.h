@@ -1,76 +1,23 @@
 /*
- *
- * Esp32_oscilloscope.ino
- *
- *  This file is part of Esp32_oscilloscope project: https://github.com/BojanJurca/Esp32_oscilloscope
- *  Esp32 oscilloscope is also fully included in Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
- *  
- *  Esp32 oscilloscope is built upon Esp32_web_ftp_telnet_server_template. As a stand-alone project it uses only those 
- *  parts of Esp32_web_ftp_telnet_server_template that are necessary to run Esp32 oscilloscope.
- *  
- *  Copy all files in the package into Esp32_oscilloscope directory, compile them with Arduino and run on ESP32.
- *   
+ * 
+ * Oscilloscope.h
+ * 
+ *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+ * 
  * History:
- *          - first release as a stand-alone project, 
- *            August 24, 2019, Bojan Jurca
- *  
+  *         - first release,
+ *            August, 14, 2019, Bojan Jurca
+ *          - oscilloscope structures and functions moved into separate file, 
+ *            October 2, 2019, Bojan Jurca
+ *            
  */
 
+
+// ----- includes, definitions and supporting functions -----
+
 #include <WiFi.h>
+#include "webServer.hpp"        // oscilloscope uses websockets defined in  webServer.hpp  
 
-// simplify the use of FTP server in this project by avoiding user management - anyone is alowed to use it
-#define USER_MANAGEMENT NO_USER_MANAGEMENT
-#include "user_management.h"
-
-// we'll need SPIFFS file system for storing uploaded oscilloscope.html  
-#include "file_system.h"
-
-// include FTP server - we'll need it for uploading oscilloscope.html to ESP32
-#include "ftpServer.hpp"
-ftpServer ftpSrv ("0.0.0.0",                  // start FTP server on all available ip addresses
-                  21,                         // controll connection FTP port
-                  NULL);                      // don't use firewall function for FTP server
-
-// include Web server - we'll need it to handle oscilloscope HTTP and WS requests
-#include "webServer.hpp"
-
-// HTTP and WS request handler function
-void runOscilloscope (WebSocket *webSocket);
-
-String httpRequestHandler (String httpRequest) {  
-  // handle HTTP protocol requests, return HTML or JSON text
-  // note that webServer handles HTTP requests to .html files by itself (in our case oscilloscope.html if uploaded into /var/www/html/ with FTP previously)
-  // so you don't have to handle this kind of requests yourself
-  
-  // example: 
-  // if (httpRequest.substring (0, 12) == "GET /upTime ") {  // return up-time in JSON format
-  //                                                        unsigned long l = micros ();
-  //                                                        return "{\"id\":\"esp32\",\"upTime\":\"" + String (l) + " sec\"}\r\n";
-  //                                                      }
-  // else
-
-  return ""; // HTTP request has not been handled by httpRequestHandler - let the webServer handle it itself
-}
-void wsRequestHandler (String wsRequest, WebSocket *webSocket) {  
-  // handle HTTP protocol requests, return HTML or JSON text
-  // note that webServer handles HTTP requests to .html files by itself (in our case oscilloscope.html if uploaded into /var/www/html/ with FTP previously)
-  // so you don't have to handle this kind of requests yourself
-  
-
-  // handle WS (WebSockets) protocol requests
-  if (wsRequest.substring (0, 21) == "GET /runOscilloscope " ) { // called from oscilloscope.html
-                                                                 runOscilloscope (webSocket);
-                                                               }
-}
-
-webServer webSrv (httpRequestHandler,         // a callback function that will handle HTTP request that are not handled by webServer itself
-                  wsRequestHandler,           // a callback function that will handle WS request
-                  4096,                       // 4 KB stack size is usually enough, it httpRequestHandler uses more stack increase this value until server is stabile
-                  "0.0.0.0",                  // start web server on all available ip addresses
-                  80,                         // HTTP port
-                  NULL);                      // don't use firewall function for web server
-
-// Oscilloscope ---------------------------------------------------------------------------------------------------
 
 typedef struct oscilloscopeSample {
    int16_t value;       // sample value read by analogRead or digialRead   
@@ -464,37 +411,4 @@ void runOscilloscope (WebSocket *webSocket) {
   while (oscilloscopeSharedMemory.senderIsRunning || oscilloscopeSharedMemory.readerIsRunning) SPIFFSsafeDelay (100); // check every 1/10 of secod
 
   return;
-}
-
-// setup (), loop () --------------------------------------------------------
-
-void setup () {  
-  Serial.begin (115200);
-  mountSPIFFS ();
-  // usersInitialization ();                             
-  listFilesOnFlashDrive ();
-
-  // TEST: pinMode (22, INPUT_PULLUP);
-
-  // connect to WiFi
-  Serial.print ("Connecting to WiFi "); 
-  WiFi.mode (WIFI_STA); 
-  WiFi.begin ("YOUR-STA-SSID", "YOUR-STA-PASSWORD"); // change YOUR-STA-SSID to your WiFi SSID here and YOUR-STA-PASSWORD to your WiFi password
-  for (int i = 0; i < 240; i++ ) { // try to connect for 4 minutes at most
-    if (WiFi.status () == WL_CONNECTED) {
-      Serial.printf (" connected\n");
-      Serial.print ("Got IP address: "); Serial.println (WiFi.localIP ());
-      return;
-    }
-    Serial.print (".");
-    SPIFFSsafeDelay (1000);
-  }
-  Serial.println ("\nUnable to connect to WiFi\n");
-}
-
-void loop () {
-  SPIFFSsafeDelay (1);  // instead of delay () 
-                        // don't use delay () in multi-threaded environment together with SPIFSS - see: 
-                        // https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template/issues/1
-                        
 }

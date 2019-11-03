@@ -16,6 +16,11 @@
  *            April 13, 2019, Bojan Jurca
  *          - introduction of FTP_FILE_TIME definition
  *            August, 25, 2019, Bojan Jurca
+ *          - minor structural changes,
+ *            the use of dmesg
+ *            September 14, 2019, Bojan Jurca
+ *          - replaced gmtime () function that returns ponter to static structure with reentrant solution
+ *            October 29, 2019, Bojan Jurca
  *  
  */
 
@@ -23,11 +28,14 @@
 #ifndef __FTP_SERVER__
   #define __FTP_SERVER__
 
-  // SPIFSS does not support file time attribute but we have to send something through FTP protocol. Any time will do.
-  // It could be 1566643632 for example or rtc.getLocalTime () if rtc is defined, ... 
-  #ifndef FTP_FILE_TIME
-    #define FTP_FILE_TIME 1566643632; // right the time I have written this line
-  #endif
+  #include <WiFi.h>
+  #include "TcpServer.hpp"        // FTP server.hpp is built upon TcpServer.hpp  
+  #include "real_time_clock.hpp"  // FTP server needs time to report file time (in ls), but it is always a fiction since SPIFFS doesn't record file creation time at all
+    #ifndef FTP_RTC                 // if not defined earlier define it now but it will only make code to compile, not to work properly
+      #define FTP_RTC __FTP_RTC__
+      real_time_clock FTP_RTC ("", "", "");
+    #endif
+  
 
   int __pasiveDataPort__ () {
     static portMUX_TYPE csFtpPasiveDataPort = portMUX_INITIALIZER_UNLOCKED;
@@ -38,12 +46,20 @@
     return pasiveDataPort;
   }
 
+  void __ftpDmesg__ (String message) { 
+    #ifdef __TELNET_SERVER__ // use dmesg from telnet server if possible
+      dmesg (message);
+    #else
+      Serial.println (message); 
+    #endif
+  }
+  void (* ftpDmesg) (String) = __ftpDmesg__; // use this pointer to display / record system messages
+
   #include "file_system.h"        // ftpServer.hpp needs file_system.h
   #include "user_management.h"    // ftpServer.hpp needs user_management.h
   #include "TcpServer.hpp"        // ftpServer.hpp is built upon TcpServer.hpp
 
-    void __ftpConnectionHandler__ (TcpConnection *connection, void *);
-  
+
   class ftpServer {                                             
   
     public:
@@ -55,31 +71,31 @@
                                                   // start TCP server
                                                   this->__tcpServer__ = new TcpServer ( __ftpConnectionHandler__, // worker function
                                                                                         NULL,                     // we don't need additional paramater for __ftpConnectionHandler__
-                                                                                        4096,                     // 4 KB stack is enough for ftpConnectionHandler
+                                                                                        8192,                     // 8 KB stack is enough for ftpConnectionHandler
                                                                                         300000,                   // close connection if inactive for more than 5 minutes
                                                                                         serverIP,                 // accept incomming connections on on specified addresses
                                                                                         serverPort,               // FTP port
                                                                                         firewallCallback);        // firewall callback function
 
-                                                  if (this->started ()) Serial.printf ("[FTP] server started\n");
-                                                  else                  Serial.printf ("[FTP] couldn't start FTP server\n");
+                                                  if (this->started ()) ftpDmesg ("[FTP] server started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
+                                                  else                  ftpDmesg ("[FTP] couldn't start FTP server.");
                                                 }
       
-      ~ftpServer ()                             { if (this->__tcpServer__) delete (this->__tcpServer__); }
+      ~ftpServer ()                             { 
+                                                  if (this->__tcpServer__) {
+                                                    ftpDmesg ("[FTP] server stopped.");
+                                                    delete (this->__tcpServer__); 
+                                                  }
+                                                }
       
       bool started ()                           { return this->__tcpServer__ && this->__tcpServer__->started (); } 
                                                      
     private:
 
-      TcpServer *__tcpServer__ = NULL;                                    // pointer to (threaded) TcpServer instance
-      
-  };
+      TcpServer *__tcpServer__ = NULL;
 
-
-      String __listFilesAsUnixDoes__ (char *directory);   
-
-      void __ftpConnectionHandler__ (TcpConnection *connection, void *notUsed) {  // connectionHandler callback function
-        log_i ("[Thread:%i][Core:%i] connection has started\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ()); 
+      static void __ftpConnectionHandler__ (TcpConnection *connection, void *notUsed) {  // connectionHandler callback function
+        // log_i ("[Thread:%i][Core:%i] connection has started\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ()); 
         char buffer [80];                   // make sure there is enough space for each type of use but be modest - this buffer uses thread stack
         TcpClient *activeDataClient = NULL; // non-threaded TCP client will be used for handling active data connections
         TcpServer *pasiveDataServer = NULL; // non-threaded TCP server will be used for handling pasive data connections
@@ -90,9 +106,9 @@
         File file;                          // define once here, will be used in several places of this function latter
   
         #if USER_MANAGEMENT == NO_USER_MANAGEMENT
-          if (!connection->sendData ("220-ESP32 FTP server - everyone is allowed to login\r\n220 \r\n", strlen ("220-ESP32 FTP server - everyone is allowed to login\r\n220 \r\n"))) goto closeFtpConnection;
+          if (!connection->sendData ("220-ESP32 FTP server - everyone is allowed to login\r\n220 \r\n")) goto closeFtpConnection;
         #else
-          if (!connection->sendData ("220-ESP32 FTP server - please login\r\n220 \r\n", strlen ("220-ESP32 FTP server - please login\r\n220 \r\n"))) goto closeFtpConnection;
+          if (!connection->sendData ("220-ESP32 FTP server - please login\r\n220 \r\n")) goto closeFtpConnection;
         #endif  
         
         while (true) { // read and process incomming commands in an endless loop
@@ -106,24 +122,26 @@
             if (!received) goto closeFtpConnection;
           } while (!(endOfCmd = strstr (buffer, "\r\n")));
           *endOfCmd = 0; // mark the end of received command
-          log_v ("[Thread:%lu][Core:%i] new command = %s\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), buffer);
+          // log_v ("[Thread:%lu][Core:%i] new command = %s\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), buffer);
           if (ftpParam = strstr (buffer, " ")) *ftpParam++ = 0; else ftpParam = endOfCmd; // mark the end of command and the beginning of parameter
           
           if (!strcmp        (ftpCmd, "USER")) {  // ---------- USER ----------
             
                 if (strlen (ftpParam) < sizeof (user)) strcpy (user, ftpParam); else *user = *homeDir = 0;
                 loggedIn = false;
-                connection->sendData ("331 enter password\r\n", strlen ("331 enter password\r\n"));
+                connection->sendData ("331 enter password\r\n");
           
           } else if (!strcmp (ftpCmd, "PASS")) {  // ---------- PASS ----------
             
-                if (checkUserNameAndPassword (user, ftpParam)) { char *p = getUserHomeDirectory (user); if (p && strlen (p) < sizeof (homeDir)) strcpy (homeDir, p); }
+                if (checkUserNameAndPassword (user, ftpParam)) getUserHomeDirectory (homeDir, user);
                 if (*homeDir) { 
                   loggedIn = true; 
+                  ftpDmesg ("[FTP] " + String (user) + " logged in.");
                   sprintf (buffer, "230 logged on, use \"/\" to refer to your home directory \"%s\"\r\n", homeDir);
-                  connection->sendData (buffer, strlen (buffer));
+                  connection->sendData (buffer);
                 } else { 
-                  connection->sendData ("530 user name or password incorrect\r\n", strlen ("530 user name or password incorrect\r\n")); 
+                  ftpDmesg ("[FTP] " + String (user) + " login attempt failed.");
+                  connection->sendData ("530 user name or password incorrect\r\n"); 
                 }
           
           } else if (!strcmp (ftpCmd, "CWD")) {   // ---------- CWD ----------          // "cd directory" command
@@ -131,31 +149,31 @@
                 if (!loggedIn) goto closeFtpConnection; // someone is not playing by the rules
                 if (!strcmp (ftpParam, "/")) {
                   sprintf (buffer, "250 current directory is \"/\" which referes to your home directory \"%s\"\r\n", homeDir);
-                  connection->sendData (buffer, strlen (buffer));
+                  connection->sendData (buffer);
                 } else {
-                  connection->sendData ("550 path not found\r\n", strlen ("550 path not found\r\n"));
+                  connection->sendData ("550 path not found\r\n");
                 }
           
           } else if (!strcmp (ftpCmd, "PWD")) {      // ---------- PWD ----------          // we have just one directory
             
                 if (!loggedIn) goto closeFtpConnection; // someone is not playing by the rules
                 sprintf (buffer, "257 use \"/\" to refer to your home directory \"%s\"\r\n", homeDir);
-                connection->sendData (buffer, strlen (buffer));
+                connection->sendData (buffer);
           
           } else if (!strcmp (ftpCmd, "TYPE")) {     // ---------- TYPE ----------         // just pretend we have done it
             
                 if (!loggedIn) goto closeFtpConnection; // someone is not playing by the rules
-                connection->sendData ("200 ok\r\n", strlen ("200 ok\r\n"));      
+                connection->sendData ("200 ok\r\n");      
           
           } else if (!strcmp (ftpCmd, "SYST")) {     // ---------- SYST ----------         // pretend this is a UNIX system
             
                 if (!loggedIn) goto closeFtpConnection; // someone is not playing by the rules
-                connection->sendData ("215 UNIX Type: L8\r\n", strlen ("215 UNIX Type: L8\r\n"));
+                connection->sendData ("215 UNIX Type: L8\r\n");
           
           } else if (!strcmp (ftpCmd, "SIZE")) {     // ---------- SIZE ----------      // just report 0, it will do
             
                 if (!loggedIn) goto closeFtpConnection; // someone is not playing by the rules
-                connection->sendData ("213 0\r\n", strlen ("213 0\r\n"));
+                connection->sendData ("213 0\r\n");
           
           } else if (!strcmp (ftpCmd, "PASV")) {     // ---------- PASV ----------      // switch to pasive mode, next command (NLST, LIST, RETR STOR) will follow shortly
             
@@ -168,9 +186,9 @@
                   p1 = pasiveDataPort / 256;
                           sprintf (reply, "227 entering passive mode (%i,%i,%i,%i,%i,%i)\r\n", ip1, ip2, ip3, ip4, p1, p2);
                   pasiveDataServer = new TcpServer (5000, connection->getThisSideIP (), pasiveDataPort, NULL); // open a new TCP server to accept pasive data connection
-                  connection->sendData (reply, strlen (reply)); // send reply
+                  connection->sendData (reply); // send reply
                 } else {
-                    connection->sendData ("425 can't open data connection\r\n", strlen ("425 can't open data connection\r\n"));
+                    connection->sendData ("425 can't open data connection\r\n");
                 }
           
           } else if (!strcmp (ftpCmd, "PORT")) {     // ---------- PORT ----------     // switch to active mode, next command (NLST, LIST, RETR STOR) will follow shortly
@@ -184,22 +202,62 @@
                   activeDataPort = 256 * p1 + p2;
                   activeDataClient = new TcpClient (activeDataIP, activeDataPort, 5000); // open a new TCP client for active data connection
                 } 
-                connection->sendData ("200 port ok\r\n", strlen ("200 port ok\r\n")); 
+                connection->sendData ("200 port ok\r\n"); 
           
           } else if (!strcmp (ftpCmd, "NLST") || !strcmp (ftpCmd, "LIST")) {  // ---------- LIST ---------- // "ls" or "dir" command requires ASCII mode data transfer to the client - the content is a list of file names
             
                 if (!loggedIn) goto closeFtpConnection; // someone is not playing by the rules
-                if (!connection->sendData ("150 starting transfer\r\n", strlen ("150 starting transfer\r\n"))) goto closeFtpConnection; 
-                  String s = __listFilesAsUnixDoes__ (homeDir);      
+                if (!connection->sendData ("150 starting transfer\r\n")) goto closeFtpConnection; 
+                  // list file as UNIX does
+                  String s = "";
+                  char d [33]; strcpy (d, homeDir); if (strlen (d) > 1 && *(d + strlen (d) - 1) == '/') *(d + strlen (d) - 1) = 0;
+                  xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
+                  File dir = SPIFFS.open (d);
+                  if (!dir) {
+                    // log_e ("failed to open directory %s\n", homeDir);
+                    s = "\r\n";
+                  } else {
+                    if (!dir.isDirectory ()) {
+                      // log_e ("%s is not a directory\n", homeDir);
+                      s = "\r\n";
+                    } else {
+                      File file = dir.openNextFile ();
+                      while (file) {
+                        if(!file.isDirectory ()) {
+                          char c [60];
+                          sprintf (c, "  %6i", file.size ());
+                          time_t rawNow;
+                          #ifdef FTP_FILE_TIME // backward compatibility
+                            rawNow = FTP_FILE_TIME; // SPIFFS does't record file time so this time is is a fiction
+                          #else
+                            if (FTP_RTC.isGmtTimeSet ())
+                              rawNow = FTP_RTC.getLocalTime (); // SPIFFS does't record file time so this time is is a fiction
+                            else
+                              rawNow = 1572387378; // right the time I'm writting this code, it is a fiction anyway
+                          #endif
+                          struct tm structNow = timeToStructTime (&rawNow);
+                          // char *month [12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dec"};
+                          // sprintf (c + strlen (c), " %s %02i %02i:%02i      ", month [structNow.tm_mon], structNow.tm_mday, structNow.tm_hour, structNow.tm_min);
+                          strftime (c + strlen (c), 25, " %b %d %H:%M      ", &structNow);
+                          s += String ("-r-xr-xrwx   1 owner    group        ") + String (c) + String (file.name ()) + "\r\n";
+                        }
+                        file = dir.openNextFile ();
+                      }
+                      if (s == "") s = "\r\n"; // we don't want to return empty string - it would make it harder to detect errors
+                    }
+                  }
+                  xSemaphoreGive (SPIFFSsemaphore);
+                  // s contains now UNIX like lsit of files in homeDir
+
                   int written = 0;
                   TcpConnection *dataConnection = NULL;
                   if (pasiveDataServer) while (!(dataConnection = pasiveDataServer->connection ()) && !pasiveDataServer->timeOut ()) SPIFFSsafeDelay (1); // wait until a connection arrives to non-threaded server or time-out occurs
                   if (activeDataClient) dataConnection = activeDataClient->connection (); // non-threaded client differs from non-threaded server - connection is established before constructor returns or not at all
-                  if (dataConnection) written = dataConnection->sendData ((char *) s.c_str (), s.length ());
+                  if (dataConnection) written = dataConnection->sendData (s);
                   if (activeDataClient) { delete (activeDataClient); activeDataClient = NULL; }
                   if (pasiveDataServer) { delete (pasiveDataServer); pasiveDataServer = NULL; }
-                if (written) connection->sendData ("226 transfer complete\r\n", strlen ("226 transfer complete\r\n"));
-                else         connection->sendData ("425 can't open data connection\r\n", strlen ("425 can't open data connection\r\n"));
+                if (written) connection->sendData ("226 transfer complete\r\n");
+                else         connection->sendData ("425 can't open data connection\r\n");
           
           } else if (!strcmp (ftpCmd, "XRMD")) {     // ---------- XRMD ----------     // "rm filename" command
             
@@ -213,14 +271,14 @@
                 
                 xSemaphoreGive (SPIFFSsemaphore);                
                 
-                connection->sendData (buffer, strlen (buffer));
+                connection->sendData (buffer);
           
           } else if (!strcmp (ftpCmd, "RETR")) {     // ---------- RETR ----------     // "get filename" command
             
                 if (!loggedIn) goto closeFtpConnection; // someone is not playing by the rules
                 if (*ftpParam == '/') ftpParam++; // trim possible prefix
                 int bytesWritten = -1; int bytesRead = 0;
-                if (!connection->sendData ("150 starting transfer\r\n", strlen ("150 starting transfer\r\n"))) goto closeFtpConnection; 
+                if (!connection->sendData ("150 starting transfer\r\n")) goto closeFtpConnection; 
                   TcpConnection *dataConnection = NULL;
                   if (pasiveDataServer) while (!(dataConnection = pasiveDataServer->connection ()) && !pasiveDataServer->timeOut ()) SPIFFSsafeDelay (1); // wait until a connection arrives to non-threaded server or time-out occurs
                   if (activeDataClient) dataConnection = activeDataClient->connection (); // non-threaded client differs from non-threaded server - connection is established before constructor returns or not at all
@@ -260,7 +318,7 @@
               if (!loggedIn) goto closeFtpConnection; // someone is not playing by the rules
                 if (*ftpParam == '/') ftpParam++; // trim possible prefix
                 int bytesRead = -1; int bytesWritten = 0;
-                if (!connection->sendData ("150 starting transfer\r\n", strlen ("150 starting transfer\r\n"))) goto closeFtpConnection; 
+                if (!connection->sendData ("150 starting transfer\r\n")) goto closeFtpConnection; 
                   TcpConnection *dataConnection = NULL;
                   if (pasiveDataServer) while (!(dataConnection = pasiveDataServer->connection ()) && !pasiveDataServer->timeOut ()) SPIFFSsafeDelay (1); // wait until a connection arrives to non-threaded server or time-out occurs
                   if (activeDataClient) dataConnection = activeDataClient->connection (); // non-threaded client differs from non-threaded server - connection is established before constructor returns or not at all
@@ -291,7 +349,7 @@
                   if (pasiveDataServer) { delete (pasiveDataServer); pasiveDataServer = NULL; }
                 if (bytesRead == bytesWritten) sprintf (buffer, "226 %s transfer complete\r\n", fileName);
                 else                           sprintf (buffer, "452 not enough space or other error\r\n");
-                connection->sendData (buffer, strlen (buffer));
+                connection->sendData (buffer);
           
           } else if (!strcmp (ftpCmd, "QUIT")) {     // ---------- QUIT ----------     // do not respond ...
             
@@ -300,50 +358,14 @@
                 goto closeFtpConnection;                                                // ... close control connection by returning
           
           } else {
-                connection->sendData ("220 unsupported command\r\n", strlen ("220 unsupported command\r\n"));
+                connection->sendData ("220 unsupported command\r\n");
           }
         }
       closeFtpConnection:
-        log_i ("[Thread:%i][Core:%i] connection has ended\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ()); 
+        // log_i ("[Thread:%i][Core:%i] connection has ended\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ()); 
+        if (loggedIn) ftpDmesg ("[FTP] " + String (user) + " logged out.");
       }
-
-      String __listFilesAsUnixDoes__ (char *directory) { // make a list of files as String reather than a character array, it will be easyer to handle
-        char d [33]; *d = 0; if (strlen (directory) < sizeof (d)) strcpy (d, directory); if (strlen (d) > 1 && *(d + strlen (d) - 1) == '/') *(d + strlen (d) - 1) = 0;
-        String s = "";
-        
-        xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
-        
-        File dir = SPIFFS.open (d);
-        if (!dir) {
-          log_e ("failed to open directory %s\n", directory);
-          
-          xSemaphoreGive (SPIFFSsemaphore);
-          
-          return "\r\n";
-        }
-        if (!dir.isDirectory ()) {
-          log_e ("%s is not a directory\n", directory);
-          
-          xSemaphoreGive (SPIFFSsemaphore);
-          
-          return "\r\n"; // we don't want to return empty string - it would make it harder to detect errors
-        }
-        File file = dir.openNextFile ();
-        while (file) {
-          if(!file.isDirectory ()) {
-            char c [60];
-            sprintf (c, "  %6i", file.size ());
-            time_t now = FTP_FILE_TIME; 
-            strftime (c + strlen (c), 25, " %b %d %H:%M      ", gmtime (&now)); // locatime is the same as gmtime since ESP is not aware of its location
-            s += String ("-r-xr-xrwx   1 owner    group        ") + String (c) + String (file.name ()) + String ("\r\n");
-          }
-          file = dir.openNextFile ();
-        }
-        if (s == "") s = String ("\r\n"); // we don't want to return empty string - it would make it harder to detect errors
-        
-        xSemaphoreGive (SPIFFSsemaphore);
-        
-        return s;
-      }  
+      
+  };
 
 #endif
