@@ -26,41 +26,58 @@
   #include <WiFi.h>
   #include <SPIFFS.h>  
   #include "TcpServer.hpp" // we'll need SPIFFSsemaphore defined in TcpServer.hpp 
-  
 
-  bool mountSPIFFS () {                                           // mount file system by calling this function
+
+  void __fileSystemDmesg__ (String message) { 
+    #ifdef __TELNET_SERVER__ // use dmesg from telnet server if possible
+      dmesg (message);
+    #else
+      Serial.println (message); 
+    #endif
+  }
+  void (* fileSystemDmesg) (String) = __fileSystemDmesg__; // use this pointer to display / record system messages
+
+  bool __fileSystemMounted__ = false;
+
+
+  bool mountSPIFFS (bool formatIfUnformatted) {                                           // mount file system by calling this function
     
     xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
 
     if (SPIFFS.begin (false)) {
       
       xSemaphoreGive (SPIFFSsemaphore);
-      
-      // Serial.printf ("[%10d] [file system] SPIFFS mounted.\n", millis ());
+
+      fileSystemDmesg ("[file system] SPIFFS mounted.");
+      __fileSystemMounted__ = true;
       return true;
     } else {
-      Serial.printf ("[%10d] [file system] formatting, please wait ... ", millis ()); 
-      if (SPIFFS.format ()) {
-        Serial.printf ("formatted\n");
-        if (SPIFFS.begin (false)) {
+      if (formatIfUnformatted) {
+        Serial.printf ("[%10d] [file system] formatting, please wait ...\n", millis ()); 
+        if (SPIFFS.format ()) {
+          fileSystemDmesg ("[file system] formatted.");
+          if (SPIFFS.begin (false)) {
           
-          xSemaphoreGive (SPIFFSsemaphore);
+            xSemaphoreGive (SPIFFSsemaphore);
           
-          // Serial.printf ("[%10d] [file system] SPIFFS mounted\n", millis ());
-          return true;
+            fileSystemDmesg ("[file system] SPIFFS mounted.");
+            return true;
+          } else {
+          
+            xSemaphoreGive (SPIFFSsemaphore);
+          
+            fileSystemDmesg ("[file system] SPIFFS failed to mount.");
+            return false;      
+          }
         } else {
-          
+        
           xSemaphoreGive (SPIFFSsemaphore);
-          
-          Serial.printf ("[%10d] [file system] SPIFFS mount failed\n", millis ());
-          return false;      
+        
+          fileSystemDmesg ("[file system] SPIFFS formatting failed.");
+          return false;
         }
       } else {
-        
-        xSemaphoreGive (SPIFFSsemaphore);
-        
-        Serial.printf ("[%10d] [file system] SPIFFS formatting failed\n", millis ());
-        return false;
+        fileSystemDmesg ("[file system] SPIFFS failed to mount.");
       }
     }
   }

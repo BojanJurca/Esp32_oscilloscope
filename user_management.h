@@ -118,7 +118,7 @@
       // create /etc/passwd if it doesn't exist
       readEntireFile (&fileContent, "/etc/passwd");
       if (fileContent == "") {
-        Serial.printf ("[user_management] /etc/passwd does not exist or it is empty, creating a new one ... ");
+        Serial.printf ("[%10d] [user_management] /etc/passwd does not exist or it is empty, creating a new one ... ", millis ());
 
         fileContent = "root:x:0:::/:\r\n"
                       "webserver::100:::/var/www/html/:\r\n"    // system user needed just to determine home directory
@@ -133,7 +133,7 @@
       // create /etc/shadow if it doesn't exist
       readEntireFile (&fileContent, "/etc/shadow");
       if (fileContent == "") {
-        Serial.printf ("[user_management] /etc/shadow does not exist or it is empty, creating a new one ... ");
+        Serial.printf ("[%10d] [user_management] /etc/shadow does not exist or it is empty, creating a new one ... ", millis ());
 
         fileContent = "root:$5$" + String (__sha256__ ("rootpassword")) + ":::::::\r\n"
                       "webadmin:$5$" + String (__sha256__ ("webadminpassword")) + ":::::::\r\n";
@@ -155,7 +155,7 @@
           if (*line < ' ') continue;
           char name [33]; char sha256Password [68];
           if (2 != sscanf (line, "%32s %67s", name, &sha256Password)) {
-            Serial.printf ("[user_management] bad format of /etc/shadow file\n"); 
+            Serial.printf ("[%10d] [user_management] bad format of /etc/shadow file\n", millis ()); 
             file.close (); 
 
             xSemaphoreGive (SPIFFSsemaphore);
@@ -183,7 +183,7 @@
         
         xSemaphoreGive (SPIFFSsemaphore);
         
-        Serial.printf ("[user_management] can't read /etc/shadow file\n"); 
+        Serial.printf ("[%10d] [user_management] can't read /etc/shadow file\n", millis ()); 
         return false;
       } // failure
     } 
@@ -223,7 +223,7 @@
         
         return NULL; // failure
       } else {
-        Serial.printf ("[user_management] can't read /etc/passwd\n"); 
+        Serial.printf ("[%10d] [user_management] can't read /etc/passwd\n", millis ()); 
         
         xSemaphoreGive (SPIFFSsemaphore);
         
@@ -251,15 +251,15 @@
           // Serial.println (fileContent);
   
           if (!__writeEntireFileWithoutSemaphore__ (fileContent, "/etc/shadow")) { // writing a file wasn't successfull
-            Serial.printf ("[user_management] passwd: error writing /etc/shadow\n");
+            Serial.printf ("[%10d] [user_management] passwd: error writing /etc/shadow\n", millis ());
             retVal = false;
           }
         } else { // userName not found in fileContent
-          Serial.printf ("[user_management] passwd: userName does not exist in /etc/shadow\n");
+          Serial.printf ("[%10d] [user_management] passwd: userName does not exist in /etc/shadow\n", millis ());
           retVal = false;
         }
       } else { // reading a file wasn't successfull
-        Serial.printf ("[user_management] passwd: error reading /etc/shadow\n");
+        Serial.printf ("[%10d] [user_management] passwd: error reading /etc/shadow\n", millis ());
         retVal = false;
       }
       // --- finished processing /etc/shadow ---
@@ -288,7 +288,7 @@
           // Serial.println (fileContent);
 
           if (!__writeEntireFileWithoutSemaphore__ (fileContent, "/etc/passwd")) { // writing a file wasn't successfull
-            Serial.printf ("[user_management] userAdd: error writing /etc/passwd\n");
+            Serial.printf ("[%10d] [user_management] userAdd: error writing /etc/passwd\n", millis ());
             retVal = false;
           }
 
@@ -306,25 +306,25 @@
                 // Serial.println (fileContent);
       
                 if (!__writeEntireFileWithoutSemaphore__ (fileContent, "/etc/shadow")) { // writing a file wasn't successfull
-                  Serial.printf ("[user_management] userAdd: error writing /etc/shadow\n");
+                  Serial.printf ("[%10d] [user_management] userAdd: error writing /etc/shadow\n", millis ());
                   retVal = false;
                 }
               } else {
-                Serial.printf ("[user_management] userAdd: userName already exist in /etc/shadow\n");
+                Serial.printf ("[%10d] [user_management] userAdd: userName already exist in /etc/shadow\n", millis ());
                 retVal = false;                      
               }
             } else { // reading a file wasn't successfull
-              Serial.printf ("[user_management] userAdd: error reading /etc/shadow\n");
+              Serial.printf ("[%10d] [user_management] userAdd: error reading /etc/shadow\n", millis ());
               retVal = false;
             }
             // --- finished processing /etc/shadow ---
 
         } else {
-          Serial.printf ("[user_management] userAdd: userName or userId already exist in /etc/passwd\n");
+          Serial.printf ("[%10d] [user_management] userAdd: userName or userId already exist in /etc/passwd\n", millis ());
           retVal = false;                      
         }
       } else { // reading a file wasn't successfull
-        Serial.printf ("[user_management] userAdd: error reading /etc/passwd\n");
+        Serial.printf ("[%10d] [user_management] userAdd: error reading /etc/passwd\n", millis ());
         retVal = false;
       }
       // --- finished processing /etc/passwd ---
@@ -354,7 +354,7 @@
           // Serial.println (fileContent);
 
           if (!__writeEntireFileWithoutSemaphore__ (fileContent, "/etc/passwd")) { // writing a file wasn't successfull
-            Serial.printf ("[user_management] userDel: error writing /etc/passwd\n");
+            Serial.printf ("[%10d] [user_management] userDel: error writing /etc/passwd\n", millis ());
             retVal = false;            
           } else {
 
@@ -371,26 +371,26 @@
                 // Serial.println (fileContent);
       
                 if (!__writeEntireFileWithoutSemaphore__ (fileContent, "/etc/shadow")) { // writing a file wasn't successfull
-                  Serial.printf ("[user_management] userDel: error writing /etc/shadow\n");
+                  Serial.printf ("[%10d] [user_management] userDel: error writing /etc/shadow\n", millis ());
                   retVal = false;
                 }
               } else { // userName not found in fileContent
-                Serial.printf ("[user_management] userDel: userName does not exist in /etc/shadow\n");
+                Serial.printf ("[%10d] [user_management] userDel: userName does not exist in /etc/shadow\n", millis ());
                 retVal = false;
               }
             } else { // reading a file wasn't successfull
-              Serial.printf ("[user_management] userDel: error reading /etc/shadow\n");
+              Serial.printf ("[%10d] [user_management] userDel: error reading /etc/shadow\n", millis ());
               retVal = false;
             }
             // --- finished processing /etc/shadow ---
 
           }
         } else { // userName not found in fileContent
-          Serial.printf ("[user_management] userDel: userName does not exist in /etc/passwd\n");
+          Serial.printf ("[%10d] [user_management] userDel: userName does not exist in /etc/passwd\n", millis ());
           retVal = false;
         }
       } else { // reading a file wasn't successfull
-        Serial.printf ("[user_management] userDel: error reading /etc/passwd\n");
+        Serial.printf ("[%10d] [user_management] userDel: error reading /etc/passwd\n", millis ());
         retVal = false;
       }
       // --- finished processing /etc/passwd ---

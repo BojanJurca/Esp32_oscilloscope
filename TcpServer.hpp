@@ -30,6 +30,9 @@
  *          - bug fixes (stopping the server) and minor improvements,
  *            minor structural changes
  *            September 14, 2019, Bojan Jurca
+ *          - increased BACKLOG from 5 to 16,
+ *            inet_ntoa replaced with thread-safe __inet_ntos__
+ *            December 27, 2019, Bojan Jurca
  *  
  */
 
@@ -55,12 +58,7 @@
       portMUX_TYPE csTcpConnectionInternalStructure = portMUX_INITIALIZER_UNLOCKED;
 
       // controll vTaskDelay - vTaskSuspendAll multi-threading problem while accessing SPIFFS file system (see https://www.esp32.com/viewtopic.php?t=7876)
-      SemaphoreHandle_t __createSPIFSSsemaphore__ () {
-        SemaphoreHandle_t s;
-        vSemaphoreCreateBinary (s);  
-        return s;
-      }
-      SemaphoreHandle_t SPIFFSsemaphore = __createSPIFSSsemaphore__ (); // create sempahore during initialization while ESP32 still runs in a single thread
+      SemaphoreHandle_t SPIFFSsemaphore = xSemaphoreCreateMutex ();
 
       void SPIFFSsafeDelay (unsigned int ms) { // use this function instead of delay ()
         unsigned int msStart = millis ();
@@ -76,6 +74,24 @@
         while (micros () - usStart < us);
       }
       
+      // thread-safe variant of inet_ntoa
+      String __inet_ntos__ (ip_addr_t addr) { // equivalent of inet_ntoa (struct in_addr addr) 
+                                              // inet_ntoa returns pointer to static string which may
+                                              // be a problem in multi-threaded environment
+        return String (*(((byte *) &addr) + 0)) + "." + 
+               String (*(((byte *) &addr) + 1)) + "." + 
+               String (*(((byte *) &addr) + 2)) + "." + 
+               String (*(((byte *) &addr) + 3));
+      }
+      String __inet_ntos__ (in_addr addr) { // equivalent of inet_ntoa (struct in_addr addr) 
+                                            // inet_ntoa returns pointer to static string which may
+                                            // be a problem in multi-threaded environment
+        return String (*(((byte *) &addr) + 0)) + "." + 
+               String (*(((byte *) &addr) + 1)) + "." + 
+               String (*(((byte *) &addr) + 2)) + "." + 
+               String (*(((byte *) &addr) + 3));
+      }
+
   
   class TcpConnection {                                             
   
@@ -169,7 +185,7 @@
                                                     *this->__thisSideIP__ = 0; // return empty string rather than NULL (error handling is easier - you can sscanf () from "" but not from NULL)
                                                   } else {
                                                     portENTER_CRITICAL (&csTcpConnectionInternalStructure);
-                                                      if (!*this->__thisSideIP__) strcpy (this->__thisSideIP__, inet_ntoa (thisAddress.sin_addr));
+                                                      if (!*this->__thisSideIP__) strcpy (this->__thisSideIP__, (char *) __inet_ntos__ (thisAddress.sin_addr).c_str ());
                                                     portEXIT_CRITICAL (&csTcpConnectionInternalStructure);
                                                   }
                                                   // port number can be found this way if needed: ntohs (thisAddress.sin_port);
@@ -512,7 +528,7 @@
                                                     //continue;
                                                   }
                                                   // mark socket as listening socket
-                                                  #define BACKLOG 5 // queue lengthe of (simultaneously) arrived connections - actual active connection number might me larger 
+                                                  #define BACKLOG 16 // queue lengthe of (simultaneously) arrived connections - actual active connection number might be larger 
                                                   if (listen (listenerSocket, BACKLOG) == -1) {
                                                     // log_e ("[Thread:%lu][Core:%i][Socket:%i] __listener__: listen () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), listenerSocket, errno);
                                                     goto terminateListener;                                                    
@@ -542,20 +558,20 @@
                                                     socklen_t connectingAddressSize = sizeof (connectingAddress);
                                                     connectionSocket = accept (listenerSocket, (struct sockaddr *) &connectingAddress, &connectingAddressSize);
                                                     if (connectionSocket != -1) { // non-blocking socket keeps returning -1 until new connection arrives
-                                                      // log_i ("[Thread:%lu][Core:%i][Socket:%i] __listener__: new connection from %s\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, inet_ntoa (connectingAddress.sin_addr));
-                                                      if (!ths->__callFirewallCallback__ (inet_ntoa (connectingAddress.sin_addr))) {
+                                                      // log_i ("[Thread:%lu][Core:%i][Socket:%i] __listener__: new connection from %s\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, (char *) __inet_ntos__ (connectingAddress.sin_addr).c_str ()); 
+                                                      if (!ths->__callFirewallCallback__ ((char *) __inet_ntos__ (connectingAddress.sin_addr).c_str ())) {
                                                         close (connectionSocket);
-                                                        // log_e ("[Thread:%lu][Core:%i][Socket:%i] __listener__: %s was rejected by firewall\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, inet_ntoa (connectingAddress.sin_addr));
+                                                        // log_e ("[Thread:%lu][Core:%i][Socket:%i] __listener__: %s was rejected by firewall\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, (char *) __inet_ntos__ (connectingAddress.sin_addr).c_str ());
                                                         continue;
                                                       } else {
-                                                        // log_i ("[Thread:%lu][Core:%i][Socket:%i] __listener__: firewall let %s through\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, inet_ntoa (connectingAddress.sin_addr));
+                                                        // log_i ("[Thread:%lu][Core:%i][Socket:%i] __listener__: firewall let %s through\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, (char *) __inet_ntos__ (connectingAddress.sin_addr).c_str ());
                                                       }
                                                       if (fcntl (connectionSocket, F_SETFL, O_NONBLOCK) == -1) {
                                                         // log_e ("[Thread:%lu][Core:%i][Socket:%i] __listener__: connection socket fcntl () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, errno);
                                                         close (connectionSocket);
                                                         continue;
                                                       }
-                                                      ths->__newConnection__ (connectionSocket, inet_ntoa (connectingAddress.sin_addr));
+                                                      ths->__newConnection__ (connectionSocket, (char *) __inet_ntos__ (connectingAddress.sin_addr).c_str ());
                                                       if (!ths->__threadedMode__ ()) goto terminateListener; // in non-threaded mode server only accepts one connection
                                                     } // new connection
                                                   } // handle incomming connections

@@ -28,14 +28,11 @@
 #ifndef __FTP_SERVER__
   #define __FTP_SERVER__
 
+  #ifndef HOSTNAME
+    #define HOSTNAME WiFi.getHostname() // use default if not defined
+  #endif
+
   #include <WiFi.h>
-  #include "TcpServer.hpp"        // FTP server.hpp is built upon TcpServer.hpp  
-  #include "real_time_clock.hpp"  // FTP server needs time to report file time (in ls), but it is always a fiction since SPIFFS doesn't record file creation time at all
-    #ifndef FTP_RTC                 // if not defined earlier define it now but it will only make code to compile, not to work properly
-      #define FTP_RTC __FTP_RTC__
-      real_time_clock FTP_RTC ("", "", "");
-    #endif
-  
 
   int __pasiveDataPort__ () {
     static portMUX_TYPE csFtpPasiveDataPort = portMUX_INITIALIZER_UNLOCKED;
@@ -55,9 +52,14 @@
   }
   void (* ftpDmesg) (String) = __ftpDmesg__; // use this pointer to display / record system messages
 
+  #include "TcpServer.hpp"        // FTP server.hpp is built upon TcpServer.hpp  
+  #include "real_time_clock.hpp"  // FTP server needs time to report file time (in ls), but it is always a fiction since SPIFFS doesn't record file creation time at all
+    #ifndef FTP_RTC                 // if not defined earlier define it now but it will only make code to compile, not to work properly
+      real_time_clock __FTP_RTC__ ("", "", "");
+      #define FTP_RTC __FTP_RTC__
+    #endif
   #include "file_system.h"        // ftpServer.hpp needs file_system.h
   #include "user_management.h"    // ftpServer.hpp needs user_management.h
-  #include "TcpServer.hpp"        // ftpServer.hpp is built upon TcpServer.hpp
 
 
   class ftpServer {                                             
@@ -96,7 +98,7 @@
 
       static void __ftpConnectionHandler__ (TcpConnection *connection, void *notUsed) {  // connectionHandler callback function
         // log_i ("[Thread:%i][Core:%i] connection has started\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ()); 
-        char buffer [80];                   // make sure there is enough space for each type of use but be modest - this buffer uses thread stack
+        char buffer [160];                  // make sure there is enough space for each type of use but be modest - this buffer uses thread stack
         TcpClient *activeDataClient = NULL; // non-threaded TCP client will be used for handling active data connections
         TcpServer *pasiveDataServer = NULL; // non-threaded TCP server will be used for handling pasive data connections
         char user [33]; *user = 0;          // store the name of the user that has logged in here 
@@ -104,11 +106,17 @@
         char homeDir [33]; *homeDir = 0;    // store home directory of the user that has logged in here
         char fileName [33];                 // define once here, will be used in several places of this function latter
         File file;                          // define once here, will be used in several places of this function latter
+
+        if (!__fileSystemMounted__) {
+          connection->sendData ("220-" + String (HOSTNAME) + " SPIFFS file system not mounted. You may have to use telnet and mkfs.spiffs to format flash disk first.");
+          goto closeFtpConnection;
+          return;
+        }
   
         #if USER_MANAGEMENT == NO_USER_MANAGEMENT
-          if (!connection->sendData ("220-ESP32 FTP server - everyone is allowed to login\r\n220 \r\n")) goto closeFtpConnection;
+          if (!connection->sendData ("220-" + String (HOSTNAME) + " FTP server - everyone is allowed to login\r\n220 \r\n")) goto closeFtpConnection;
         #else
-          if (!connection->sendData ("220-ESP32 FTP server - please login\r\n220 \r\n")) goto closeFtpConnection;
+          if (!connection->sendData ("220-" + String (HOSTNAME) + " FTP server - please login\r\n220 \r\n")) goto closeFtpConnection;
         #endif  
         
         while (true) { // read and process incomming commands in an endless loop
@@ -137,7 +145,7 @@
                 if (*homeDir) { 
                   loggedIn = true; 
                   ftpDmesg ("[FTP] " + String (user) + " logged in.");
-                  sprintf (buffer, "230 logged on, use \"/\" to refer to your home directory \"%s\"\r\n", homeDir);
+                  sprintf (buffer, "230 logged on, use \"/\" to refer to your home directory \"%s\", cd command is not supported\r\n", homeDir);
                   connection->sendData (buffer);
                 } else { 
                   ftpDmesg ("[FTP] " + String (user) + " login attempt failed.");
@@ -157,7 +165,7 @@
           } else if (!strcmp (ftpCmd, "PWD")) {      // ---------- PWD ----------          // we have just one directory
             
                 if (!loggedIn) goto closeFtpConnection; // someone is not playing by the rules
-                sprintf (buffer, "257 use \"/\" to refer to your home directory \"%s\"\r\n", homeDir);
+                sprintf (buffer, "257 use \"/\" to refer to your home directory \"%s\", cd command is not supported\r\n", homeDir);
                 connection->sendData (buffer);
           
           } else if (!strcmp (ftpCmd, "TYPE")) {     // ---------- TYPE ----------         // just pretend we have done it
