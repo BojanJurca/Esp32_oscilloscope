@@ -28,6 +28,8 @@
  *          - added support for ESP REST time servers,
  *            added awareness of timing preserved during ESP32 deep sleep
  *            November 10, 2019, Bojan Jurca
+ *          - elimination of compiler warnings and some bugs
+ *            Jun 10, 2020, Bojan Jurca     
  *  
  */
 
@@ -124,13 +126,13 @@
   #define RTC_NTP_TIME_OUT 100    // number of milliseconds we are going to wait for NTP reply - it the number is too large the time will be less accurate
   #define RTC_REST_TIME_OUT 1100  // number of milliseconds we are going to wait for REST reply - it the number is too large the time will be less accurate but it has to be longer tha  1 s
   #define RTC_RETRY_TIME 15000    // number of milliseconds between NTP request retries before it succeds, 15000 = 15 s
-  #define RTC_SYNC_TIME 604800000 // number of milliseconds between NTP synchronizations, 7 days (86400000 = 1 day)
+  #define RTC_SYNC_TIME 86400000  // number of milliseconds between NTP synchronizations, 86400000 s = 1 day
 
   void __rtcDmesg__ (String message) { 
     #ifdef __TELNET_SERVER__ // use dmesg from telnet server if possible
       dmesg (message);
     #else
-      Serial.println (message); 
+      Serial.printf ("[%10lu] %s\n", millis (), message.c_str ()); 
     #endif
   }
   void (* rtcDmesg) (String) = __rtcDmesg__; // use this pointer to display / record system messages
@@ -221,14 +223,14 @@
       now = gmt + 3600; // GMT + 1
       // check if now is inside DST interval
       struct tm nowStr = timeToStructTime (&now);
-      if (nowStr.tm_mon > 2 || nowStr.tm_mon == 2                                         // April .. December || March 
-                                && nowStr.tm_mday - nowStr.tm_wday >= 23                  //                      && last Sunday or latter
-                                   && (nowStr.tm_wday > 0 || nowStr.tm_wday == 0          //                      && Monday .. Saturday || Sunday
-                                                              && nowStr.tm_hour >= 2))     //                                               && GMT + 1 == 2 or more
-        if (!(nowStr.tm_mon > 9 || nowStr.tm_mon == 9                                       // NOT November .. December || October 
-                                    && nowStr.tm_mday - nowStr.tm_wday >= 23                //                             && last Sunday or latter
-                                       && (nowStr.tm_wday > 0 || nowStr.tm_wday == 0        //                             && Monday .. Saturday || Sunday
-                                                                  && nowStr.tm_hour >= 2)))  //                                                      && GMT + 1 == 2 or more
+      if (nowStr.tm_mon > 2 || (nowStr.tm_mon == 2                                                               // April .. December || March 
+                                && nowStr.tm_mday - nowStr.tm_wday >= 23                                         //                      && last Sunday or latter
+                                   && (nowStr.tm_wday > 0 || (nowStr.tm_wday == 0 && nowStr.tm_hour >= 2))))     //                      && Monday .. Saturday || Sunday && GMT + 1 == 2 or more
+                                                                                                                              
+        if (!(nowStr.tm_mon > 9 || (nowStr.tm_mon == 9                                                             // NOT November .. December || October 
+                                    && nowStr.tm_mday - nowStr.tm_wday >= 23                                       //                             && last Sunday or latter
+                                       && (nowStr.tm_wday > 0 || (nowStr.tm_wday == 0 && nowStr.tm_hour >= 2)))))  //                             && Monday .. Saturday || Sunday && GMT + 1 == 2 or more
+                                                                    
           now += 3600; // DST -> GMT + 2
     #endif
     #if TIMEZONE == EET_TIMEZONE 
@@ -286,14 +288,12 @@
       now = gmt - 5 * 3600; // GMT - 5
       // check if now is inside DST interval
       struct tm nowStr = timeToStructTime (&now);
-      if (nowStr.tm_mon > 2 || nowStr.tm_mon == 2                                         // April .. December || March 
-                                && nowStr.tm_mday - nowStr.tm_wday >= 8                   //                      && second Sunday or latter
-                                   && (nowStr.tm_wday > 0 || nowStr.tm_wday == 0          //                      && Monday .. Saturday || Sunday
-                                                              && nowStr.tm_hour >= 2))     //                                               && GMT - 5 == 2 or more
-        if (!(nowStr.tm_mon > 10 || nowStr.tm_mon == 10                                     // NOT December || November 
-                                    && nowStr.tm_mday - nowStr.tm_wday >= 1                 //                 && first Sunday or latter
-                                       && (nowStr.tm_wday > 0 || nowStr.tm_wday == 0        //                 && Monday .. Saturday || Sunday
-                                                                  && nowStr.tm_hour >= 1)))  //                                          && GMT - 5 == 1 or more (equals GMT - 4 == 2 or more)
+      if (nowStr.tm_mon > 2 || (nowStr.tm_mon == 2                                                                // April .. December || March 
+                                && nowStr.tm_mday - nowStr.tm_wday >= 8                                           //                      && second Sunday or latter
+                                   && (nowStr.tm_wday > 0 || (nowStr.tm_wday == 0 && nowStr.tm_hour >= 2))))      //                      && Monday .. Saturday || Sunday && GMT - 5 == 2 or more                                      
+        if (!(nowStr.tm_mon > 10 || (nowStr.tm_mon == 10                                                          // NOT December || November 
+                                     && nowStr.tm_mday - nowStr.tm_wday >= 1                                      //                 && first Sunday or latter
+                                       && (nowStr.tm_wday > 0 || (nowStr.tm_wday == 0 && nowStr.tm_hour >= 1))))) //                 && Monday .. Saturday || Sunday && GMT - 5 == 1 or more (equals GMT - 4 == 2 or more)                                      
           now += 3600; // DST -> GMT - 4
     #endif
     #if TIMEZONE == EASTERN_NO_DST_TIMEZONE 
@@ -436,9 +436,9 @@
                                                       this->__state__ = real_time_clock::WAITING_FOR_NTP_SYNC;
                                                     }; 
 
-      real_time_clock (IPAddress espRESTtimeServerIP,               // IP of another ESP time server that this ESP is going to sync with (like IPAddress (1, 0, 0, 4))
-                       byte espRESTtimeServerPort = 80,             // second NTP server name if the first one is not accessible (like 80)
-                       char *espRESTtimeServerURL = "/currentTime") // httpRequest fro current time (like /currentTime)
+      real_time_clock (IPAddress espRESTtimeServerIP,                         // IP of another ESP time server that this ESP is going to sync with (like IPAddress (1, 0, 0, 4))
+                       byte espRESTtimeServerPort = 80,                       // second NTP server name if the first one is not accessible (like 80)
+                       char *espRESTtimeServerURL = (char *) "/currentTime")  // httpRequest for current time (like /currentTime)
                        
                                                     { // constructor
                                                       // copy parameters into internal structure for latter use
@@ -477,7 +477,7 @@
                                                         this->__espStartupTime__ = newTime.tv_sec - millis () / 1000;
                                                         newTime.tv_sec = this->getLocalTime ();
                                                         rtcDmesg ("[RTC] local time (according to TIMEZONE definition): " + timeToString (newLocalTime) + ".");
-                                                        Serial.printf ("[%10d] [RTC] if your local time is different change TIMEZONE definition or modify timeToLocalTime () function for your country and location.\n", millis ());
+                                                        Serial.printf ("[%10lu] [RTC] if your local time is different change TIMEZONE definition or modify timeToLocalTime () function for your country and location.\n", millis ());
                                                       } else {
                                                         rtcDmesg ("[RTC] time corrected for: " + String (newTime.tv_sec - oldTime.tv_sec) + " s. New local time (according to TIMEZONE definition): " + timeToString (newLocalTime) + ".");
                                                       }
@@ -538,7 +538,6 @@
                                                       
                                                       switch (this->__state__) {
                                                         case real_time_clock::WAITING_FOR_NTP_SYNC:
-
 
                                                                 if ((this->__gmtTimeIsSet__ && millis () - this->__lastSyncMillis__ > RTC_SYNC_TIME) // time already set, synchronize every RTC_SYNC_TIME
                                                                     ||
@@ -624,47 +623,46 @@
           
                                                         case real_time_clock::WAITING_FOR_NTP_REPLY:
                                                                 
-                                                                // wait for NTP reply or time-out
-                                                                if (millis () - this->__requestMillis__ > RTC_NTP_TIME_OUT) { // time-out, stop waiting for reply
-                                                                  this->__udp__.stop ();
-                                                                  rtcDmesg ("[RTC] NTP time-out.");
+                                                                { // wait for NTP reply or time-out
+                                                                  if (millis () - this->__requestMillis__ > RTC_NTP_TIME_OUT) { // time-out, stop waiting for reply
+                                                                    this->__udp__.stop ();
+                                                                    rtcDmesg ("[RTC] NTP time-out.");
+                                                                    this->__state__ = real_time_clock::WAITING_FOR_NTP_SYNC;
+                                                                    return;
+                                                                  }
+                                                                  if (this->__udp__.parsePacket () != sizeof (this->__ntpPacket__)) return; // keep waiting for reply
+                                                                  // change state although we are not sure yet that reply is OK
                                                                   this->__state__ = real_time_clock::WAITING_FOR_NTP_SYNC;
-                                                                  return;
-                                                                }
-                                                                
-                                                                if (this->__udp__.parsePacket () != sizeof (this->__ntpPacket__)) return; // keep waiting for reply
-                                                                
-                                                                // change state although we are not sure yet that reply is OK
-                                                                this->__state__ = real_time_clock::WAITING_FOR_NTP_SYNC;
-                                                                // read NTP response back into the same packet we used for NTP request (different bytes are used for request and reply)
-                                                                this->__udp__.read (this->__ntpPacket__, sizeof (this->__ntpPacket__));
-                                                                if (!this->__ntpPacket__ [40] && !this->__ntpPacket__ [41] && !this->__ntpPacket__ [42] && !this->__ntpPacket__ [43]) { // sometimes we get empty response which is invalid
+                                                                  // read NTP response back into the same packet we used for NTP request (different bytes are used for request and reply)
+                                                                  this->__udp__.read (this->__ntpPacket__, sizeof (this->__ntpPacket__));
+                                                                  if (!this->__ntpPacket__ [40] && !this->__ntpPacket__ [41] && !this->__ntpPacket__ [42] && !this->__ntpPacket__ [43]) { // sometimes we get empty response which is invalid
+                                                                    this->__udp__.stop ();
+                                                                    rtcDmesg ("[RTC] got invalid NTP response.");
+                                                                    return;
+                                                                  }
+                                                                  // NTP server counts seconds from 1st January 1900 but ESP32 uses UNIX like format - it counts seconds from 1st January 1970 - let's do the conversion 
+                                                                  unsigned long highWord;
+                                                                  unsigned long lowWord;
+                                                                  unsigned long secsSince1900;
+                                                                  #define SEVENTY_YEARS 2208988800UL
+                                                                  // time_t currentTime;                                                                
+  
+                                                                  highWord = word (this->__ntpPacket__ [40], this->__ntpPacket__ [41]); 
+                                                                  lowWord = word (this->__ntpPacket__ [42], this->__ntpPacket__ [43]);
+                                                                  secsSince1900 = highWord << 16 | lowWord;
+                                                                  currentTime = secsSince1900 - SEVENTY_YEARS;
+                                                                  // Serial.printf ("currentTime = %i\n", currentTime);
+                                                                  // right now currentTime is 1542238838 (14.11.18 23:40:38), every valid time should be grater then 1542238838
+                                                                  if (currentTime < 1542238838) { 
+                                                                    this->__udp__.stop ();
+                                                                    rtcDmesg ("[RTC] got invalid NTP response.");
+                                                                    return;
+                                                                  }
                                                                   this->__udp__.stop ();
-                                                                  rtcDmesg ("[RTC] got invalid NTP response.");
-                                                                  return;
+                                                                  rtcDmesg ("[RTC] got GMT from NTP server: " + timeToString (currentTime) + ".");
+                                                                  this->setGmtTime (currentTime);
+                                                                  this->__lastSyncTime__ = currentTime;
                                                                 }
-                                                                // NTP server counts seconds from 1st January 1900 but ESP32 uses UNIX like format - it counts seconds from 1st January 1970 - let's do the conversion 
-                                                                unsigned long highWord;
-                                                                unsigned long lowWord;
-                                                                unsigned long secsSince1900;
-                                                                #define SEVENTY_YEARS 2208988800UL
-                                                                // time_t currentTime;                                                                
-
-                                                                highWord = word (this->__ntpPacket__ [40], this->__ntpPacket__ [41]); 
-                                                                lowWord = word (this->__ntpPacket__ [42], this->__ntpPacket__ [43]);
-                                                                secsSince1900 = highWord << 16 | lowWord;
-                                                                currentTime = secsSince1900 - SEVENTY_YEARS;
-                                                                // Serial.printf ("currentTime = %i\n", currentTime);
-                                                                // right now currentTime is 1542238838 (14.11.18 23:40:38), every valid time should be grater then 1542238838
-                                                                if (currentTime < 1542238838) { 
-                                                                  this->__udp__.stop ();
-                                                                  rtcDmesg ("[RTC] got invalid NTP response.");
-                                                                  return;
-                                                                }
-                                                                this->__udp__.stop ();
-                                                                rtcDmesg ("[RTC] got GMT from NTP server: " + timeToString (currentTime) + ".");
-                                                                this->setGmtTime (currentTime);
-                                                                this->__lastSyncTime__ = currentTime;
                                                                 break;
 
                                                         case real_time_clock::WAITING_FOR_REST_SYNC:
@@ -711,46 +709,50 @@
 
                                                         case real_time_clock::WAITING_FOR_REST_REPLY:
                                                                 
-                                                                // wait for REST reply or time-out
-                                                                if (millis () - this->__requestMillis__ > RTC_REST_TIME_OUT) { // time-out, stop waiting for reply
-                                                                  this->__tcp__.stop ();
-                                                                  rtcDmesg ("[RTC] REST time-out.");
-                                                                  this->__state__ = real_time_clock::WAITING_FOR_REST_SYNC;
-                                                                  return;
-                                                                }
+                                                                { // wait for REST reply or time-out
+                                                                  if (millis () - this->__requestMillis__ > RTC_REST_TIME_OUT) { // time-out, stop waiting for reply
+                                                                    this->__tcp__.stop ();
+                                                                    rtcDmesg ("[RTC] REST time-out.");
+                                                                    this->__state__ = real_time_clock::WAITING_FOR_REST_SYNC;
+                                                                    return;
+                                                                  }
+    
+                                                                  if (!this->__tcp__.available ()) return; // keep waiting for reply
   
-                                                                if (!this->__tcp__.available ()) return; // keep waiting for reply
-
-                                                                // change state although we are not sure yet that reply is OK
-                                                                this->__state__ = real_time_clock::WAITING_FOR_REST_SYNC;
-
-                                                                String reply = "";
-                                                                while ((this->__tcp__.available () || this->__tcp__.connected ()) && !(millis () - this->__requestMillis__ > RTC_REST_TIME_OUT)) reply += (char) this->__tcp__.read ();
-                                                                this->__tcp__.stop ();
-                                                                // JSON part of HTTP reply is in a form of: {"id":"ESP","currentTime":"1573336079"}
-                                                                currentTime = 0;
-                                                                #ifdef ESP8266
-                                                                  int i;
-                                                                  if ((i = reply.indexOf ("\":\"")) > 0) {
-                                                                    if ((i = reply.indexOf ("\":\"", i + 1)) > 0) {
-                                                                      reply = reply.substring (i + 3); // Serial.printf ("reply = %s\n", reply.c_str ());
-                                                                      if ((i = reply.indexOf ("\"")) > 0) {
-                                                                        reply = reply.substring (0, i); // Serial.printf ("reply = %s\n", reply.c_str ());
-                                                                        currentTime = reply.toInt ();
+                                                                  // change state although we are not sure yet that reply is OK
+                                                                  this->__state__ = real_time_clock::WAITING_FOR_REST_SYNC;
+  
+                                                                  String reply = "";
+                                                                  while ((this->__tcp__.available () || this->__tcp__.connected ()) && !(millis () - this->__requestMillis__ > RTC_REST_TIME_OUT)) reply += (char) this->__tcp__.read ();
+                                                                  this->__tcp__.stop ();
+                                                                  // JSON part of HTTP reply is in a form of: {"id":"ESP","currentTime":"1573336079"}
+                                                                  currentTime = 0;
+                                                                  #ifdef ESP8266
+                                                                    int i;
+                                                                    if ((i = reply.indexOf ("\":\"")) > 0) {
+                                                                      if ((i = reply.indexOf ("\":\"", i + 1)) > 0) {
+                                                                        reply = reply.substring (i + 3); // Serial.printf ("reply = %s\n", reply.c_str ());
+                                                                        if ((i = reply.indexOf ("\"")) > 0) {
+                                                                          reply = reply.substring (0, i); // Serial.printf ("reply = %s\n", reply.c_str ());
+                                                                          currentTime = reply.toInt ();
+                                                                        }
                                                                       }
                                                                     }
+                                                                  #endif
+                                                                  #ifdef ESP32
+                                                                    sscanf (reply.c_str (), "%*[^{]%*[^:]%*[^\"]%*[^:]%*[^\"]\"%lu\"}", &currentTime);
+                                                                  #endif
+                                                                  if (currentTime < 1573336079) { 
+                                                                    rtcDmesg ("[RTC] got invalid REST response.");
+                                                                    return;
                                                                   }
-                                                                #endif
-                                                                #ifdef ESP32
-                                                                  sscanf (reply.c_str (), "%*[^{]%*[^:]%*[^\"]%*[^:]%*[^\"]\"%lu\"}", &currentTime);
-                                                                #endif
-                                                                if (currentTime < 1573336079) { 
-                                                                  rtcDmesg ("[RTC] got invalid REST response.");
-                                                                  return;
+                                                                  rtcDmesg ("[RTC] got GMT from WEB server: " + timeToString (currentTime) + ".");
+                                                                  this->setGmtTime (currentTime);
+                                                                  this->__lastSyncTime__ = currentTime;
                                                                 }
-                                                                rtcDmesg ("[RTC] got GMT from WEB server: " + timeToString (currentTime) + ".");
-                                                                this->setGmtTime (currentTime);
-                                                                this->__lastSyncTime__ = currentTime;
+                                                                break;
+
+                                                        default:
                                                                 break;
                                                                  
                                                       } // switch                                     
@@ -767,9 +769,9 @@
       }; 
       __stateType__ __state__ = real_time_clock::NOT_INITIALIZED;
 
-      char *__ntpServer1__ = NULL; // initialized in the first constructor
-      char *__ntpServer2__ = NULL; // initialized in the first constructor
-      char *__ntpServer3__ = NULL; // initialized in the first constructor      
+      const char *__ntpServer1__ = NULL; // initialized in the first constructor
+      const char *__ntpServer2__ = NULL; // initialized in the first constructor
+      const char *__ntpServer3__ = NULL; // initialized in the first constructor      
       WiFiUDP __udp__;                    // initialized at NTP request
       byte __ntpPacket__ [48];            // initialized at NTP request
       unsigned long __requestMillis__;    // initialized at NTP request
@@ -801,9 +803,9 @@
       time_t localTestTime = testRtc.getLocalTime ();
       Serial.printf ("      %i | ", (unsigned long long) testTime);
       char s [30];
-      strftime (s, 30, "%y/%m/%d %H:%M:%S", gmtime (&testTime));
+      strftime (s, 30, "%y/%m/%lu %H:%M:%S", gmtime (&testTime));
       Serial.printf ("%s | ", s);
-      strftime (s, 30, "%y/%m/%d %H:%M:%S", gmtime (&localTestTime));
+      strftime (s, 30, "%y/%m/%lu %H:%M:%S", gmtime (&localTestTime));
       Serial.printf ("%s | ", s);
       Serial.printf ("%i\n", localTestTime - testTime);
     }
@@ -817,9 +819,9 @@
       time_t localTestTime = testRtc.getLocalTime ();
       Serial.printf ("      %i | ", (unsigned long long) testTime);
       char s [30];
-      strftime (s, 30, "%y/%m/%d %H:%M:%S", gmtime (&testTime));
+      strftime (s, 30, "%y/%m/%lu %H:%M:%S", gmtime (&testTime));
       Serial.printf ("%s | ", s);
-      strftime (s, 30, "%y/%m/%d %H:%M:%S", gmtime (&localTestTime));
+      strftime (s, 30, "%y/%m/%lu %H:%M:%S", gmtime (&localTestTime));
       Serial.printf ("%s | ", s);
       Serial.printf ("%i\n", localTestTime - testTime);
     }
@@ -833,9 +835,9 @@
       time_t localTestTime = testRtc.getLocalTime ();
       Serial.printf ("      %i | ", (unsigned long long) testTime);
       char s [30];
-      strftime (s, 30, "%y/%m/%d %H:%M:%S", gmtime (&testTime));
+      strftime (s, 30, "%y/%m/%lu %H:%M:%S", gmtime (&testTime));
       Serial.printf ("%s | ", s);
-      strftime (s, 30, "%y/%m/%d %H:%M:%S", gmtime (&localTestTime));
+      strftime (s, 30, "%y/%m/%lu %H:%M:%S", gmtime (&localTestTime));
       Serial.printf ("%s | ", s);
       Serial.printf ("%i\n", localTestTime - testTime);
     }
@@ -849,9 +851,9 @@
       time_t localTestTime = testRtc.getLocalTime ();
       Serial.printf ("      %i | ", (unsigned long long) testTime);
       char s [30];
-      strftime (s, 30, "%y/%m/%d %H:%M:%S", gmtime (&testTime));
+      strftime (s, 30, "%y/%m/%lu %H:%M:%S", gmtime (&testTime));
       Serial.printf ("%s | ", s);
-      strftime (s, 30, "%y/%m/%d %H:%M:%S", gmtime (&localTestTime));
+      strftime (s, 30, "%y/%m/%lu %H:%M:%S", gmtime (&localTestTime));
       Serial.printf ("%s | ", s);
       Serial.printf ("%i\n", localTestTime - testTime);
     }    
