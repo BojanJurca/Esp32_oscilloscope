@@ -65,22 +65,22 @@ void wsRequestHandler (String& wsRequest, WebSocket *webSocket) {
 
 // Oscilloscope ---------------------------------------------------------------------------------------------------
 
-typedef struct oscilloscopeSample {
+struct oscilloscopeSample {
    int16_t value;       // sample value read by analogRead or digialRead   
    int16_t timeOffset;  // sampe time offset drom previous sample in ms or us
 };
 
-typedef struct oscilloscopeSamples {
+struct oscilloscopeSamples {
    oscilloscopeSample samples [64]; // sample buffer will never exceed 41 samples, make it 64 for simplicity reasons    
    int count;                       // number of samples in the buffer
    bool ready;                      // is the buffer ready for sending
 };
 
-typedef struct oscilloscopeSharedMemoryType { // data structure to be shared with oscilloscope tasks
+struct oscilloscopeSharedMemoryType { // data structure to be shared with oscilloscope tasks
   // basic objects for webSocket communication
   WebSocket *webSocket;               // open webSocket for communication with javascript client
   bool clientIsBigEndian;             // true if javascript client is big endian machine
-  // sampling parameters
+  // sampling parameterss
   char readType [8];                  // analog or digital  
   bool analog;                        // true if readType is analog, false if digital
   int gpio;                           // gpio in which ESP32 is taking samples from
@@ -113,7 +113,7 @@ void oscilloscopeReader (void *parameters) {
   int16_t samplingTime =              ((oscilloscopeSharedMemoryType *) parameters)->samplingTime;
   bool microSeconds =                 ((oscilloscopeSharedMemoryType *) parameters)->microSeconds;
   int screenWidthTime =               ((oscilloscopeSharedMemoryType *) parameters)->screenWidthTime; 
-  int screenRefreshTime =             ((oscilloscopeSharedMemoryType *) parameters)->screenRefreshTime;  
+  // int screenRefreshTime =             ((oscilloscopeSharedMemoryType *) parameters)->screenRefreshTime;  
   long screenRefreshTimeCommonUnit =  ((oscilloscopeSharedMemoryType *) parameters)->screenRefreshTimeCommonUnit;  
   int screenRefreshModulus =          ((oscilloscopeSharedMemoryType *) parameters)->screenRefreshModulus;  
   oscilloscopeSamples *readBuffer =   &((oscilloscopeSharedMemoryType *) parameters)->readBuffer;
@@ -474,8 +474,8 @@ void setup () {
 
   // connect ESP STAtion to WiFi
   
-  #define staSSID "YOUR-STA-SSID"
-  #define staPassword "YOUR-STA-PASSWORD"
+  #define staSSID "NaLazih22a-zgoraj" // "YOUR-STA-SSID"
+  #define staPassword "werner196" // "YOUR-STA-PASSWORD"
   
   WiFi.disconnect (true);
   WiFi.mode (WIFI_OFF);             
@@ -514,7 +514,7 @@ void setup () {
   }
 
   // start WEB server 
-  webSrv = new httpServer (httpRequestHandler, wsRequestHandler, 4096, (char *) "0.0.0.0", 80, NULL);
+  webSrv = new httpServer (httpRequestHandler, wsRequestHandler, 8192, (char *) "0.0.0.0", 80, NULL);
   if (webSrv) { // did ESP create TcpServer instance?
     if (webSrv->started ()) { // did WEB server start correctly?
       Serial.printf ("[%10lu] WEB server has started.\n", millis ());
