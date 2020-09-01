@@ -474,8 +474,8 @@ void setup () {
 
   // connect ESP STAtion to WiFi
   
-  #define staSSID "NaLazih22a-zgoraj" // "YOUR-STA-SSID"
-  #define staPassword "werner196" // "YOUR-STA-PASSWORD"
+  #define staSSID "YOUR-STA-SSID"
+  #define staPassword "YOUR-STA-PASSWORD"
   
   WiFi.disconnect (true);
   WiFi.mode (WIFI_OFF);             
