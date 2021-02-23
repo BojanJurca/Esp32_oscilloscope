@@ -17,7 +17,7 @@
 			div.d2 {position: relative; float: left; width: 48%; font-family: verdana; font-size: 30px; color: gray;}
 			div.d3 {position: relative; float: left; width: 13%; font-family: verdana; font-size: 30px; color: black;}
 			div.d4 {position: relative; float: left; width: 39%;}
-			div.d5 {position: relative; float: left; width: 19%;}
+			div.d5 {position: relative; float: left; width: 26%;}
 
 			/* select control */
 			select {padding: 8px 24px; border-radius: 12px; font-size: 16px; color: black; background-color: #eee; -webkit-appearance: none; -moz-appearance: none; box-sizing: border-box; border: 3px solid #ccc; -webkit-transition: 0.5s; transition: 0.5s; outline: none}
@@ -37,7 +37,7 @@
 			.container input:disabled ~ .checkmark {background-color: #aaa}
 
 			/* slider control */
-			input[type='range'] {-webkit-appearance: none; -webkit-tap-highlight-color: rgba(255,255,255,0); width: 250px; height: 28px; margin: 0; border: none; padding: 4px 4px; border-radius: 28px; background: #2196F3; outline: none}
+			input[type='range'] {-webkit-appearance: none; -webkit-tap-highlight-color: rgba(255,255,255,0); width: 230px; height: 28px; margin: 0; border: none; padding: 4px 4px; border-radius: 28px; background: #2196F3; outline: none}
 			input[type='range']::-moz-range-track {border: inherit; background: transparent}
 			input[type='range']::-ms-track {border: inherit; color: transparent; background: transparent}
 			input[type='range']::-ms-fill-lower
@@ -82,6 +82,33 @@
 			.button3:active {background-color: darkred; transform: translateY(3px)}
 
 		</style>
+
+		<script type='text/javascript'>
+			// from: https://www.w3schools.com/js/js_cookies.asp
+			function getCookie(cname) {
+				var name = cname + "=";
+				var decodedCookie = decodeURIComponent(document.cookie);
+				var ca = decodedCookie.split(';');
+				for(var i = 0; i <ca.length; i++) {
+					var c = ca[i];
+					while (c.charAt(0) == ' ') {
+						c = c.substring(1);
+					}
+					if (c.indexOf(name) == 0) {
+						return c.substring(name.length, c.length);
+					}
+				}
+				return "";
+			}
+			// from: https://www.w3schools.com/js/js_cookies.asp
+			function setCookie(cname, cvalue, exdays) {
+				var d = new Date();
+				d.setTime(d.getTime() + (exdays*24*60*60*1000));
+				var expires = "expires="+ d.toUTCString();
+				document.cookie = cname + "=" + cvalue + ";" + expires + ";" // path=/";  we wont use path - cookies are used in this page only
+			}
+		</script>
+
 	</head>
 
 	<body>
@@ -89,39 +116,33 @@
 
 		<hr />
 		<div class='d1' style='height: 50px;'>
-			<div class='d2'>&nbsp;Select ESP32 GPIO to monitor</div>
-			<div class='d3'> 
-				<select id='gpio'>
-				        <option value='1'>GPIO  1</option><option value='2'>GPIO  2</option><option value='3'>GPIO  3</option><option value='4'>GPIO  4</option><option value='5'>GPIO  5</option>
+			<div class='d2'>&nbsp;Prim. (and sec.) ESP32 GPIOs</div>
+			<div class='d3' style='color: gray;'> 
+				<select id='gpio1'>
+				        <option value='1'>GPIO  1</option><option value='2' selected='selected'>GPIO  2</option><option value='3'>GPIO  3</option><option value='4'>GPIO  4</option><option value='5'>GPIO  5</option>
 					<option value='12'>GPIO 12</option><option value='13'>GPIO 13</option><option value='14'>GPIO 14</option><option value='15'>GPIO 15</option><option value='16'>GPIO 16</option>
 					<option value='17'>GPIO 17</option><option value='18'>GPIO 18</option><option value='19'>GPIO 19</option><option value='21'>GPIO 21</option><option value='22'>GPIO 22</option>
 					<option value='23'>GPIO 23</option><option value='25'>GPIO 25</option><option value='26'>GPIO 26</option><option value='27'>GPIO 27</option><option value='32'>GPIO 32</option>
-					<option value='33'>GPIO 33</option><option value='34'>GPIO 34</option><option value='35'>GPIO 35</option><option value='36' selected='selected'>GPIO 36</option><option value='39'>GPIO 39</option>
+					<option value='33'>GPIO 33</option><option value='34'>GPIO 34</option><option value='35'>GPIO 35</option><option value='36'>GPIO 36</option><option value='39'>GPIO 39</option>
+				</select>
+			</div>
+			<div class='d3' style='color: gray;'> 
+				<select id='gpio2'>
+				        <option value='40' selected='selected'></option>
+					<option value='1'>GPIO  1</option><option value='2'>GPIO  2</option><option value='3'>GPIO  3</option><option value='4'>GPIO  4</option><option value='5'>GPIO  5</option>
+					<option value='12'>GPIO 12</option><option value='13'>GPIO 13</option><option value='14'>GPIO 14</option><option value='15'>GPIO 15</option><option value='16'>GPIO 16</option>
+					<option value='17'>GPIO 17</option><option value='18'>GPIO 18</option><option value='19'>GPIO 19</option><option value='21'>GPIO 21</option><option value='22'>GPIO 22</option>
+					<option value='23'>GPIO 23</option><option value='25'>GPIO 25</option><option value='26'>GPIO 26</option><option value='27'>GPIO 27</option><option value='32'>GPIO 32</option>
+					<option value='33'>GPIO 33</option><option value='34'>GPIO 34</option><option value='35'>GPIO 35</option><option value='36'>GPIO 36</option><option value='39'>GPIO 39</option>
 				</select>
 			</div>
 		</div>
 
 		<hr />
 		<div class='d1'>
-			<div class='d2'>&nbsp;Monitor GPIO with analogRead</div>
+			<div class='d2'>&nbsp;Do digitalRead (GPIO)</div>
 			<div class='d3'>
-				<label class='container'>&nbsp;<input type='radio' checked='checked' name='radio1' id='analog' onchange="
-					drawBackgroundAndCalculateParameters ();
-					document.getElementById ('sensitivity').disabled = false;
-					document.getElementById ('sensitivityLabel').style.color = 'black';
-					document.getElementById ('position').disabled = false;
-					document.getElementById ('positionLabel').style.color = 'black';
-					document.getElementById ('posTreshold').disabled = false;
-					document.getElementById ('posTriggerLabel').style.color = 'black';
-					document.getElementById ('negTreshold').disabled = false;
-					document.getElementById ('negTriggerLabel').style.color = 'black';
-				"><span class='checkmark'></span></label>
-			</div>
-		</div>
-		<div class='d1'>
-			<div class='d2'>&nbsp;Monitor GPIO with digitalRead</div>
-			<div class='d3'>
-				<label class='container'>&nbsp;<input type='radio' name='radio1' id='digital' onchange="
+				<label class='container'>&nbsp;<input type='radio' checked='checked' name='radio1' id='digital' onchange="
 					drawBackgroundAndCalculateParameters ();
 					document.getElementById ('sensitivity').disabled = true;
 					document.getElementById ('sensitivityLabel').style.color = 'gray';
@@ -134,21 +155,30 @@
 				"><span class='checkmark'></span></label>
 			</div>
 		</div>
+		<div class='d1'>
+			<div class='d2'>&nbsp;Do analogRead (GPIO)</div>
+			<div class='d3'>
+				<label class='container'>&nbsp;<input type='radio' name='radio1' id='analog' onchange="
+					drawBackgroundAndCalculateParameters ();
+					document.getElementById ('sensitivity').disabled = false;
+					document.getElementById ('sensitivityLabel').style.color = 'black';
+					document.getElementById ('position').disabled = false;
+					document.getElementById ('positionLabel').style.color = 'black';
+					document.getElementById ('posTreshold').disabled = false;
+					document.getElementById ('posTriggerLabel').style.color = 'black';
+					document.getElementById ('negTreshold').disabled = false;
+					document.getElementById ('negTriggerLabel').style.color = 'black';
+				"><span class='checkmark'></span></label>
+			</div>
+		</div>
 
 		<hr />
 		<div class='d1'>
 			<div class='d2'>&nbsp;Vertical sensitivity</div>
 			<div class='d3' id='sensitivityLabel'>100 %</div>
 			<div class='d4'> 
-				<div class='slider'><input id='sensitivity' type='range' min='0' max='5' value='0' step='1' onchange="
-					switch (this.value) {
-						case '0':	document.getElementById ('sensitivityLabel').textContent = '100 %'; break;
-						case '1':	document.getElementById ('sensitivityLabel').textContent = '200 %'; break;
-						case '2':	document.getElementById ('sensitivityLabel').textContent = '400 %'; break;
-						case '3':	document.getElementById ('sensitivityLabel').textContent = '1000 %'; break;
-						case '4':	document.getElementById ('sensitivityLabel').textContent = '2000 %'; break;
-						case '5':	document.getElementById ('sensitivityLabel').textContent = '4000 %'; break;
-					}
+				<div class='slider'><input id='sensitivity' type='range' min='0' max='5' value='0' step='1' disabled onchange="
+					document.getElementById ('sensitivityLabel').textContent = sensitivityLabelFromSensitivitySlider (this.value);
 					drawBackgroundAndCalculateParameters ();
 				" /></div>
 			</div>
@@ -158,7 +188,7 @@
 			<div class='d2'>&nbsp;Vertical position</div>
 			<div class='d3' id='positionLabel'>0</div>
 			<div class='d4'> 
-				<div class='slider'><input id='position' type='range' min='0' max='4000' value='0' step='100' onchange="
+				<div class='slider'><input id='position' type='range' min='0' max='4000' value='0' step='100' disabled onchange="
 					document.getElementById ('positionLabel').textContent = this.value;
 					drawBackgroundAndCalculateParameters ();
 				" /></div>
@@ -167,26 +197,26 @@
 
 		<hr />
 		<div class='d1'>
-			<div class='d2'>&nbsp;Trigger on positive slope</div>
+			<div class='d2'>&nbsp;Trigger on positive slope <small><small>(primary)</small></small></div>
 			<div class='d3'>
 				<label class='switch'><input type='checkbox' id='posTrigger'><div class='slider round'></div></label>
 			</div>
 			<div class='d3' id='posTriggerLabel'>on 1000</div>
 			<div class='d5'> 
-				<div class='slider'><input id='posTreshold' type='range' min='1' max='4095' value='1000' step='1' onchange="
+				<div class='slider'><input id='posTreshold' type='range' min='1' max='4095' value='1000' step='1' disabled Sonchange="
 					document.getElementById ('posTriggerLabel').textContent = 'on ' + this.value;
 					document.getElementById ('posTrigger').checked = true;
 				" /></div>
 			</div>
 		</div>
 		<div class='d1'>
-			<div class='d2'>&nbsp;Trigger on negative slope</div>
+			<div class='d2'>&nbsp;Trigger on negative slope <small><small>(primary)</small></small></div>
 			<div class='d3'>
 				<label class='switch'><input type='checkbox' id='negTrigger'><div class='slider round'></div></label>
 			</div>
 			<div class='d3' id='negTriggerLabel'>on 3000</div>
 			<div class='d5'> 
-				<div class='slider'><input id='negTreshold' type='range' min='0' max='4094' value='3000' step='1' onchange="
+				<div class='slider'><input id='negTreshold' type='range' min='0' max='4094' value='3000' step='1' disabled onchange="
 					document.getElementById('negTriggerLabel').textContent = 'on ' + this.value;
 					document.getElementById('negTrigger').checked = true;
 				" /></div>
@@ -200,25 +230,7 @@
 			<div class='d3' id='frequencyLabel'>1 KHz</div>
 			<div class='d4'> 
 				<div class='slider'><input id='frequency' type='range' min='1' max='17' value='14' step='1' onchange="
-					switch (this.value) {
-						case '1':	document.getElementById ('frequencyLabel').textContent = '0,1 Hz'; break;
-						case '2':	document.getElementById ('frequencyLabel').textContent = '0,2 Hz'; break;
-						case '3':	document.getElementById ('frequencyLabel').textContent = '0,5 Hz'; break;
-						case '4':	document.getElementById ('frequencyLabel').textContent = '1 Hz'; break;
-						case '5':	document.getElementById ('frequencyLabel').textContent = '2 Hz'; break;
-						case '6':	document.getElementById ('frequencyLabel').textContent = '5 Hz'; break;
-						case '7':	document.getElementById ('frequencyLabel').textContent = '10 Hz'; break;
-						case '8':	document.getElementById ('frequencyLabel').textContent = '20 Hz'; break;
-						case '9':	document.getElementById ('frequencyLabel').textContent = '50 Hz'; break;
-						case '10':	document.getElementById ('frequencyLabel').textContent = '60 Hz'; break;
-						case '11':	document.getElementById ('frequencyLabel').textContent = '100 Hz'; break;
-						case '12':	document.getElementById ('frequencyLabel').textContent = '200 Hz'; break;
-						case '13':	document.getElementById ('frequencyLabel').textContent = '500 Hz'; break;
-						case '14':	document.getElementById ('frequencyLabel').textContent = '1 kHz'; break;
-						case '15':	document.getElementById ('frequencyLabel').textContent = '2 kHz'; break;
-						case '16':	document.getElementById ('frequencyLabel').textContent = '5 kHz'; break;
-						case '17':	document.getElementById ('frequencyLabel').textContent = '10 kHz'; break;
-					}
+					document.getElementById ('frequencyLabel').textContent = frequencyLabelFromFrequencySlider (this.value);
 					drawBackgroundAndCalculateParameters ();
 				" /></div>
 			</div>
@@ -243,16 +255,20 @@
 		</div>
 
 		<hr />
-		<div style='height:48px;' class='d1'; style='height: 56px;'>
-			<div class='d2'>&nbsp;</div>
-			<div class='d3'>&nbsp;</div>
+		<div class='d1'; style='height: 76px;'>
+			<div class='d2'>&nbsp;Remeber settings<br>&nbsp;<small><small>Some essential cookies will be used for this.</small></small></div>
+			<div class='d3'>
+				<label class='switch'><input type='checkbox' id='remember' onclick="
+					saveSettings ();
+				"><div class='slider round'></div></label>
+			</div>
 			<div class='d3'><button class='button button2' id='startButton' onclick="
+				saveSettings ();
 				drawBackgroundAndCalculateParameters ();
 				enableDisableControls (true);
 				startOscilloscope ();
 			">&nbsp;START&nbsp;</button></div>
-			<div class='d3'>&nbsp;</div>
-			<div class='d3'><button class='button button3' id='stopButton' disabled onclick="
+			<div class='d5'><button class='button button3' id='stopButton' disabled onclick="
 				stopOscilloscope ();
 				enableDisableControls (false);
 			">&nbsp;STOP&nbsp;</button></div>
@@ -264,6 +280,95 @@
 		<canvas id='oscilloscope' width='968' height='512';></canvas></div>
 
 		<script type='text/javascript'>
+
+			// initialization
+
+			function sensitivityLabelFromSensitivitySlider (value) {
+				switch (value) {
+					case '0':	return '100 %'; 
+					case '1':	return '200 %'; 
+					case '2':	return '400 %'; 
+					case '3':	return '1000 %'; 
+					case '4':	return '2000 %'; 
+					case '5':	return '4000 %'; 
+				}
+			}
+
+			function frequencyLabelFromFrequencySlider (value) {
+				switch (value) {
+					case '1':	return '0,1 Hz'; 
+					case '2':	return '0,2 Hz'; 
+					case '3':	return '0,5 Hz'; 
+					case '4':	return '1 Hz'; 
+					case '5':	return '2 Hz'; 
+					case '6':	return '5 Hz'; 
+					case '7':	return '10 Hz'; 
+					case '8':	return '20 Hz'; 
+					case '9':	return '50 Hz'; 
+					case '10':	return '60 Hz'; 
+					case '11':	return '100 Hz'; 
+					case '12':	return '200 Hz'; 
+					case '13':	return '500 Hz'; 
+					case '14':	return '1 KHz'; 
+					case '15':	return '2 KHz'; 
+					case '16':	return '5 KHz'; 
+					case '17':	return '10 KHz';
+				}
+			}
+
+			// console.log (document.cookie);
+
+			var v;
+			v = getCookie ('gpio1'); if (v != '') document.getElementById ('gpio1').value = v;
+			v = getCookie ('gpio2'); if (v != '') document.getElementById ('gpio2').value = v;
+			v = getCookie ('analog'); if (v == 'true') document.getElementById ('analog').checked = true; else document.getElementById ('digital').checked = true;
+			v = getCookie ('sensitivity'); if (v != '') { document.getElementById ('sensitivity').value = v; document.getElementById ('sensitivityLabel').textContent = sensitivityLabelFromSensitivitySlider (v); }
+			v = getCookie ('position'); if (v != '') { document.getElementById ('position').value = v; document.getElementById ('positionLabel').textContent = v;}
+			v = getCookie ('posTrigger'); if (v == 'true') document.getElementById ('posTrigger').checked = true;
+			v = getCookie ('posTreshold'); if (v != '') { document.getElementById ('posTreshold').value = v; document.getElementById ('posTriggerLabel').textContent = 'on ' + v; }
+			v = getCookie ('negTrigger'); if (v == 'true') document.getElementById ('negTrigger').checked = true;
+			v = getCookie ('negTreshold'); if (v != '') { document.getElementById ('negTreshold').value = v; document.getElementById ('negTriggerLabel').textContent = 'on ' + v; }
+			v = getCookie ('frequency'); if (v != '') { document.getElementById ('frequency').value = v; document.getElementById ('frequencyLabel').textContent = frequencyLabelFromFrequencySlider (v); }
+			v = getCookie ('lines'); if (v == 'false') document.getElementById ('lines').checked = false;
+			v = getCookie ('markers'); if (v == 'false') document.getElementById ('markers').checked = false;
+			v = getCookie ('remember'); if (v == 'true') document.getElementById ('remember').checked = true;
+
+			enableDisableControls (false);
+
+			// save settings into cookies
+			function saveSettings () {
+				if (document.getElementById ('remember').checked) {
+					// set cookies for 10 years
+					setCookie ('gpio1', document.getElementById ('gpio1').value, 3652);
+					setCookie ('gpio2', document.getElementById ('gpio2').value, 3652);
+					setCookie ('analog', document.getElementById ('analog').checked, 3652);
+					setCookie ('sensitivity', document.getElementById ('sensitivity').value, 3652);
+					setCookie ('position', document.getElementById ('position').value, 3652);
+					setCookie ('posTrigger', document.getElementById ('posTrigger').checked, 3652);
+					setCookie ('posTreshold', document.getElementById ('posTreshold').value, 3652);
+					setCookie ('negTrigger', document.getElementById ('negTrigger').checked, 3652);
+					setCookie ('negTreshold', document.getElementById ('negTreshold').value, 3652);
+					setCookie ('frequency', document.getElementById ('frequency').value, 3652);
+					setCookie ('lines', document.getElementById ('lines').checked, 3652);
+					setCookie ('markers', document.getElementById ('markers').checked, 3652);
+					setCookie ('remember', document.getElementById ('remember').checked, 3652);
+				} else {
+					// delete cookies
+					setCookie ('gpio1', '', -1);
+					setCookie ('gpio2', '', -1);
+					setCookie ('analog', '', -1);
+					setCookie ('sensitivity', '', -1);
+					setCookie ('position', '', -1);
+					setCookie ('posTrigger', '', -1);
+					setCookie ('posTreshold', '', -1);
+					setCookie ('negTrigger', '', -1);
+					setCookie ('negTreshold', '', -1);
+					setCookie ('frequency', '', -1);
+					setCookie ('lines', '', -1);
+					setCookie ('markers', '', -1);
+					setCookie ('remember', '', -1);
+				}
+			}
 
 			var webSocket = null;
 
@@ -289,79 +394,70 @@
 						ws.send (endianArray);
 
 						// then send start command with sampling parameters
-						var startCommand = "start " + (document.getElementById ("analog").checked ? "analog" : "digital") + " sampling on GPIO " + + document.getElementById ("gpio").value + " every ";
+						var startCommand = "start " + (document.getElementById ("analog").checked ? "analog" : "digital") + " sampling on GPIO " + document.getElementById ("gpio1").value + (document.getElementById ("gpio2").value == 40 ? "" : ", " + document.getElementById ("gpio2").value) + " every ";
 						switch (document.getElementById ('frequency').value) {
 
-							// first mode from here on: 1 sample at a time, measurements in ms
+							// real sampling times will be passed back to browser in 16 bit integers - 
+							// take care that values are <= 32767 !
 
-							case '1':	// horizontal frequency = 0,1 Hz, whole width = 10 s, 40 samples per screen, 250 ms per sample (fits in 16 bit integer), refresh every sample (4 Hz)
-									startCommand += "250 ms refresh screen of width 10000 ms every 250 ms"; // 4 Hz, 0,1 Hz, max 40 samples per screen
+							// 1 sample at a time mode, measurements in ms
+
+							case '1':	// horizontal frequency = 0,1 Hz, screen width = 10 s, 40 samples per screen, 250 ms per sample, server refreshes every sample 
+									startCommand += "250 ms screen width = 10000 ms"; // sampling: 4 Hz, horizontal frequency: 0,1 Hz, max 40 samples per screen
 									break;
-							case '2':	// horizontal frequency = 0,2 Hz, whole width = 5 s, 40 samples per screen, 125 ms per sample (fits in 16 bit integer), refresh every sample (8 Hz)
-									startCommand += "125 ms refresh screen of width 5000 ms every 125 ms";  // 8 Hz, 0,2 Hz, max 40 samples per screen
+							case '2':	// horizontal frequency = 0,2 Hz, whole width = 5 s, 40 samples per screen, 125 ms per sample, server refreshes every sample
+									startCommand += "125 ms screen width = 5000 ms"; // sampling: 8 Hz, horizontal frequency:0,2 Hz, max 40 samples per screen
 									break; 
-							case '3':	// horizontal frequency = 0,5 Hz, whole width = 2 s, 40 samples per screen, 50 ms per sample (fits in 16 bit integer), refresh every sample (20 Hz)
-									startCommand += "50 ms refresh screen of width 2000 ms every 50 ms"; // 20 Hz, 0,5 Hz, max 40 samples per screen
+							case '3':	// horizontal frequency = 0,5 Hz, whole width = 2 s, 40 samples per screen, 50 ms per sample, server refreshes every sample
+									startCommand += "50 ms screen width = 2000 ms"; // sampling: 20 Hz, horizontal frequency:0,5 Hz, max 40 samples per screen
 									break;
 
-							// second mode from now on: 40 samples per packet, measurements in ms
+							// screen at a time mode from now on: 40 samples per packet, measurements in ms
 
-							case '4':	// horizontal frequency = 1 Hz, whole width = 1 s, 40 samples per screen, 25 ms per sample (fits in 16 bit integer), refresh every screen (1 Hz)
-									startCommand += "25 ms refresh screen of width 1000 ms every 1000 ms";
+							case '4':	// horizontal frequency = 1 Hz, whole width = 1 s, 40 samples per screen, 25 ms per sample, server refreshes every 1 s, all 40 samples will be displyed at once
+									startCommand += "25 ms screen width = 1000 ms"; // sampling: 40 Hz, horizontal frequency: 1 Hz, max 40 samples per screen
 									break;
 
 							// switch to measurements in us for better accuracy with shorter time intervals
 
-							case '5':	// horizontal frequency = 2 Hz, whole width = 0,5 s, 40 samples per screen, 12.500 us per sample (fits in 16 bit integer), refresh every screen (2 Hz)
-									startCommand += "12500 us refresh screen of width 500000 us every 500 ms"; // 80 Hz, 2 Hz, max 40 samples per screen
+							case '5':	// horizontal frequency = 2 Hz, whole width = 0,5 s, 40 samples per screen, 12.500 us per sample, server refreshes every 0,5 s, all 40 samples will be displyed at once
+									startCommand += "12500 us screen width = 500000 us"; // sampling: 80 Hz, horizontal frequency: 2 Hz, max 40 samples per screen
 									break;
-							case '6':	// horizontal frequency = 5 Hz, whole width = 0,2 s, 40 samples per screen, 5.000 us per sample (fits in 16 bit integer), refresh every screen (5 Hz)
-									startCommand += "5000 us refresh screen of width 200000 us every 200 ms"; // 200 Hz, 5 Hz, max 40 samples per screen
+							case '6':	// horizontal frequency = 5 Hz, whole width = 0,2 s, 40 samples per screen, 5.000 us per sample, server refreshes every 0,2 s, all 40 samples will be displyed at once
+									startCommand += "5000 us screen width = 200000 us"; // sampling: 200 Hz, horizontal frequency: 5 Hz, max 40 samples per screen
 									break;
-							case '7':	// horizontal frequency = 10 Hz, whole width = 0,1 s, 40 samples per screen, 2.500 us per sample (fits in 16 bit integer), refresh every screen (10 Hz)
-									startCommand += "2500 us refresh screen of width 100000 us every 100 ms"; // 400 Hz, 10 Hz, max 40 samples per screen
+							case '7':	// horizontal frequency = 10 Hz, whole width = 0,1 s, 40 samples per screen, 2.500 us per sample, server refreshes every 0,1 s, all 40 samples will be displyed at once
+									startCommand += "2500 us screen width = 100000 us"; // sampling: 400 Hz, horizontal frequency: 10 Hz, max 40 samples per screen
 									break;
-							case '8':	// horizontal frequency = 20 Hz, whole width = 0,05 s, 40 samples per screen, 1.250 us per sample (fits in 16 bit integer), refresh every screen (20 Hz)
-									startCommand += "1250 us refresh screen of width 50000 us every 50 ms"; // 800 Hz, 20 Hz, max 40 samples per screen
+							case '8':	// horizontal frequency = 20 Hz, whole width = 0,05 s, 40 samples per screen, 1.250 us per sample, server refreshes every 0,05 s, all 40 samples will be displyed at once
+									startCommand += "1250 us screen width = 50000 us"; // sampling: 800 Hz, horizontal frequency: 20 Hz, max 40 samples per screen
 									break;
-
-							// IE can not keep up with higher screen refresh rates any more, we have to start skipping screen frames
-
-							case '9':	// horizontal frequency = 50 Hz, whole width = 0,02 s, 40 samples per screen, 500 us per sample (fits in 16 bit integer), refresh every 3rd screen frame (16.67 Hz)
-									startCommand += "500 us refresh screen of width 20000 us every 60 ms";  // 2 kHz, 50 Hz, max 40 samples per screen
+							case '9':	// horizontal frequency = 50 Hz, whole width = 20 ms, 40 samples per screen, 500 us per sample, server refreshes every 40 ms (20 would be too fast), all 40 samples will be displyed at once
+									startCommand += "500 us screen width = 20000 us";  // sampling: 2 KHz, horizontal frequency: 50 Hz, max 40 samples per screen
 									break;
-							case '10':	// horizontal frequency = 60 Hz, whole width = 0,016667 s, 40 samples per screen, 417 us per sample (fits in 16 bit integer), refresh every 3rd screen frame (19.60 Hz)
-									startCommand += "425 us refresh screen of width 17000 us every 51 ms"; // 2,4 kHz, 60 Hz, max 40 samples per screen
+							case '10':	// horizontal frequency = 60 Hz, whole width = 16,667 ms, 40 samples per screen, 417 us per sample, server refreshes every 34 ms (16,667 would be too fast), all 40 samples will be displyed at once
+									startCommand += "425 us screen width = 17000 us"; // sampling: 2,4 KHz, horizontal frequency: 60 Hz, max 40 samples per screen
 									break; 
-							case '11':	// horizontal frequency = 100 Hz, whole width = 0,01 s, 40 samples per screen, 250 us per sample (fits in 16 bit integer), refresh every 5th screen frame (20 Hz)
-									startCommand += "250 us refresh screen of width 10000 us every 50 ms"; // 4 kHz, 50 Hz, max 40 samples per screen
+							case '11':	// horizontal frequency = 100 Hz, whole width = 10 ms, 40 samples per screen, 250 us per sample, server refreshes every 50 ms (10 would be too fast), all 40 samples will be displyed at once
+									startCommand += "250 us screen width = 10000 us"; // sampling: 4 KHz, horizontal frequency: 100 Hz, max 40 samples per screen
 									break;
-							case '12':	// horizontal frequency = 200 Hz, whole width = 0,005 s, 40 samples per screen, 125 us per sample (fits in 16 bit integer), refresh every 10th screen frame (20 Hz)
-									startCommand += "125 us refresh screen of width 5000 us every 50 ms"; // 8 kHz, 50 Hz, max 40 samples per screen
+							case '12':	// horizontal frequency = 200 Hz, whole width = 5 ms, 40 samples per screen, 125 us per sample, server refreshes every 50 ms (5 would be too fast), all 40 samples will be displyed at once
+									startCommand += "125 us screen width = 5000 us"; // sampling: 8 KHz, horizontal frequency: 200 Hz, max 40 samples per screen
 									break;
-							case '13':	// horizontal frequency = 500 Hz, whole width = 0,002 s, 30 or 40 samples per screen, 50 us per sample, refresh every 25th screen frame (20 Hz)
-									startCommand += "50 us refresh screen of width 2000 us every 50 ms"; // 20 kHz, 50 Hz, max 40 samples per screen
+							case '13':	// horizontal frequency = 500 Hz, whole width = 2 ms, 40 samples per screen, 50 us per sample, server refreshes every 50 ms (2 would be too fast), all 40 samples will be displyed at once
+									startCommand += "50 us screen width = 2000 us"; // sampling: 20 KHz, horizontal frequency: 500 Hz, max 40 samples per screen
 									break;
-							case '14':	// horizontal frequency = 1000 Hz, whole width = 0,001 s, 40 samples per screen, 25 us per sample (fits in 16 bit integer), refresh every 50th screen frame (20 Hz)
-									startCommand += "25 us refresh screen of width 1000 us every 50 ms"; // 40 kHz, 50 Hz, max 40 samples per screen
+							case '14':	// horizontal frequency = 1000 Hz, whole width = 1 ms, 40 samples per screen, 25 us per sample, server refreshes every 50 ms (1 would be too fast), all 40 samples will be displyed at once
+									startCommand += "25 us screen width = 1000 us"; // sampling: 40 KHz, horizontal frequency: 1 KHz, max 40 samples per screen
 									break;
-
-							// ESP32 can not keep up with higher analog sampling rate - reduce the number of samples per screen
-
-							case '15':	// horizontal frequency = 2000 Hz, whole width = 0,0005 s, 35/40 samples per screen, 2 us per sample (fits in 16 bit integer), refresh every 100th screen frame (20 Hz)
-									if (document.getElementById ("analog").checked) startCommand += "14 us refresh screen of width 500 us every 50 ms"; // 70 kHz, 50 Hz, max 35 samples per screen
-									else 						startCommand += "12 us refresh screen of width 500 us every 50 ms"; // 80 kHz, 50 Hz, max 40 samples per screen
+							case '15':	// horizontal frequency = 2000 Hz, whole width = 500 us, 40 samples per screen, 12 us per sample, server refreshes every 50 ms (500 us would be too fast), all (less then, server can not keep up) 40) samples will be displyed at once
+									startCommand += "12 us screen width = 500 us every 50 ms"; // sampling: 80 KHz, horizontal frequency: 50 Hz, max 40 samples per screen
 									break;
-							case '16':	// horizontal frequency = 5000 Hz, whole width = 0,0002 s, 14/40 samples per screen, 20/5 us per sample (fits in 16 bit integer), refresh every 250th screen frame (20 Hz)
-									if (document.getElementById ("analog").checked) startCommand += "14 us refresh screen of width 200 us every 50 ms"; // 70 kHz, 50 Hz, max 14 samples per screen
-									else 						startCommand += "5 us refresh screen of width 200 us every 50 ms"; // 200 kHz, 50 Hz, max 40 samples per screen
+							case '16':	// horizontal frequency = 5000 Hz, whole width = 200 us, 40 samples per screen, 5 us per sample, server refreshes every 50 ms (200 us would be too fast), all (less then, server can not keep up) 40) samples will be displyed at once
+									startCommand += "5 us screen width = 200 us"; // sampling: 200 KHz, horizontal frequency: 50 Hz, max 40 samples per screen
 									break;
-
-							// ESP32 can not keep up with higher digital sampling rate - reduce the number of samples per screen
-
-							case '17':	// horizontal frequency = 10000 Hz, whole width = 0,0001 s, 8/33 samples per screen, 16/3 us per sample (fits in 16 bit integer), refresh every 500th screen frame (20 Hz)
-									if (document.getElementById ("analog").checked) startCommand += "13 us refresh screen of width 100 us every 50 ms"; // 76 kHz, 50 Hz, max 8 samples per screen
-									else 						startCommand += "3 us refresh screen of width 100 us every 50 ms"; // 300 kHz, 50 Hz, max 30 samples per screen
+							case '17':	// horizontal frequency = 10000 Hz, whole width = 100 us, 33 samples per screen, 3 us per sample, server refreshes every 50 ms (100 us would be too fast), all (less then, server can not keep up) 40) samples will be displyed at once
+									startCommand += "3 us screen width = 100 us"; // sampling: 300 KHz, horizontal frequency: 50 Hz, max 33 samples per screen
 									break;
 
 						}
@@ -373,7 +469,7 @@
 
 					ws.onmessage = function (evt) { 
 						if (typeof (evt.data) === 'string' || evt.data instanceof String) { // UTF-8 formatted string - error message from ESP32 server
-							alert ("Error: " + evt.data);
+							alert ("Error message from server: " + evt.data); // oscilloscope code reporting error (synatx error, ...)
 							enableDisableControls (false);
 						}
 						if (evt.data instanceof Blob) { // binary data - array of samples
@@ -391,10 +487,13 @@
 						}
 					};
 
+					/*
                				ws.onclose = function () { 
 						// websocket is closed.
+						console.log ("WebSocket closed.");
 						enableDisableControls (false); 
 					};
+					*/
 
 					ws.onerror = function (event) {
 						ws.close (); 
@@ -441,7 +540,6 @@
 				ctx.lineTo (canvas.width - 1, 0);
 				ctx.lineTo (canvas.width - 1, canvas.height - 1);
 				ctx.lineTo (0, canvas.height - 1);
-				ctx.closePath ();
 				ctx.fill ();
 
 				// calculate drawing parametes and draw grid and scale
@@ -480,7 +578,6 @@
 						ctx.beginPath ();
 						ctx.moveTo (xOffset - 5, j);
 						ctx.lineTo (canvas.width, j);
-						ctx.closePath ();
 						ctx.stroke ();
 					}					
 
@@ -494,7 +591,6 @@
 						ctx.beginPath ();
 						ctx.moveTo (xOffset - 5, j);
 						ctx.lineTo (canvas.width, j);
-						ctx.closePath ();
 						ctx.stroke ();
 					}
 					ctx.strokeText ('0', 5, yOffset + 5);
@@ -599,94 +695,108 @@
 					ctx.beginPath ();
 					ctx.moveTo (i, yOffset + 5);
 					ctx.lineTo (i, gridTop);
-					ctx.closePath ();
 					ctx.stroke ();
 				}
-				ctx.beginPath (); ctx.moveTo (-1, -1); ctx.lineTo (-1, -1); ctx.closePath (); ctx.stroke (); // non-existing line - this line will be redrawn latter with signal color after first stroke - put it outside of view since we don't want this to hapen
-
 			}
 
 			drawBackgroundAndCalculateParameters ();
 
-			function drawSignal (myInt16Array, startInd, endInd) {
-				//alert ('entering - drawSignal (myInt16Array, ' + startInd + ', ' + endInd + ')');
-				if (endInd < startInd) return;
+			var lastI;	// last drawn sample (time)
+			var lastJ1;	// signal 1
+			var lastJ2;	// signal 2
 
-				// find dummy sample (the one with time offset of -1) which will tells javascript cliento to start drawing from beginning of the screen
-				for (var ind = startInd; ind <= endInd; ind += 2) {
+			function drawSignal (myInt16Array, startInd, endInd) {
+				if (startInd > endInd) return;
+
+				// find dummy sample (the one with value of -1) which will tells javascript cliento to start drawing from beginning of the screen
+				for (var ind = startInd; ind <= endInd; ind += 3) {
 					if (myInt16Array [ind] == -1) { // if signal value = -1 (dummy value)
-						drawSignal (myInt16Array, startInd, ind - 2);
+						drawSignal (myInt16Array, startInd, ind - 3); // upt to peviuos sample, there are 3 16 bit words in each sample
 						drawBackgroundAndCalculateParameters ();
-						drawSignal (myInt16Array, ind + 2, endInd);
+						drawSignal (myInt16Array, ind + 3, endInd); // from next sample on, there are 3 16 bit words in each sample
 						return;
 					}
 				}
 
-				var canvas = document.getElementById ("oscilloscope")
+				var canvas = document.getElementById ("oscilloscope");
 				var ctx = canvas.getContext ('2d');
 
 				var analog = document.getElementById ('analog').checked; 
-				var lines = document.getElementById ("lines").checked;
-				var markers = document.getElementById ("markers").checked;
+				var lines = document.getElementById ('lines').checked;
+				var markers = document.getElementById ('markers').checked;
 
-				var tmp = screenTimeOffset;
-				
-				ctx.strokeStyle='#b6dcfb';
-				ctx.lineWidth=5;
+				ctx.lineWidth = 5;
 
-				// draw lines
+				for (var ind = startInd; ind < endInd; ind += 3) { // there are 3 16 bit words in each sample
 
-				if (lines) {
-					screenTimeOffset = tmp;
-					if (analog) { // analog
-						for (var ind = startInd; ind <= endInd; ind += 2) {
-							screenTimeOffset += myInt16Array [ind + 1]; // signal time offset
-							i = xOffset + xScale * screenTimeOffset;
- 							j = yOffset + yScale * myInt16Array [ind]; // signal value
-							if (restartDrawingSignal) {
-								ctx.moveTo (i, j); 
-								restartDrawingSignal = false;
-							} else {
-							    ctx.lineTo (i, j); 
-							    ctx.stroke ();
+					// calculate sample position
+
+					screenTimeOffset += myInt16Array [ind + 2]; 
+					i = xOffset + xScale * screenTimeOffset;   // time	
+ 					j1 = yOffset + yScale * myInt16Array [ind]; // signal 1 
+					j2 = myInt16Array [ind + 1] >=0 ? yOffset + yScale * myInt16Array [ind + 1] : -1; // signal 2 
+
+					// lines
+					if (lines) {
+						if (restartDrawingSignal) {
+							restartDrawingSignal = false;
+						} else {
+							if (analog) { // analog
+								// signal 2
+								if (j2 >= 0) {
+									ctx.strokeStyle = '#ff8000'; 
+									ctx.beginPath ();
+									ctx.moveTo (lastI, lastJ2); 
+									ctx.lineTo (i, j2); 		
+									ctx.stroke ();
+								}
+								// signal 1
+								ctx.strokeStyle = '#ffbf80'; 
+								ctx.beginPath ();
+								ctx.moveTo (lastI, lastJ1); 
+								ctx.lineTo (i, j1); 		
+								ctx.stroke ();
+							} else { // digital
+								// signal 2
+								if (j2 >= 0) {
+									ctx.strokeStyle = '#ff8000'; 
+									ctx.beginPath ();
+									ctx.moveTo (lastI, lastJ2);
+									ctx.lineTo (i, lastJ2);
+									ctx.lineTo (i, j2);
+									ctx.stroke ();
+								}
+								// signal 1
+								ctx.strokeStyle = '#ffbf80'; 
+								ctx.beginPath ();
+								ctx.moveTo (lastI, lastJ1);
+								ctx.lineTo (i, lastJ1);
+								ctx.lineTo (i, j1);
+								ctx.stroke ();
 							}
 						}
-
-					} else { // digital
 						
-						for (var ind = startInd; ind <= endInd; ind += 2) {
-							screenTimeOffset += myInt16Array [ind + 1]; // signal time offset
-							i = xOffset + xScale * screenTimeOffset;
-							if (restartDrawingSignal) {
-								yLast = myInt16Array [ind];
-								j = yOffset + yScale * yLast;
-								ctx.moveTo (i, j);
-								restartDrawingSignal = false;
-							} 
-							ctx.lineTo (i, j);
-							yLast = myInt16Array [ind];
-							j = yOffset + yScale * yLast; // signal value
-							ctx.lineTo (i, j);
+					}
+
+					// markers
+					if (markers) {
+						// signal 2
+						if (j2 >= 0) {
+							ctx.strokeStyle = '#ff8000'; 
+							ctx.beginPath ();
+							ctx.arc (i, j2, 5, 0, 2 * Math.PI, false); 
+							ctx.stroke ();
 						}
-						ctx.stroke ();
-						
-					}
-				}	
-
-				// draw markers
-
-				if (markers) {
-					screenTimeOffset = tmp;
-					for (var ind = startInd; ind <= endInd; ind += 2) {
-						screenTimeOffset += myInt16Array [ind + 1]; // signal time offset
+						// signal 1
+						ctx.strokeStyle = '#ffbf80'; 
 						ctx.beginPath ();
-						i = xOffset + screenTimeOffset * xScale;
-						j = yOffset + myInt16Array [ind] * yScale; // signal value
-						ctx.arc (i, j, 5, 0, 2 * Math.PI, false); 
+						ctx.arc (i, j1, 5, 0, 2 * Math.PI, false); 
 						ctx.stroke ();
-						ctx.closePath ();
 					}
-					ctx.moveTo (i, j); // so the next lineTo will work correctly
+
+					lastI = i;
+					lastJ1 = j1; 
+					lastJ2 = j2;
 				}
 
 			}
@@ -695,9 +805,9 @@
 
 			function enableDisableControls (workMode) {
 				if (workMode) {
-
 					// disable GPIO, analog/digital, trigger, frequency and start, enable stop
-					document.getElementById ('gpio').disabled = true;
+					document.getElementById ('gpio1').disabled = true;
+					document.getElementById ('gpio2').disabled = true;
 					document.getElementById ('analog').disabled = true;
 					document.getElementById ('digital').disabled = true;
 					document.getElementById ('posTrigger').disabled = true;
@@ -710,11 +820,10 @@
 					document.getElementById ('frequencyLabel').style.color = 'gray';
 					document.getElementById ('startButton').disabled = true;
 					document.getElementById ('stopButton').disabled = false;
-
 				} else {
-
 					// enable GPIO, analog/digital, trigger, frequency and start, disable stop
-					document.getElementById ('gpio').disabled = false;
+					document.getElementById ('gpio1').disabled = false;
+					document.getElementById ('gpio2').disabled = false;
 					document.getElementById ('analog').disabled = false;
 					document.getElementById ('digital').disabled = false;
 					document.getElementById ('posTrigger').disabled = false;
@@ -723,7 +832,6 @@
 					document.getElementById ('frequencyLabel').style.color = 'black';
 					document.getElementById ('startButton').disabled = false;
 					document.getElementById ('stopButton').disabled = true;
-
 					if (document.getElementById ("analog").checked) {
 						document.getElementById ('sensitivity').disabled = false;
 						document.getElementById ('sensitivityLabel').style.color = 'black';
@@ -734,85 +842,8 @@
 						document.getElementById ('negTreshold').disabled = false;
 						document.getElementById ('negTriggerLabel').style.color = 'black';
 					}
-
 				} 
 			}
-
-
-			// some tests during development
-
-			function test_analog_1_sample_at_a_time () { 
-				document.getElementById ('frequency').value = 3; // 0,5 Hz
-				document.getElementById ('analog').checked = true; 
-				var count = 0;
-				var timer = setInterval (function () {
-					if (count % 40 == 0) { // start drawing signal from the left of the screen
-						var myInt16Array = new Int16Array ([-1, -1, parseInt (320 * Math.sin ((count ++) * 0.3) + 500), 0]); // dummy sample, left most sample
-						drawSignal (myInt16Array, 0, 3);
-					} else { // continue drawing signal
-						var myInt16Array = new Int16Array ([parseInt (320 * Math.sin ((count ++) * 0.3) + 500), 50]); // 50 ms
-						drawSignal (myInt16Array, 0, 1);
-					}
-				}, 50); // ms
-			}
-
-			function test_analog_1_screen_at_a_time () { 
-				document.getElementById ('frequency').value = 8; // 20 Hz
-				document.getElementById ('analog').checked = true; 
-				var count = 0;
-				var timer = setInterval (function () {
-					var myInt16Array = new Int16Array (82);
-					myInt16Array [0] = -1; myInt16Array [1] = -1; // dummy sample
-					for (var i = 2; i < 82; i += 2) {
-						myInt16Array [i] = parseInt (320 * Math.sin ((count ++) / 3.1415) + 500);
-						myInt16Array [i + 1] = 1250; // us
-					}
-					myInt16Array [3] = 0; // us - correction for the first sample
-					drawSignal (myInt16Array, 0, 82);
-				}, 50); // ms
-			}
-
-			function test_digital_1_sample_at_a_time () { 
-				document.getElementById ('frequency').value = 3; // 0,5 Hz
-				document.getElementById ('analog').checked = false; 
-				var count = 0;
-				var timer = setInterval (function () {
-					if (count % 40 == 0) { // start drawing signal from the left of the screen
-						var myInt16Array = new Int16Array ([-1, -1, parseInt (((count ++) / 3 % 3 == 0) ? 1 : 0), 0]); // dummy sample, left most sample
-						drawSignal (myInt16Array, 0, 3);
-					} else { // continue drawing signal
-						var myInt16Array = new Int16Array ([parseInt (((count ++) / 3 % 3 == 0) ? 1 : 0), 50]); // 50 ms
-						drawSignal (myInt16Array, 0, 1);
-					}
-				}, 50); // ms
-			}
-
-			function test_digital_1_screen_at_a_time () { 
-				document.getElementById ('frequency').value = 8; // 20 Hz
-				document.getElementById ('analog').checked = false; 
-				var count = 0;
-				var timer = setInterval (function () {
-					var myInt16Array = new Int16Array (82);
-					myInt16Array [0] = -1; myInt16Array [1] = -1; // dummy sample
-					for (var i = 2; i < 82; i += 2) {
-						myInt16Array [i] = parseInt (((count ++) / 3 % 3 == 0) ? 1 : 0);
-						myInt16Array [i + 1] = 1250; // us
-					}
-					myInt16Array [3] = 0; // us - correction for the first sample
-					drawSignal (myInt16Array, 0, 82);
-				}, 50); // ms
-			}
-
-			function sleep (milliseconds) {
-				var start = performance.now ();
-				while ((performance.now () - start) < milliseconds);
-			}
-			
-			// enableDisableControls (true);
-			// test_analog_1_sample_at_a_time ();
-			// test_analog_1_screen_at_a_time ();
-			// test_digital_1_sample_at_a_time ();
-			// test_digital_1_screen_at_a_time ();
 
 		</script>
 	</body>
