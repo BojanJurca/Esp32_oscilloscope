@@ -26,7 +26,7 @@
 #include <WiFi.h>
 #include "webServer.hpp"    // oscilloscope uses websockets defined in webServer.hpp  
 
-// #include "esp_task_wdt.h"
+#include "esp_task_wdt.h"
 
 struct oscSample {                    // one sample
    int16_t signal1;                   // signal value of 1st GPIO read by analogRead or digialRead   
