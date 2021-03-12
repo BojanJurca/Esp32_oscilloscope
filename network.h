@@ -37,6 +37,8 @@
  *            December 1, Bojan Jurca
  *          - elimination of compiler warnings and some bugs
  *            Jun 10, 2020, Bojan Jurca
+ *          - added DNS servers to static STA IP configuration
+ *            March 5, 2021, Bojan Jurca
  *            
  */
 
@@ -77,6 +79,12 @@
   #ifndef DEFAULT_STA_GATEWAY
     #define DEFAULT_STA_GATEWAY     "10.0.0.3"
   #endif
+  #ifndef DEFAULT_STA_DNS_1
+    #define DEFAULT_STA_DNS_1       "193.189.160.13" // or whatever your internet provider's DNS is
+  #endif
+  #ifndef DEFAULT_STA_DNS_2
+    #define DEFAULT_STA_DNS_2       "193.189.160.23" // or whatever your internet provider's DNS is
+  #endif  
   */
   // define default Access Point parameters to be written into /etc/hostapd/hostapd.conf if you want ESP to serve as an access point  
   #ifndef DEFAULT_AP_SSID
@@ -128,6 +136,8 @@
     String staIP = "";
     String staSubnetMask = "";
     String staGateway = "";
+    String staDns1 = "";
+    String staDns2 = "";
     String apSSID = "";
     String apPassword = "";
     String apIP = "";
@@ -150,6 +160,8 @@
             staIP         = between (fileContent, "address ", "\n");
             staSubnetMask = between (fileContent, "netmask ", "\n");
             staGateway    = between (fileContent, "gateway ", "\n");
+            staDns1       = between (fileContent, "dns1 ", "\n");
+            staDns2       = between (fileContent, "dns2 ", "\n");
           }
           // Serial.printf ("[%10lu] [network] staIP         = %s\n", millis (), staIP.c_str ());
           // Serial.printf ("[%10lu] [network] staSubnetMask = %s\n", millis (), staSubnetMask.c_str ());
@@ -158,10 +170,10 @@
         } else { // save default configuration
     
           Serial.printf ("[%10lu] [network] /network/interfaces does not exist or it is empty, creating a new one ... ", millis ());
-          FFat.mkdir ("/network"); // location of this file
+          if (!isDirectory ("/network")) FFat.mkdir ("/network"); // location of this file
         
           fileContent = "# WiFi STA(tion) configuration - reboot for changes to take effect\r\n\r\n";
-                         #if defined DEFAULT_STA_IP && defined DEFAULT_STA_SUBNET_MASK && defined DEFAULT_STA_GATEWAY
+                         #if defined DEFAULT_STA_IP && defined DEFAULT_STA_SUBNET_MASK && defined DEFAULT_STA_GATEWAY && defined DEFAULT_STA_DNS_1 && defined DEFAULT_STA_DNS_2
                            fileContent += "# get IP address from DHCP\r\n"
                                           "#  iface STA inet dhcp\r\n"                  
                                           "\r\n"
@@ -169,7 +181,9 @@
                                           "   iface STA inet static\r\n"
                                           "      address " + (staIP = DEFAULT_STA_IP) + "\r\n"          
                                           "      netmask " + (staSubnetMask = DEFAULT_STA_SUBNET_MASK) + "\r\n" 
-                                          "      gateway " + (staGateway + DEFAULT_STA_GATEWAY) + "\r\n";    
+                                          "      gateway " + (staGateway = DEFAULT_STA_GATEWAY) + "\r\n"
+                                          "      dns1 " + (staDns1 = DEFAULT_STA_DNS_1) + "\r\n"
+                                          "      dns2 " + (staDns2 = DEFAULT_STA_DNS_2) + "\r\n";    
                          #else
                            fileContent += "# get IP address from DHCP\r\n"
                                           "   iface STA inet dhcp\r\n"                  
@@ -178,7 +192,9 @@
                                           "#  iface STA inet static\r\n"
                                           "#     address 10.0.0.3\r\n"          
                                           "#     netmask 255.255.255.0\r\n" 
-                                          "#     gateway 10.0.0.1\r\n";  
+                                          "#     gateway 10.0.0.1\r\n"
+                                          "#     dns1 \r\n"
+                                          "#     dns2 \r\n";
                          #endif
           if (writeFile (fileContent, "/network/interfaces")) Serial.printf ("created.\n");
           else                                                Serial.printf ("error.\n");  
@@ -201,7 +217,7 @@
         } else { // save default configuration
     
           Serial.printf ("[%10lu] [network] /etc/wpa_supplicant/wpa_supplicant.conf does not exist or it is empty, creating a new one ... ", millis ());
-          FFat.mkdir ("/etc"); FFat.mkdir ("/etc/wpa_supplicant"); // location of this file
+          if (!isDirectory ("/etc/wpa_supplicant")) { FFat.mkdir ("/etc"); FFat.mkdir ("/etc/wpa_supplicant"); } // location of this file
     
           fileContent = "# WiFi STA (station) credentials - reboot for changes to take effect\r\n\r\n"
                         "network = {\r\n"
@@ -282,7 +298,7 @@
         } else { // save default configuration
     
           Serial.printf ("[%10lu] [network] /etc/hostapd/hostapd.conf does not exist or it is empty, creating a new one ... ", millis ());
-          FFat.mkdir ("/etc/hostapd"); // location of this file
+          if (!isDirectory ("/etc/hostapd")) { FFat.mkdir ("/etc"); FFat.mkdir ("/etc/hostapd"); } // location of this file
           
           fileContent =  "# WiFi AP credentials - reboot for changes to take effect\r\n\r\n"
                          "iface AP\r\n"
@@ -415,8 +431,8 @@
     if (staSSID > "") { 
 
       if (staIP > "") { 
-        networkDmesg ("[network] [STA] connecting STAtion to router with static IP " + staIP);
-        WiFi.config (IPAddressFromString (staIP), IPAddressFromString (staGateway), IPAddressFromString (staSubnetMask));
+        networkDmesg ("[network] [STA] connecting STAtion to router with static IP: " + staIP + " GW: " + staGateway + " MSK: " + staSubnetMask + " DNS: " + staDns1 + ", " + staDns2);
+        WiFi.config (IPAddressFromString (staIP), IPAddressFromString (staGateway), IPAddressFromString (staSubnetMask), staDns1 == "" ? IPAddress (255, 255, 255, 255) : IPAddressFromString (staDns1), staDns2 == "" ? IPAddress (255, 255, 255, 255) : IPAddressFromString (staDns2)); // INADDR_NONE == 255.255.255.255
       } else { 
         networkDmesg ("[network] [STA] connecting STAtion to router using DHCP.");
       }

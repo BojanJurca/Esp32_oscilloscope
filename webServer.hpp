@@ -34,6 +34,8 @@
  *            October 10, 2020, Bojan Jurca
  *          - support for HTTP request and response header fields and cookies
  *            February 3, 2021, Bojan Jurca
+ *          - MIME types
+ *            March 2, Bojan Jurca
  *
  */
 
@@ -91,6 +93,8 @@
                                                   // make a copy of constructor parameters
                                                   __connection__ = connection;
                                                   __wsRequest__ = wsRequest;
+
+                                                  // debug: Serial.printf ("[websocket debug] %s\n", wsRequest.c_str ());
 
                                                   // do the handshake with the browser so it would consider webSocket connection established
                                                   int i = wsRequest.indexOf ("Sec-WebSocket-Key: ");
@@ -510,8 +514,9 @@ readingPayload:
             // 3rd handle HTTP request internaly:
             //    - if it is a HTML file name then reply with file content
             //    - reply with error 404 if it is not
-            
-            if (stristr (buffer, (char *) "CONNECTION: UPGRADE")) {
+
+            // debug: Serial.printf ("[httpServer debug] %s\n", buffer);
+            if (stristr (buffer, (char *) "UPGRADE: WEBSOCKET")) {
               connection->setTimeOut (300000); // set time-out to 5 minutes for WebSockets (by default if is 1.5 s for HTTP requests)
               WebSocket *webSocket = new WebSocket (connection, httpRequest); 
               if (webSocket && webSocket->isOpened ()) { // check success
@@ -525,7 +530,13 @@ readingPayload:
 
             String httpResponseContent;
             if (ths->__externalHttpRequestHandler__ && (httpResponseContent = ths->__externalHttpRequestHandler__ (httpRequest, &wsp)) != "") {
-              // debug: Serial.println ("HTTP/1.1 " + wsp.httpResponseStatus + "\r\n" + wsp.getHttpResponseHeaderFields () + "Content-Length:" + String (httpResponseContent.length ()) + "\r\n\r\n" + httpResponseContent);
+              if (!stristr ((char *) wsp.httpResponseHeaderFields.c_str (), (char *) "CONTENT-TYPE")) { // add Content-Type if it is not set yet
+                     if (stristr ((char *) httpResponseContent.c_str (), (char *) "<HTML>")) wsp.setHttpResponseHeaderField ("Content-Type", "text/html"); // try guessing if Content-Type is HTML ...
+                else if (strstr (httpResponseContent.c_str (), "{"))                         wsp.setHttpResponseHeaderField ("Content-Type", "application/json");
+                // ... add more if needed but Contet-Type can often be omitted without problems ...                
+                else                                                                         wsp.setHttpResponseHeaderField ("Content-Type", "text/plain"); // ... or just say it is a plain text
+              }
+              // debug: Serial.println ("[httpServer debug] HTTP/1.1 " + wsp.httpResponseStatus + "\r\n" + wsp.httpResponseHeaderFields + "Content-Length:" + String (httpResponseContent.length ()) + "\r\n\r\n" + httpResponseContent);
               connection->sendData ("HTTP/1.1 " + wsp.httpResponseStatus + "\r\n" + wsp.httpResponseHeaderFields + "Content-Length:" + String (httpResponseContent.length ()) + "\r\n\r\n" + httpResponseContent);
             } else {
               connection->sendData (ths->__internalHttpRequestHandler__ (httpRequest, &wsp)); // send reply to browser
@@ -552,13 +563,29 @@ readingPayload:
               String fileName = httpRequest.substring (5, i);
               if (fileName == "") fileName = "index.html";
               fileName = __webServerHomeDirectory__ + fileName;
-
+              if (!stristr ((char *) wsp->httpResponseHeaderFields.c_str (), (char *) "CONTENT-TYPE")) { // add Content-Type if it is not set yet
+                     if (fileName.endsWith (".bmp"))                                wsp->setHttpResponseHeaderField ("Content-Type", "image/bmp");
+                else if (fileName.endsWith (".css"))                                wsp->setHttpResponseHeaderField ("Content-Type", "text/css");
+                else if (fileName.endsWith (".csv"))                                wsp->setHttpResponseHeaderField ("Content-Type", "text/csv");
+                else if (fileName.endsWith (".gif"))                                wsp->setHttpResponseHeaderField ("Content-Type", "image/gif");
+                else if (fileName.endsWith (".htm") || fileName.endsWith (".html")) wsp->setHttpResponseHeaderField ("Content-Type", "text/html");
+                else if (fileName.endsWith (".jpg") || fileName.endsWith (".jpeg")) wsp->setHttpResponseHeaderField ("Content-Type", "image/jpeg");
+                else if (fileName.endsWith (".js"))                                 wsp->setHttpResponseHeaderField ("Content-Type", "text/javascript");
+                else if (fileName.endsWith (".json"))                               wsp->setHttpResponseHeaderField ("Content-Type", "application/json");
+                else if (fileName.endsWith (".mpeg"))                               wsp->setHttpResponseHeaderField ("Content-Type", "video/mpeg");
+                else if (fileName.endsWith (".pdf"))                                wsp->setHttpResponseHeaderField ("Content-Type", "application/pdf");
+                else if (fileName.endsWith (".png"))                                wsp->setHttpResponseHeaderField ("Content-Type", "image/png");
+                else if (fileName.endsWith (".tif") || fileName.endsWith (".tiff")) wsp->setHttpResponseHeaderField ("Content-Type", "image/tiff");
+                else if (fileName.endsWith (".txt"))                                wsp->setHttpResponseHeaderField ("Content-Type", "text/plain");
+                // ... add more if needed but Contet-Type can often be omitted without problems ...
+              }
               File f = FFat.open (fileName.c_str (), FILE_READ);           
               if (f) {
                 if (!f.isDirectory ()) {
                   char *buff = (char *) malloc (2048); // get 2 KB of memory from heap
                   if (buff) {
                     String httpHeader = "HTTP/1.1 " + wsp->httpResponseStatus + "\r\n" + wsp->httpResponseHeaderFields + "Content-Length:" + String (f.size ()) + "\r\n\r\n";
+                    // debug: Serial.printf ("[httpServer debug] %s", httpHeader.c_str ());
                     if (httpHeader.length () > 2046) { // there should normally be enough space, but check anyway
                       f.close ();
                       return "HTTP/1.1 500 Internal server error\r\nContent-Length:29\r\n\r\nError: HTTP header too large."; 

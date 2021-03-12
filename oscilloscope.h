@@ -26,7 +26,7 @@
 #include <WiFi.h>
 #include "webServer.hpp"    // oscilloscope uses websockets defined in webServer.hpp  
 
-#include "esp_task_wdt.h"
+// #include "esp_task_wdt.h"
 
 struct oscSample {                    // one sample
    int16_t signal1;                   // signal value of 1st GPIO read by analogRead or digialRead   
@@ -94,7 +94,7 @@ void oscReader (void *sharedMemory) {
 
   portMUX_TYPE *csSendBuffer =        &((oscSharedMemory *) sharedMemory)->csSendBuffer;
 
-  esp_task_wdt_delete (NULL);
+  // esp_task_wdt_delete (NULL);
   
   int screenTime;     // to check how far we have already got from the left of the screen (we'll compare this value with screenWidthTime)
   int16_t deltaTime;  // to chek how far last sample is from the previous one
@@ -255,7 +255,7 @@ void oscSender (void *sharedMemory) {
 
 void runOscilloscope (WebSocket *webSocket) {
 
-  esp_task_wdt_delete (NULL);
+  // esp_task_wdt_delete (NULL);
   
   // set up oscilloscope shared memory that will be shared among all 3 oscilloscope threads
   oscSharedMemory sharedMemory = {};                        // get some memory that will be shared among all oscilloscope threads and initialize it with zerros
@@ -378,11 +378,12 @@ void runOscilloscope (WebSocket *webSocket) {
 
   if (!strcmp (sharedMemory.samplingTimeUnit, "us")) {
     // calculate delayMicroseconds correction for more accurrate timing
+    //  80 MHz CPU analogRead takes 100 us, digitalRead takes  6 us
+    // 160 MHz CPU analogRead takes  80 us, digitalRead takes  3 us
+    // 240 MHz CPU analogRead takes  60 us, digitalRead takes  2 us
     int correction;
-    if (!strcmp (sharedMemory.readType, "analog")) correction = 7; else correction = 1; if (cpuMHz < 240) correction ++; if (cpuMHz < 160) correction ++;
-
-// PREVERI ALI MORAŠ ZA 2 SIGNAL T +O ŠE POVEČATI
-    
+    if (!strcmp (sharedMemory.readType, "analog")) correction = ESP.getCpuFreqMHz () < 240 ? ( ESP.getCpuFreqMHz () < 160 ? 100 : 90 ) : 60; 
+    else                                           correction = ESP.getCpuFreqMHz () < 240 ? ( ESP.getCpuFreqMHz () < 160 ?   6 :  3 ) :  2; 
     sharedMemory.samplingTime -= correction;
     if (sharedMemory.samplingTime < 0) sharedMemory.samplingTime = 0;
   }

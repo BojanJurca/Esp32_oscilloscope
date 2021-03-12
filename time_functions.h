@@ -367,7 +367,7 @@
         String fileContent = readTextFile ("/etc/ntp.conf");
         if (fileContent == "") {
           timeDmesg ("[time] /etc/ntp.conf does not exist, creating new one.");
-          FFat.mkdir ("/etc"); // location of this file
+          if (!isDirectory ("/etc")) FFat.mkdir ("/etc"); // location of this file
           
           fileContent = "# configuration for NTP - reboot for changes to take effect\r\n\r\n"
                         "server1 " + (__ntpServer1__ = DEFAULT_NTP_SERVER_1) + "\r\n"
@@ -385,7 +385,7 @@
         fileContent = readTextFile ("/etc/crontab");
         if (fileContent == "") {
           timeDmesg ("[time] /etc/crontab does not exist, creating new one.");
-          FFat.mkdir ("/etc"); // location of this file
+          if (!isDirectory ("/etc")) FFat.mkdir ("/etc"); // location of this file
           
           fileContent = "# scheduled tasks (in local time) - reboot for changes to take effect\r\n"
                         "#\r\n"

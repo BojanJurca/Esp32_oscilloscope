@@ -59,14 +59,4 @@
     return s;
   }
 
-  // CPU frequency (80, 160, 240)
-
-  int __getCpuMHz__ () {
-    unsigned long startMicors = micros ();  
-    unsigned long counter = 0;
-    while (micros () - startMicors < 1000) counter ++;
-    return  (int) (((float) counter / (float) 463) + 0.5) * 80; // estimate CPU frequency
-  }
-  int cpuMHz = __getCpuMHz__ ();
-
 #endif
