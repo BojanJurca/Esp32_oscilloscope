@@ -1,5 +1,7 @@
 # ESP32 oscilloscope with Web user interface - see the signals the way ESP32 sees them
 
+**Want to try live demo? Demo ESP32 is available at [http://193.77.159.208/oscilloscope.html](http://193.77.159.208/oscilloscope.html). Please be lenient, ESP32 is not primarily intended for WAN.**
+
 What is new in this version?
 - support for Firefox web browser
 - the use of the latest ESP32_ftp_web_telnet_server_template code
