@@ -1,0 +1,4 @@
+New in 1.5
+
+  - easy install - all in RAM version included
+  - the latest version of servers used

@@ -1,50 +1,37 @@
 /*
- * 
- * FtpServer.hpp 
- * 
- *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
- * 
- *  FtpServer is built upon TcpServer with connectionHandler that handles TcpConnection according to FTP protocol.
- *  This goes for control connection at least. FTP is a little more complicated since it uses another TCP connection
- *  for data transfer. Beside that, data connection can be initialized by FTP server or FTP client and it is FTP client's
- *  responsibility to decide which way it is going to be.
- * 
- * History:
- *          - first release, 
- *            November 18, 2018, Bojan Jurca
- *          - added fileSystemSemaphore and delay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
- *            April 13, 2019, Bojan Jurca
- *          - introduction of FTP_FILE_TIME definition
- *            August, 25, 2019, Bojan Jurca
- *          - replaced gmtime () function that returns pointer to static structure with reentrant solution
- *            October 29, 2019, Bojan Jurca
- *          - elimination of compiler warnings and some bugs
- *            Jun 10, 2020, Bojan Jurca 
- *          - port from SPIFFS to FAT file system, adjustment for Arduino 1.8.13
- *            added FTP commands (pwd, cd, mkdir, rmdir, ...)
- *            October 31, 2020, Bojan Jurca
- *  
- */
+
+    ftpServer.hpp 
+ 
+    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+  
+    FtpServer is built upon TcpServer with connectionHandler that handles TcpConnection according to FTP protocol.
+    This goes for control connection at least. FTP is a little more complicated since it uses another TCP connection
+    for data transfer. Beside that, data connection can be initialized by FTP server or FTP client and it is FTP client's
+    responsibility to decide which way it is going to be.
+   
+    July, 25, 2021, Bojan Jurca
+    
+*/
 
 
 #ifndef __FTP_SERVER__
   #define __FTP_SERVER__
 
   #ifndef HOSTNAME
-    #define HOSTNAME "MyESP32Server" // WiFi.getHostname() // use default if not defined
+    #define HOSTNAME "MyESP32Server" // use default if not defined
   #endif
 
   #include <WiFi.h>
 
-  int __pasiveDataPort__ () {
-    static portMUX_TYPE csFtpPasiveDataPort = portMUX_INITIALIZER_UNLOCKED;
-    static int lastPasiveDataPort = 1024;                                               // change pasive data port range if needed
-    portENTER_CRITICAL (&csFtpPasiveDataPort);
-    int pasiveDataPort = lastPasiveDataPort = (((lastPasiveDataPort + 1) % 16) + 1024); // change pasive data port range if needed
-    portEXIT_CRITICAL (&csFtpPasiveDataPort);
-    return pasiveDataPort;
-  }
 
+  /*
+
+     Support for telnet dmesg command. If telnetServer.hpp is included in the project __ftpDmesg__ function will be redirected
+     to message queue defined there and dmesg command will display its contetn. Otherwise it will just display message on the
+     Serial console.
+     
+  */  
+  
   void __ftpDmesg__ (String message) { 
     #ifdef __TELNET_SERVER__ // use dmesg from telnet server if possible
       dmesg (message);
@@ -53,6 +40,29 @@
     #endif
   }
   void (* ftpDmesg) (String) = __ftpDmesg__; // use this pointer to display / record system messages
+
+  #ifndef dmesg
+    #define dmesg ftpDmesg
+  #endif
+
+  /*
+
+     When FTP server is working in passive mode it tells FTP client on which port to establish data connection. Since there may be
+     multiple FTP sessions running at the same time the server must pass a different port number for passive data connection
+     to each client.  
+     
+  */  
+
+
+  int __pasiveDataPort__ () {
+    static SemaphoreHandle_t __pasiveDataPortSemaphore__= xSemaphoreCreateMutex (); 
+    static int lastPasiveDataPort = 1024;                                               // change pasive data port range if needed
+    xSemaphoreTake (__pasiveDataPortSemaphore__, portMAX_DELAY);
+      int pasiveDataPort = lastPasiveDataPort = (((lastPasiveDataPort + 1) % 16) + 1024); // change pasive data port range if needed
+    xSemaphoreGive (__pasiveDataPortSemaphore__);
+    return pasiveDataPort;
+  }
+
 
   #include "TcpServer.hpp"        // ftpServer.hpp is built upon TcpServer.hpp  
   #include "file_system.h"        // ftpServer.hpp needs file_system.h
@@ -74,24 +84,27 @@
         // feel free to add more
       } ftpSessionParameters;        
   
-      ftpServer (char *serverIP,                                       // FTP server IP address, 0.0.0.0 for all available IP addresses - 15 characters at most!
+      ftpServer (String serverIP,                                      // FTP server IP address, 0.0.0.0 for all available IP addresses
                  int serverPort,                                       // FTP server port
-                 bool (* firewallCallback) (char *)                    // a reference to callback function that will be celled when new connection arrives 
-                ): TcpServer (__ftpConnectionHandler__, (void *) this, 8 * 1024, 300000, serverIP, serverPort, firewallCallback)
+                 bool (* firewallCallback) (String connectingIP)       // a reference to callback function that will be celled when new connection arrives 
+                ): TcpServer (__staticFtpConnectionHandler__, (void *) this, 8 * 1024, (TIME_OUT_TYPE) 300000, serverIP, serverPort, firewallCallback)
                                                 {
-                                                  if (started ()) ftpDmesg ("[ftpServer] started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
-                                                  else            ftpDmesg ("[ftpServer] couldn't start.");
+                                                  if (started ()) dmesg ("[ftpServer] started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
+                                                  else            dmesg ("[ftpServer] couldn't start.");
                                                 }
       
-      ~ftpServer ()                             { if (started ()) ftpDmesg ("[ftpServer] stopped."); }
-                                                      
+      ~ftpServer ()                             { if (started ()) dmesg ("[ftpServer] stopped."); }
+                                     
     private:
 
-      static void __ftpConnectionHandler__ (TcpConnection *connection, void *thisFtpServer) { // connectionHandler callback function
+      static void __staticFtpConnectionHandler__ (TcpConnection *connection, void *ths) {  // connectionHandler callback function
+        ((ftpServer *) ths)->__ftpConnectionHandler__ (connection);
+      }
+
+      virtual void __ftpConnectionHandler__ (TcpConnection *connection) { // connectionHandler callback function
 
         // this is where ftp session begins
         
-        ftpServer *ths = (ftpServer *) thisFtpServer; // we've got this pointer into static member function
         ftpSessionParameters fsp = {"", "", "", connection, NULL, NULL};
         
         String cmdLine;
@@ -132,19 +145,19 @@
               }
             }
 
-              //debug FTP protocol: Serial.print ("<--"); for (int i = 0; i < argc; i++) Serial.print (argv [i] + " "); Serial.println ();
+            //debug FTP protocol: Serial.print ("<--"); for (int i = 0; i < argc; i++) Serial.print (argv [i] + " "); Serial.println ();
 
             // ----- try to handle ftp command -----
-            String s = ths->__internalFtpCommandHandler__ (argc, argv, param, &fsp);
-            connection->sendData (s); // send reply to telnet client
+            String s = __internalFtpCommandHandler__ (argc, argv, param, &fsp);
+            if (!connection->sendData (s)) goto closeFtpConnection; // send reply to FTP client
               
-              //debug FTP protocol: Serial.println ("-->" + s);
+            //debug FTP protocol: Serial.println ("-->" + s);
 
           } // if cmdLine is not empty
         } // read and process comands in a loop
 
 closeFtpConnection:      
-        if (fsp.userName != "") ftpDmesg ("[ftpServer] " + fsp.userName + " logged out.");
+        if (fsp.userName != "") dmesg ("[ftpServer] " + fsp.userName + " logged out.");
       }
     
       // returns last chracter pressed (Enter or 0 in case of error
@@ -265,13 +278,13 @@ closeFtpConnection:
         fsp->userName = userName;                     return "331 enter password\r\n";
       }
 
-      inline String __PASS__ (String password, ftpSessionParameters *fsp) { // login
+      String __PASS__ (String password, ftpSessionParameters *fsp) { // login
         if (checkUserNameAndPassword (fsp->userName, password)) fsp->workingDir = fsp->homeDir = getUserHomeDirectory (fsp->userName);
         if (fsp->homeDir > "") { // if logged in
-          ftpDmesg ("[ftpServer] " + fsp->userName + " logged in.");
+                                                      dmesg ("[ftpServer] " + fsp->userName + " logged in.");
                                                       return "230 logged on, your home directory is \"" + fsp->homeDir + "\"\r\n";
         } else { 
-          ftpDmesg ("[ftpServer] " + fsp->userName + " login attempt failed.");
+                                                      dmesg ("[ftpServer] " + fsp->userName + " login attempt failed.");
                                                       return "530 user name or password incorrect\r\n"; 
         }
       }
@@ -315,11 +328,11 @@ closeFtpConnection:
         if (fsp->homeDir == "")                       return "530 not logged in\r\n";
 
         int ip1, ip2, ip3, ip4, p1, p2; // get (this) server IP and next free port
-        if (4 == sscanf (fsp->controlConnection->getThisSideIP (), "%i.%i.%i.%i", &ip1, &ip2, &ip3, &ip4)) {
+        if (4 == sscanf (fsp->controlConnection->getThisSideIP ().c_str (), "%i.%i.%i.%i", &ip1, &ip2, &ip3, &ip4)) {
           // get next free port
           int pasiveDataPort = __pasiveDataPort__ ();
            // open a new TCP server to accept pasive data connection
-          fsp->pasiveDataServer = new TcpServer (5000, fsp->controlConnection->getThisSideIP (), pasiveDataPort, NULL);
+          fsp->pasiveDataServer = new TcpServer ((TIME_OUT_TYPE) 5000, fsp->controlConnection->getThisSideIP (), pasiveDataPort, NULL);
           // report to ftp client through control connection how to connect for data exchange
           p2 = pasiveDataPort % 256;
           p1 = pasiveDataPort / 256;
@@ -337,7 +350,7 @@ closeFtpConnection:
           int activeDataPort;
           sprintf (activeDataIP, "%i.%i.%i.%i", ip1, ip2, ip3, ip4); 
           activeDataPort = 256 * p1 + p2;
-          fsp->activeDataClient = new TcpClient (activeDataIP, activeDataPort, 5000); // open a new TCP client for active data connection
+          fsp->activeDataClient = new TcpClient (activeDataIP, activeDataPort, (TIME_OUT_TYPE) 5000); // open a new TCP client for active data connection
           if (fsp->activeDataClient) {
             if (fsp->activeDataClient->connection ()) return "200 port ok\r\n"; 
             delete (fsp->activeDataClient);
@@ -394,7 +407,7 @@ closeFtpConnection:
       inline String __RNFR__ (String fileOrDirName, ftpSessionParameters *fsp) { 
         if (fsp->homeDir == "")                       return "530 not logged in\r\n";
 
-        fsp->controlConnection->sendData ((char *) "350 need more information\r\n");
+        if (!fsp->controlConnection->sendData ((char *) "350 need more information\r\n")) return "";
         String s;
         if (13 != __readLineFromClient__ (&s, fsp->controlConnection)) return "503 wrong command syntax\r\n";
 
@@ -489,11 +502,12 @@ closeFtpConnection:
         if (dataConnection) {
           File f = FFat.open (fp, FILE_WRITE);
           if (f) {
-            byte *buff = (byte *) malloc (2048); // get 2048 B of memory from heap (not from the stack)
+            #define BUFF_SIZE 2048
+            byte *buff = (byte *) malloc (BUFF_SIZE); // get 2048 B of memory from heap (not from the )
             if (buff) {
               int received;
               do {
-                bytesRead += (received = dataConnection->recvData ((char *) buff, 2048));
+                bytesRead += (received = dataConnection->recvData ((char *) buff, BUFF_SIZE));
                 int written = f.write (buff, received);                   
                 if (received && (written == received)) bytesWritten += written;
               } while (received);
@@ -501,7 +515,7 @@ closeFtpConnection:
             }
             f.close ();
           } else {
-            ftpDmesg ("[ftpServer] could not open " + fp + " for writing.");
+            dmesg ("[ftpServer] could not open " + fp + " for writing.");
           }
         }
 
@@ -512,7 +526,7 @@ closeFtpConnection:
       }
 
       inline String __QUIT__ (ftpSessionParameters *fsp) { 
-        // close data connection if opened
+        // close data connection if open
         if (fsp->activeDataClient) delete (fsp->activeDataClient);
         if (fsp->pasiveDataServer) delete (fsp->pasiveDataServer); 
         // report client we are closing contro connection

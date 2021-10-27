@@ -1,35 +1,15 @@
 /*
- * 
- * time_functions.h
- * 
- *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
- * 
- *  Real_time_clock synchronizes its time with NTP server accessible from internet once a day.
- *  Internet connection is necessary for real_time_clock to work.
- * 
- * History:
- *          - first release, 
- *            November 14, 2018, Bojan Jurca
- *          - changed delay () to SPIFFSsafeDelay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
- *            April 13, 2019, Bojan Jurca          
- *          - added support for all Europe time zones
- *            April 22, 2019, Bojan Jurca
- *          - added support for USA time zones 
- *            September 30, 2019, Bojan Jurca
- *          - added support for Japan, China and Canada time zones  
- *            October 8, 2019, Bojan Jurca
- *          - added support for ESP8266 and Russia time zones
- *            October 14, 2019, Bojan Jurca
- *          - elimination of compiler warnings and some bugs
- *            Jun 10, 2020, Bojan Jurca     
- *          - Arduino 1.8.13 supported some features (strftime, settimeofday) that have not been supoprted on ESP8266 earier, 
- *            (but they have been supported on ESP32). These features need no longer beeing implemented in ESP8266 part of this module any more,
- *            added cronDaemon,
- *            added support of /etc/ntp.conf and /etc/crontab configuration files,
- *            conversion of real_time_clock class into C functions
- *            October 4, 2020, Bojan Jurca
- *  
- */
+
+    time_functions.h
+ 
+    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+
+    Real_time_clock synchronizes its time with NTP server accessible from internet once a day. Internet connection is 
+    necessary for real_time_clock to work.
+
+    October 4, 2020, Bojan Jurca
+    
+*/
 
 #ifndef __TIME_FUNCTIONS__
   #define __TIME_FUNCTIONS__
@@ -93,35 +73,14 @@
   #endif
 
 
-  // FUNCTIONS OF THIS MODULE
+  /*
 
-  void synchronizeTimeAndInitializeItAtFirstCall ();
+     Support for telnet dmesg command. If telnetServer.hpp is included in the project __TcpDmesg__ function will be redirected
+     to message queue defined there and dmesg command will display its contetn. Otherwise it will just display message on the
+     Serial console.
+     
+  */
 
-  time_t getGmt ();                       // returns current GMT or 0 it the time has not been set yet 
-
-  void setGmt (time_t t);
-
-  time_t getLocalTime ();                 // returns current local time or 0 it the time has not been set yet 
-
-  void setLocalTime (time_t t);
-
-  time_t timeToLocalTime (time_t t);
-
-  struct tm timeToStructTime (time_t t);
-
-  String timeToString (time_t t);
-
-
-  // VARIABLES AND FUNCTIONS TO BE USED INSIDE THIS MODULE
-
-  time_t __readBuiltInClock__ () {
-    struct timeval now;
-    gettimeofday (&now, NULL);
-    return now.tv_sec;    
-  }
-
-  RTC_DATA_ATTR bool __timeHasBeenSet__ = false;
-  RTC_DATA_ATTR time_t __startupTime__ = 0;
 
   void __timeDmesg__ (String message) { 
     #ifdef __TELNET_SERVER__ 
@@ -132,14 +91,32 @@
   }
   void (* timeDmesg) (String) = __timeDmesg__;                      // use this pointer to display / record system messages
 
-  portMUX_TYPE __csTime__ = portMUX_INITIALIZER_UNLOCKED;           // controll real_time_clock critical sections in multi-threaded environment
+  #ifndef dmesg
+    #define dmesg timeDmesg
+  #endif
 
- 
-  // IMPLEMENTATION OF FUNCTIONS IN THIS MODULE
 
+  time_t __readBuiltInClock__ () {
+    struct timeval now;
+    gettimeofday (&now, NULL);
+    return now.tv_sec;    
+  }
+
+  RTC_DATA_ATTR bool __timeHasBeenSet__ = false;
+  RTC_DATA_ATTR time_t __startupTime__ = 0;
+
+  static SemaphoreHandle_t __timeSemaphore__= xSemaphoreCreateMutex (); // control real_time_clock critical sections in multi-threaded environment 
+  
   String __ntpServer1__ = DEFAULT_NTP_SERVER_1;
   String __ntpServer2__ = DEFAULT_NTP_SERVER_2;
   String __ntpServer3__ = DEFAULT_NTP_SERVER_3;  
+
+  void setGmt (time_t);
+  time_t getGmt ();
+  void setLocalTime (time_t);
+  time_t getLocalTime ();
+  time_t timeToLocalTime (time_t t);
+  String timeToString (time_t);
 
 
   String ntpDate (String ntpServer) { // synchronizes time with NTP server, returns error message
@@ -157,7 +134,7 @@
     // send NTP request
     IPAddress ntpServerIp;
     WiFiUDP udp;
-    if (!WiFi.hostByName (ntpServer.c_str (), ntpServerIp)) return ntpServer + " is not available.";
+    if (!WiFi.hostByName (ntpServer.c_str (), ntpServerIp)) return "Could not find host " + ntpServer;
     // open internal port
     #define INTERNAL_NTP_PORT 2390
     if (!udp.begin (INTERNAL_NTP_PORT)) return "Internal port number " + String (INTERNAL_NTP_PORT) + " is not available for NTP.";
@@ -188,7 +165,7 @@
       time_t currentTime = secsSince1900 - SEVENTY_YEARS;
       if (currentTime < 946684800) { udp.stop (); return "Wrong NTP reply."; }
       udp.stop ();
-      timeDmesg ("[time] synchronized with " + ntpServer);
+      dmesg ("[time] synchronized with " + ntpServer);
       setGmt (currentTime);
       break;
     }
@@ -197,13 +174,15 @@
 
   String ntpDate () { // synchronizes time with NTP servers, returns error message
     String s;
-    s = ntpDate (__ntpServer1__); if (s == "") return ""; else timeDmesg (s); delay (1);
-    s = ntpDate (__ntpServer2__); if (s == "") return ""; else timeDmesg (s); delay (1);
-    s = ntpDate (__ntpServer3__); if (s == "") return ""; else timeDmesg (s); delay (1);
+    s = ntpDate (__ntpServer1__); if (s == "") return ""; else dmesg (s); delay (1);
+    s = ntpDate (__ntpServer2__); if (s == "") return ""; else dmesg (s); delay (1);
+    s = ntpDate (__ntpServer3__); if (s == "") return ""; else dmesg (s); delay (1);
     return "NTP servers are not available.";
   }
   
-  portMUX_TYPE csCron = portMUX_INITIALIZER_UNLOCKED;
+  static SemaphoreHandle_t __cronSemaphore__= xSemaphoreCreateMutex (); 
+
+  #define ANY 255
   
   #define MAX_CRONTAB_ENTRIES 32
   int __cronTabEntries__ = 0;
@@ -211,47 +190,47 @@
   struct cronEntryType {
     bool readFromFile;        // true, if this entry is read from /etc/crontab file, false if it is inserted by program code
     bool executed;            // flag if the command is beeing executed
-    uint8_t second;           // 0-59, 255 means *
-    uint8_t minute;           // 0-59, 255 means *
-    uint8_t hour;             // 0-23, 255 means *
-    uint8_t day;              // 1-31, 255 means *
-    uint8_t month;            // 1-12, 255 means *
-    uint8_t day_of_week;      // 0-6 and 7, Sunday to Saturday, 7 is also Sunday, 255 means *
+    uint8_t second;           // 0-59, ANY (255) means *
+    uint8_t minute;           // 0-59, ANY (255) means *
+    uint8_t hour;             // 0-23, ANY (255) means *
+    uint8_t day;              // 1-31, ANY (255) means *
+    uint8_t month;            // 1-12, ANY (255) means *
+    uint8_t day_of_week;      // 0-6 and 7, Sunday to Saturday, 7 is also Sunday, ANY (255) means *
     String cronCommand;       // cronCommand to be passed to cronHandler when time condition is met - it is reponsibility of cronHandler to do with it what is needed
     time_t lastExecuted;      // the time cronCommand has been executed
   } __cronEntry__ [MAX_CRONTAB_ENTRIES];
   
   bool cronTabAdd (uint8_t second, uint8_t minute, uint8_t hour, uint8_t day, uint8_t month, uint8_t day_of_week, String cronCommand, bool readFromFile = false) {
     bool b = false;    
-    portENTER_CRITICAL (&csCron);
+    xSemaphoreTake (__cronSemaphore__, portMAX_DELAY);
       if (__cronTabEntries__ < MAX_CRONTAB_ENTRIES - 1) __cronEntry__ [__cronTabEntries__ ++] = {readFromFile, false, second, minute, hour, day, month, day_of_week, cronCommand, 0};
       b = true;
-    portEXIT_CRITICAL (&csCron);
+    xSemaphoreGive (__cronSemaphore__);
     if (b) return true;
-    timeDmesg ("[cronDaemon] can't add " + cronCommand + ", cron table is full.");
+    dmesg ("[cronDaemon] can't add " + cronCommand + ", cron table is full.");
     return false;
   }
   
   bool cronTabAdd (String cronTabLine, bool readFromFile = false) { // parse cronTabLine and then call the function above
     char second [3]; char minute [3]; char hour [3]; char day [3]; char month [3]; char day_of_week [3]; char cronCommand [65];
     if (sscanf (cronTabLine.c_str (), "%2s %2s %2s %2s %2s %2s %64s", second, minute, hour, day, month, day_of_week, cronCommand) == 7) {
-      int8_t se = strcmp (second, "*") ? atoi (second) : 255; if ((!se && *second != '0') || se > 59) { timeDmesg ("[cronDaemon] [cronAdd] invalid second condition: " + String (second)); return false; }
-      int8_t mi = strcmp (minute, "*") ? atoi (minute) : 255; if ((!mi && *minute != '0') || mi > 59) { timeDmesg ("[cronDaemon] [cronAdd] invalid minute condition: " + String (minute)); return false; }
-      int8_t hr = strcmp (hour, "*") ? atoi (hour) : 255; if ((!hr && *hour != '0') || hr > 23) { timeDmesg ("[cronDaemon] [cronAdd] invalid hour condition: " + String (hour)); return false; }
-      int8_t dm = strcmp (day, "*") ? atoi (day) : 255; if (!dm || dm > 31) { timeDmesg ("[cronDaemon] [cronAdd] invalid day condition: " + String (day)); return false; }
-      int8_t mn = strcmp (month, "*") ? atoi (month) : 255; if (!mn || mn > 12) { timeDmesg ("[cronDaemon] [cronAdd] invalid month condition: " + String (month)); return false; }
-      int8_t dw = strcmp (day_of_week, "*") ? atoi (day_of_week) : 255; if ((!dw && *day_of_week != '0') || dw > 7) { timeDmesg ("[cronDaemon] [cronAdd] invalid day of week condition: " + String (day_of_week)); return false; }
-      if (!*cronCommand) { timeDmesg ("[cronDaemon] [cronAdd] missing cron command"); return false; }
+      int8_t se = strcmp (second, "*") ? atoi (second) : ANY; if ((!se && *second != '0') || se > 59) { dmesg ("[cronDaemon] [cronAdd] invalid second condition: " + String (second)); return false; }
+      int8_t mi = strcmp (minute, "*") ? atoi (minute) : ANY; if ((!mi && *minute != '0') || mi > 59) { dmesg ("[cronDaemon] [cronAdd] invalid minute condition: " + String (minute)); return false; }
+      int8_t hr = strcmp (hour, "*") ? atoi (hour) : ANY; if ((!hr && *hour != '0') || hr > 23) { dmesg ("[cronDaemon] [cronAdd] invalid hour condition: " + String (hour)); return false; }
+      int8_t dm = strcmp (day, "*") ? atoi (day) : ANY; if (!dm || dm > 31) { dmesg ("[cronDaemon] [cronAdd] invalid day condition: " + String (day)); return false; }
+      int8_t mn = strcmp (month, "*") ? atoi (month) : ANY; if (!mn || mn > 12) { dmesg ("[cronDaemon] [cronAdd] invalid month condition: " + String (month)); return false; }
+      int8_t dw = strcmp (day_of_week, "*") ? atoi (day_of_week) : ANY; if ((!dw && *day_of_week != '0') || dw > 7) { dmesg ("[cronDaemon] [cronAdd] invalid day of week condition: " + String (day_of_week)); return false; }
+      if (!*cronCommand) { dmesg ("[cronDaemon] [cronAdd] missing cron command"); return false; }
       return cronTabAdd (se, mi, hr, dm, mn, dw, String (cronCommand), readFromFile);
     } else {
-      timeDmesg ("[cronDaemon] [cronAdd] invalid cron table line: " + cronTabLine);
+      dmesg ("[cronDaemon] [cronAdd] invalid cron table line: " + cronTabLine);
       return false;
     }
   }
     
   int cronTabDel (String cronCommand) { // returns the number of cron commands being deleted
     int cnt = 0;
-    portENTER_CRITICAL (&csCron);
+    xSemaphoreTake (__cronSemaphore__, portMAX_DELAY);
       int i = 0;
       while (i < __cronTabEntries__) {
         if (__cronEntry__ [i].cronCommand == cronCommand) {        
@@ -262,37 +241,37 @@
           i ++;
         }
       }
-    portEXIT_CRITICAL (&csCron);
-    if (!cnt) timeDmesg ("[cronDaemon] there are no " + cronCommand + " commands to delete from cron table.");
+    xSemaphoreGive (__cronSemaphore__);
+    if (!cnt) dmesg ("[cronDaemon] there are no " + cronCommand + " commands to delete from cron table.");
     return cnt;
   }
 
   String cronTab () { // returns crontab content as a string
     String s = "";
-    portENTER_CRITICAL (&csCron);
+    xSemaphoreTake (__cronSemaphore__, portMAX_DELAY);
       if (!__cronTabEntries__) {
         s = "crontab is empty.";
       } else {
         for (int i = 0; i < __cronTabEntries__; i ++) {
           if (s != "") s += "\r\n";
           char c [4]; 
-          if (__cronEntry__ [i].second == 255) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].second); s += String (c); }
-          if (__cronEntry__ [i].minute == 255) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].minute); s += String (c); }
-          if (__cronEntry__ [i].hour == 255) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].hour); s += String (c); }
-          if (__cronEntry__ [i].day == 255) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].day); s += String (c); }
-          if (__cronEntry__ [i].month == 255) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].month); s += String (c); }
-          if (__cronEntry__ [i].day_of_week == 255) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].day_of_week); s += String (c); }
+          if (__cronEntry__ [i].second == ANY) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].second); s += String (c); }
+          if (__cronEntry__ [i].minute == ANY) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].minute); s += String (c); }
+          if (__cronEntry__ [i].hour == ANY) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].hour); s += String (c); }
+          if (__cronEntry__ [i].day == ANY) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].day); s += String (c); }
+          if (__cronEntry__ [i].month == ANY) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].month); s += String (c); }
+          if (__cronEntry__ [i].day_of_week == ANY) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].day_of_week); s += String (c); }
           if (__cronEntry__ [i].lastExecuted) s += " " + timeToString (__cronEntry__ [i].lastExecuted) + " "; else s += " (not executed yet)  ";
           if (__cronEntry__ [i].readFromFile) s += " from /etc/crontab  "; else s += " entered from code  ";
           s += __cronEntry__ [i].cronCommand;
         }
       }
-    portEXIT_CRITICAL (&csCron);
+    xSemaphoreGive (__cronSemaphore__);
     return s;    
   }
 
   void cronDaemon (void *ptrCronHandler) { // it does two things: it synchronizes time with NTP servers once a day and executes cron commands from cron table when the time is right
-    timeDmesg ("[cronDaemon] started.");
+    dmesg ("[cronDaemon] started.");
     do {     // try to set/synchronize the time, retry after 1 minute if unsuccessfull 
        delay (15000);
        if (ntpDate () == "") break; // success
@@ -300,13 +279,13 @@
     } while (!getGmt ());
 
     void (* cronHandler) (String&) = (void (*) (String&)) ptrCronHandler;  
-    unsigned long lastSyncMillis = millis ();
+    unsigned long lastSyncMillis = millis (); 
 
     while (true) {
       delay (10);
 
       // 1. synchronize time with NTP servers
-      if (millis () - lastSyncMillis > 86400000) { ntpDate (); lastSyncMillis = millis (); } 
+      if (millis () - lastSyncMillis >= 86400000) { ntpDate (); lastSyncMillis = millis (); } 
 
       // 2. execute cron commands from cron table
       time_t now = getLocalTime ();
@@ -317,15 +296,15 @@
         struct tm slt = timeToStructTime (l);
         //scan through cron entries and find commands that needs to be executed (at time l)
         String commands = "\n";
-        portENTER_CRITICAL (&csCron);
+        xSemaphoreTake (__cronSemaphore__, portMAX_DELAY);
           for (int i = 0; i < __cronTabEntries__; i ++) {
-            // check if time condition is met for entry i and chabge state of the entry accordigly
-            if ( (__cronEntry__ [i].second == 255 || __cronEntry__ [i].second == slt.tm_sec) && 
-                 (__cronEntry__ [i].minute == 255 || __cronEntry__ [i].minute == slt.tm_min) &&
-                 (__cronEntry__ [i].hour == 255 || __cronEntry__ [i].hour == slt.tm_hour) &&
-                 (__cronEntry__ [i].day == 255 || __cronEntry__ [i].day == slt.tm_mday) &&
-                 (__cronEntry__ [i].month == 255 || __cronEntry__ [i].month == slt.tm_mon + 1) &&
-                 (__cronEntry__ [i].day_of_week == 255 || __cronEntry__ [i].day_of_week == slt.tm_wday || __cronEntry__ [i].day_of_week == slt.tm_wday + 7) ) {
+            // check if time condition is met for entry i and change state of the entry accordigly
+            if ( (__cronEntry__ [i].second == ANY || __cronEntry__ [i].second == slt.tm_sec) && 
+                 (__cronEntry__ [i].minute == ANY || __cronEntry__ [i].minute == slt.tm_min) &&
+                 (__cronEntry__ [i].hour == ANY || __cronEntry__ [i].hour == slt.tm_hour) &&
+                 (__cronEntry__ [i].day == ANY || __cronEntry__ [i].day == slt.tm_mday) &&
+                 (__cronEntry__ [i].month == ANY || __cronEntry__ [i].month == slt.tm_mon + 1) &&
+                 (__cronEntry__ [i].day_of_week == ANY || __cronEntry__ [i].day_of_week == slt.tm_wday || __cronEntry__ [i].day_of_week == slt.tm_wday + 7) ) {
   
                       if (!__cronEntry__ [i].executed) {
                         __cronEntry__ [i].executed = true;
@@ -340,7 +319,7 @@
   
             }
           }          
-        portEXIT_CRITICAL (&csCron);
+        xSemaphoreGive (__cronSemaphore__);
         // execute the commands
         // debug: Serial.printf ("[%10lu] [cronDaemon] to be executed at %s: >>>%s<<<\n", millis (), timeToString (l).c_str (), commands.c_str ());  
         int i = 1;
@@ -358,33 +337,33 @@
       previous = now;
     }
   }
-  
-  void startCronDaemonAndInitializeItAtFirstCall (void (* cronHandler) (String&), size_t cronStack = (3 * 1024)) { // synchronizes time with NTP servers from /etc/ntp.conf, reads /etc/crontab, returns error message. If /etc/ntp.conf or /etc/crontab don't exist (yet) creates the default onee
+
+  void startCronDaemon (void (* cronHandler) (String&), size_t cronStack = (3 * 1024)) { // synchronizes time with NTP servers from /etc/ntp.conf, reads /etc/crontab, returns error message. If /etc/ntp.conf or /etc/crontab don't exist (yet) creates the default onee
     #ifdef __FILE_SYSTEM__
       if (__fileSystemMounted__) {
         
         // read NTP configuration from /etc/ntp.conf, create a new one if it doesn't exist
         String fileContent = readTextFile ("/etc/ntp.conf");
         if (fileContent == "") {
-          timeDmesg ("[time] /etc/ntp.conf does not exist, creating new one.");
+          dmesg ("[time] /etc/ntp.conf does not exist, creating new one.");
           if (!isDirectory ("/etc")) FFat.mkdir ("/etc"); // location of this file
           
           fileContent = "# configuration for NTP - reboot for changes to take effect\r\n\r\n"
                         "server1 " + (__ntpServer1__ = DEFAULT_NTP_SERVER_1) + "\r\n"
                         "server2 " + (__ntpServer1__ = DEFAULT_NTP_SERVER_2) + "\r\n"
                         "server3 " + (__ntpServer1__ = DEFAULT_NTP_SERVER_3) + "\r\n";
-          if (!writeFile (fileContent, "/etc/ntp.conf")) timeDmesg ("[time] unable to create /etc/ntp.conf");
+          if (!writeFile (fileContent, "/etc/ntp.conf")) dmesg ("[time] unable to create /etc/ntp.conf");
         } else {
           // parse configuration file if it exists
           fileContent = compactConfigurationFileContent (fileContent) + "\n"; 
-          __ntpServer1__ = between (fileContent, "server1","\n"); __ntpServer1__.trim ();
-          __ntpServer2__ = between (fileContent, "server2","\n"); __ntpServer2__.trim ();
-          __ntpServer3__ = between (fileContent, "server3","\n"); __ntpServer3__.trim ();
+          __ntpServer1__ = between (fileContent, "server1","\n");
+          __ntpServer2__ = between (fileContent, "server2","\n");
+          __ntpServer3__ = between (fileContent, "server3","\n");
         }
         // read scheduled tasks from /etc/crontab
         fileContent = readTextFile ("/etc/crontab");
         if (fileContent == "") {
-          timeDmesg ("[time] /etc/crontab does not exist, creating new one.");
+          dmesg ("[time] /etc/crontab does not exist, creating new one.");
           if (!isDirectory ("/etc")) FFat.mkdir ("/etc"); // location of this file
           
           fileContent = "# scheduled tasks (in local time) - reboot for changes to take effect\r\n"
@@ -398,7 +377,7 @@
                         "# |  |  |  |  |  |\r\n"
                         "# *  *  *  *  *  * cronCommand to be executed\r\n"
                         "# * 15  *  *  *  * exampleThatRunsQuaterPastEachHour\r\n";
-          if (!writeFile (fileContent, "/etc/crontab")) timeDmesg ("[time] unable to create /etc/crontab");
+          if (!writeFile (fileContent, "/etc/crontab")) dmesg ("[time] unable to create /etc/crontab");
         } else {
           // parse scheduled tasks if /etc/crontab exists
           fileContent = compactConfigurationFileContent (fileContent) + "\n"; 
@@ -414,13 +393,18 @@
             }
         }
       } else {
-        timeDmesg ("[time] file system not mounted, can't read or write configuration files.");
+        dmesg ("[time] file system not mounted, can't read or write configuration files.");
       }
     #endif    
     
     // run periodic synchronization with NTP servers and execute cron commands in a separate thread
     #define tskNORMAL_PRIORITY 1
-    if (pdPASS != xTaskCreate (cronDaemon, "cronDaemon", cronStack, (void *) cronHandler, tskNORMAL_PRIORITY, NULL)) timeDmesg ("[cronDaemon] could not start cronDaemon.");
+    if (pdPASS != xTaskCreate (cronDaemon, "cronDaemon", cronStack, (void *) cronHandler, tskNORMAL_PRIORITY, NULL)) dmesg ("[cronDaemon] could not start cronDaemon.");
+  }
+
+  [[deprecated("Replaced by startCronDaemon (void (* cronHandler) (String&), size_t cronStack = (3 * 1024));")]]
+  void startCronDaemonAndInitializeItAtFirstCall (void (* cronHandler) (String&), size_t cronStack = (3 * 1024)) { 
+    startCronDaemonAndInitializeItAtFirstCall (cronHandler, cronStack); 
   }
  
   time_t getGmt () { // returns current GMT or 0 it the time has not been set yet 
@@ -440,10 +424,11 @@
     settimeofday (&newTime, NULL); 
 
     if (__timeHasBeenSet__) {
-      timeDmesg ("[time] time corrected for " + String (newTime.tv_sec - oldTime.tv_sec) + " s to " + timeToString (timeToLocalTime (t))); 
+      // dmesg ("[time] time corrected for " + String (newTime.tv_sec - oldTime.tv_sec) + " s to " + timeToString (timeToLocalTime (t))); 
+      dmesg ("[time] time corrected from " + timeToString (timeToLocalTime (oldTime.tv_sec)) + " to " + timeToString (timeToLocalTime (t))); 
     } else {
       __timeHasBeenSet__ = true;
-      timeDmesg ("[time] time set to " + timeToString (timeToLocalTime (t))  + "."); 
+      dmesg ("[time] time set to " + timeToString (timeToLocalTime (t))); 
     }
   }
 
@@ -629,9 +614,9 @@
   #endif
 
   struct tm timeToStructTime (time_t t) { 
-    portENTER_CRITICAL (&__csTime__); // gmtime (&time_t) returns pointer to static structure which may be a problem in multi-threaded environment
+    xSemaphoreTake (__timeSemaphore__, portMAX_DELAY); // gmtime (&time_t) returns pointer to static structure which may be a problem in multi-threaded environment
       struct tm timeStr = *gmtime (&t);
-    portEXIT_CRITICAL (&__csTime__);
+    xSemaphoreGive (__timeSemaphore__);
     return timeStr;                                         
   }
 

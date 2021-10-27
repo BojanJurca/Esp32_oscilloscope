@@ -1,24 +1,15 @@
 /*
- * 
- * Oscilloscope.h
- * 
- *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
- * 
- * History:
- *          - first release,
- *            August, 14, 2019, Bojan Jurca
- *          - oscilloscope structures and functions moved into separate file, 
- *            October 2, 2019, Bojan Jurca
- *          - elimination of compiler warnings and some bugs
- *            Jun 11, 2020, Bojan Jurca 
- *          - ability to monitor up to 2 signals simultaneously
- *            remember settings functionality
- *            February 10, 2021, Bojan Jurca
- *            
- * Issues:
- *          - when WiFi is WIFI_AP or WIFI_STA_AP mode is oscillospe causes WDT problem when working at higher frequenceses
- *            
- */
+ 
+    oscilloscope.h
+ 
+    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+                
+    Issues:
+            - when WiFi is in WIFI_AP or WIFI_STA_AP mode is oscillospe causes WDT problem when working at higher frequenceses
+
+    February, 10, 2021, Bojan Jurca
+             
+*/
 
 
 // ----- includes, definitions and supporting functions -----
@@ -40,30 +31,30 @@ struct oscSamples {                   // buffer with samples
    bool samplesReady;                 // is the buffer ready for sending
 };
 
-struct oscSharedMemory {              // data structure to be shared among oscilloscope tasks
+struct oscSharedMemory {                 // data structure to be shared among oscilloscope tasks
   // basic data
-  WebSocket *webSocket;               // open webSocket for communication with javascript client
-  bool clientIsBigEndian;             // true if javascript client is big endian machine
+  WebSocket *webSocket;                  // open webSocket for communication with javascript client
+  bool clientIsBigEndian;                // true if javascript client is big endian machine
   // sampling sharedMemory
-  char readType [8];                  // analog or digital  
-  bool analog;                        // true if readType is analog, false if digital
-  int gpio1;                          // gpio where ESP32 is taking samples from
-  int gpio2;                          // 2nd gpio if requested
-  int samplingTime;                   // time between samples in ms or us
-  char samplingTimeUnit [3];          // ms or us
-  int screenWidthTime;                // oscilloscope screen width in ms or us
-  char screenWidthTimeUnit [3];       // ms or us 
-  unsigned long screenRefreshPeriod;  // approximately 20 Hz, in ms
-  int screenRefreshModulus;           // used to reduce refresh frequency down to approximatelly sustainable 20 Hz (samples are passet via websocket to internet browser)
-  bool oneSampleAtATime;              // if horizontl frequency <= 1 Hz, whole screen at a time otherwise
-  bool positiveTrigger;               // true if posotive slope trigger is set
-  int positiveTriggerTreshold;        // positive slope trigger treshold value
-  bool negativeTrigger;               // true if negative slope trigger is set  
-  int negativeTriggerTreshold;        // negative slope trigger treshold value
+  char readType [8];                     // analog or digital  
+  bool analog;                           // true if readType is analog, false if digital
+  int gpio1;                             // gpio where ESP32 is taking samples from
+  int gpio2;                             // 2nd gpio if requested
+  int samplingTime;                      // time between samples in ms or us
+  char samplingTimeUnit [3];             // ms or us
+  int screenWidthTime;                   // oscilloscope screen width in ms or us
+  char screenWidthTimeUnit [3];          // ms or us 
+  unsigned long screenRefreshPeriod;     // approximately 20 Hz, in ms
+  int screenRefreshModulus;              // used to reduce refresh frequency down to approximatelly sustainable 20 Hz (samples are passet via websocket to internet browser)
+  bool oneSampleAtATime;                 // if horizontl frequency <= 1 Hz, whole screen at a time otherwise
+  bool positiveTrigger;                  // true if posotive slope trigger is set
+  int positiveTriggerTreshold;           // positive slope trigger treshold value
+  bool negativeTrigger;                  // true if negative slope trigger is set  
+  int negativeTriggerTreshold;           // negative slope trigger treshold value
   // buffers holding samples 
-  oscSamples readBuffer;              // we'll read samples into this buffer
-  oscSamples sendBuffer;              // we'll copy red buffer into this buffer before sending samples to the client
-  portMUX_TYPE csSendBuffer;          // MUX for handling critical section while copying
+  oscSamples readBuffer;                 // we'll read samples into this buffer
+  oscSamples sendBuffer;                 // we'll copy red buffer into this buffer before sending samples to the client
+  SemaphoreHandle_t sendBufferSemaphore; // semaphore for handling critical section while copying
   // status of oscilloscope threads
   bool readerIsRunning;
   bool senderIsRunning;  
@@ -92,7 +83,7 @@ void oscReader (void *sharedMemory) {
   oscSamples *readBuffer =   &((oscSharedMemory *) sharedMemory)->readBuffer;
   oscSamples *sendBuffer =   &((oscSharedMemory *) sharedMemory)->sendBuffer;
 
-  portMUX_TYPE *csSendBuffer =        &((oscSharedMemory *) sharedMemory)->csSendBuffer;
+  SemaphoreHandle_t *sendBufferSemaphore = &((oscSharedMemory *) sharedMemory)->sendBufferSemaphore;
 
   // esp_task_wdt_delete (NULL);
   
@@ -154,9 +145,9 @@ void oscReader (void *sharedMemory) {
      
       if (oneSampleAtATime && readBuffer->sampleCount) {
         // copy read buffer to send buffer (within critical section) so that oscilloscope sender can send it to javascript client 
-        portENTER_CRITICAL (csSendBuffer);
+        xSemaphoreTake (*sendBufferSemaphore, portMAX_DELAY);
           *sendBuffer = *readBuffer; // this also copies 'ready' flag from read buffer which is 'true'
-        portEXIT_CRITICAL (csSendBuffer);
+        xSemaphoreGive (*sendBufferSemaphore);
         // then empty read buffer so we don't send the same data again later
         readBuffer->sampleCount = 0; 
       }
@@ -173,9 +164,9 @@ void oscReader (void *sharedMemory) {
             vTaskDelete (NULL); // stop this thread
           }
           // else copy read buffer to send buffer within critical section
-          portENTER_CRITICAL (csSendBuffer);
+          xSemaphoreTake (*sendBufferSemaphore, portMAX_DELAY);
             *sendBuffer = *readBuffer; // this also copies 'ready' flag from read buffer which is 'true'
-          portEXIT_CRITICAL (csSendBuffer);
+          xSemaphoreGive (*sendBufferSemaphore);
         }
         if (unitIsMicroSeconds) delayMicroseconds (samplingTime); else delay (samplingTime); // esp_task_wdt_reset ();        
         break; // get out of while loop to start sampling from the left of the screen
@@ -208,10 +199,10 @@ void oscReader (void *sharedMemory) {
 // oscilloscope sender is always sending both streams regardless if only one is in use - let javascript client pick out only those that it rquested
 
 void oscSender (void *sharedMemory) {
-  oscSamples *sendBuffer =     &((oscSharedMemory *) sharedMemory)->sendBuffer;
-  portMUX_TYPE *csSendBuffer = &((oscSharedMemory *) sharedMemory)->csSendBuffer;
-  bool clientIsBigEndian =     ((oscSharedMemory *) sharedMemory)->clientIsBigEndian;
-  WebSocket *webSocket =       ((oscSharedMemory *) sharedMemory)->webSocket; 
+  oscSamples *sendBuffer =                 &((oscSharedMemory *) sharedMemory)->sendBuffer;
+  SemaphoreHandle_t *sendBufferSemaphore = &((oscSharedMemory *) sharedMemory)->sendBufferSemaphore;
+  bool clientIsBigEndian =                 ((oscSharedMemory *) sharedMemory)->clientIsBigEndian;
+  WebSocket *webSocket =                   ((oscSharedMemory *) sharedMemory)->webSocket; 
 
   while (true) {
     delay (1);
@@ -219,10 +210,10 @@ void oscSender (void *sharedMemory) {
     if (sendBuffer->samplesReady) {
       // copy buffer with samples within critical section
       oscSamples sendSamples;
-      portENTER_CRITICAL (csSendBuffer);
+      xSemaphoreTake (*sendBufferSemaphore, portMAX_DELAY);
         sendSamples = *sendBuffer;
         sendBuffer->samplesReady = false; // oscRader will set this flag when buffer is the next time ready for sending
-      portEXIT_CRITICAL (csSendBuffer);
+      xSemaphoreGive (*sendBufferSemaphore);
 
         // debug: Serial.printf ("\nsignal1:   |"); for (int i = 0; i < sendSamples.sampleCount; i ++) Serial.printf ("%4i|", sendSamples.samples [i].signal1); 
         // debug: Serial.printf ("\nsignal2:   |"); for (int i = 0; i < sendSamples.sampleCount; i ++) Serial.printf ("%4i|", sendSamples.samples [i].signal2);
@@ -258,10 +249,10 @@ void runOscilloscope (WebSocket *webSocket) {
   // esp_task_wdt_delete (NULL);
   
   // set up oscilloscope shared memory that will be shared among all 3 oscilloscope threads
-  oscSharedMemory sharedMemory = {};                        // get some memory that will be shared among all oscilloscope threads and initialize it with zerros
-  sharedMemory.webSocket = webSocket;                       // put webSocket rference into shared memory
-  sharedMemory.readBuffer.samplesReady = true;              // this value will be copied into sendBuffer later where this flag will be checked
-  sharedMemory.csSendBuffer = portMUX_INITIALIZER_UNLOCKED; // initialize critical section mutex in shared memory
+  oscSharedMemory sharedMemory = {};                           // get some memory that will be shared among all oscilloscope threads and initialize it with zerros
+  sharedMemory.webSocket = webSocket;                          // put webSocket rference into shared memory
+  sharedMemory.readBuffer.samplesReady = true;                 // this value will be copied into sendBuffer later where this flag will be checked
+  sharedMemory.sendBufferSemaphore = xSemaphoreCreateMutex (); // initialize critical section mutex in shared memory
 
   // oscilloscope protocol starts with binary endian identification from the client
   uint16_t endianIdentification = 0;
