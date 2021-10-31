@@ -66,6 +66,17 @@
     return String (s);
   }
 
+
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0) //Checks if board manager version for esp32 is  >= 2.0.0
+  String inet_ntos (esp_ip4_addr_t addr) { // equivalent of inet_ntoa
+    char s [40];
+    xSemaphoreTake (__ntosSemaphore__, portMAX_DELAY);
+      strcpy (s, inet_ntoa (addr)); 
+    xSemaphoreGive (__ntosSemaphore__);
+    return String (s);
+  }
+#endif
+
   String inet_ntos (ip4_addr_t addr) { // equivalent of inet_ntoa
     char s [40];
     xSemaphoreTake (__ntosSemaphore__, portMAX_DELAY);

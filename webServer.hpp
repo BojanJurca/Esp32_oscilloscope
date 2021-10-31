@@ -68,7 +68,12 @@
    TcpConnection since TcpCOnnection already exists at the time WebSocket is beeing created
  */
 
-  #include "hwcrypto/sha.h"       // needed for websockets support 
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0) //Checks if board manager version for esp32 is  >= 2.0.0
+      #include "esp32/sha.h"       // needed for websockets support
+#else
+      #include "hwcrypto/sha.h"       // needed for websockets support
+#endif
+
   #include "mbedtls/base64.h"     // needed for websockets support
 
   class WebSocket {  
