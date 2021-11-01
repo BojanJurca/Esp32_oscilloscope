@@ -256,26 +256,29 @@
     </div>
 
     <hr />
-    <div class='d1'; style='height: 76px;'>
-      <div class='d2'>&nbsp;Remeber settings<br>&nbsp;<small><small>Some essential cookies will be used for this.</small></small></div>
+    <div class='d1'>
+      <div class='d2'>&nbsp;Remember settings <small><small>(uses cookies)</small></small></div>
       <div class='d3'>
         <label class='switch'><input type='checkbox' id='remember' onclick="
           saveSettings ();
         "><div class='slider round'></div></label>
       </div>
-      <div class='d3'><button class='button button2' id='startButton' onclick="
+    </div>
+
+    <hr />
+    <div class='d1'>
+      <div class='d2'><button class='button button2' id='startButton' onclick="
         saveSettings ();
         drawBackgroundAndCalculateParameters ();
         enableDisableControls (true);
         startOscilloscope ();
       ">&nbsp;START&nbsp;</button></div>
-      <div class='d5'><button class='button button3' id='stopButton' disabled onclick="
+      <div class='d2'><button class='button button3' id='stopButton' disabled onclick="
         stopOscilloscope ();
         enableDisableControls (false);
       ">&nbsp;STOP&nbsp;</button></div>
     </div>
 
-    <hr />
     <br>
 
     <canvas id='oscilloscope' width='968' height='512';></canvas></div>

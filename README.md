@@ -18,9 +18,10 @@ better off on its own. Only functionalities necessary for oscilloscope to work a
 1. Copy all files in this package into Esp32_oscilloscope directory.
 2. Open Esp32_oscilloscope.ino with Arduino IDE.
 3. Find and change YOUR-STA-SSID to your WiFi SSID and YOUR-STA-PASSWORD to your WiFi password.
-4. Oscilloscope uses FAT file system so select one of FATFS partition schemas (Tools | Partition scheme | ...)
-5. Compile sketch and run it on your ESP32 for the first time. Doing this, ESP32 flash memory will be formatted with FAT file system. WARNING: every information you have stored into ESP32’s flash memory will be lost.
-6. FTP to your ESP32 (By using ftp command line utility or Windows explorer. User name and password are not required) and upload the following files into /var/www/html directory:
+4. In your Arduino IDE under Tools|Board make sure you choose "ESP32 Dev Module" or a board allowing partition schemes
+5. Oscilloscope uses FAT file system so select one of FATFS partition schemas (Arduino IDE under Tools|Partition Scheme|...)
+6. Compile sketch and run it on your ESP32 for the first time. Doing this, ESP32 flash memory will be formatted with FAT file system. WARNING: every information you have stored into ESP32’s flash memory will be lost.
+7. FTP to your ESP32 (By using ftp command line utility or Windows explorer. User name and password are not required) and upload the following files into /var/www/html directory:
 
    - android-192-osc.png,
    - apple-180-osc.png,
@@ -50,4 +51,4 @@ ftp> ls
 ftp>
 ```
 
-6. Open http://YOUR-ESP32-IP/oscilloscope.html with your browser.
+8. Open http://YOUR-ESP32-IP/oscilloscope.html with your browser.
