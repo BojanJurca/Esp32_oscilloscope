@@ -252,7 +252,9 @@ void runOscilloscope (WebSocket *webSocket) {
   oscSharedMemory sharedMemory = {};                           // get some memory that will be shared among all oscilloscope threads and initialize it with zerros
   sharedMemory.webSocket = webSocket;                          // put webSocket rference into shared memory
   sharedMemory.readBuffer.samplesReady = true;                 // this value will be copied into sendBuffer later where this flag will be checked
-  sharedMemory.sendBufferSemaphore = xSemaphoreCreateMutex (); // initialize critical section mutex in shared memory
+  StaticSemaphore_t xSemaphoreBuffer;
+  sharedMemory.sendBufferSemaphore = xSemaphoreCreateBinaryStatic (&xSemaphoreBuffer); // initialize critical section binary semaphore
+  xSemaphoreGive (sharedMemory.sendBufferSemaphore);
 
   // oscilloscope protocol starts with binary endian identification from the client
   uint16_t endianIdentification = 0;
