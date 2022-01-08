@@ -22,9 +22,9 @@
 // network settings
 #define HOSTNAME                  "Oscilloscope"      // define the name of your ESP32 here
 #define MACHINETYPE               "ESP32 NodeMCU"     // describe your hardware here
-#define DEFAULT_STA_SSID          "YOUR-STA-SSID" // define default WiFi settings
+#define DEFAULT_STA_SSID          "YOUR-STA-SSID"     // define default WiFi settings
 #define DEFAULT_STA_PASSWORD      "YOUR-STA-PASSWORD"
-#define DEFAULT_AP_SSID           "" // HOSTNAME 
+#define DEFAULT_AP_SSID           "" // HOSTNAME     
 #define DEFAULT_AP_PASSWORD       "" // "YOUR_AP_PASSWORD" // must be at leas 8 characters long
 #include "network.h"
 
@@ -59,6 +59,7 @@ void setup () {
   if (!isDirectory ("/var/www/html")) { FFat.mkdir ("/var"); FFat.mkdir ("/var/www"); FFat.mkdir ("/var/www/html"); } // so that you won't have to make them manualy yourself
 
   // connect ESP STAtion to WiFi
+  // deleteFile ("/etc/wpa_supplicant/wpa_supplicant.conf"); // STA credentials
   startWiFi ();
  
   // start FTP server so we can upload .html and .png files into /var/www/html directory
@@ -74,7 +75,12 @@ void setup () {
     if (webSrv->started ()) Serial.printf ("[%10lu] WEB server has started.\n", millis ());
     else                    Serial.printf ("[%10lu] WEB server did not start. Compile it in Verbose Debug level to find the error.\n", millis ());
   else                      Serial.printf ("[%10lu] not enough free memory to start WEB server\n", millis ()); // shouldn't really happen
-
+  if (ESP_IDF_VERSION_MAJOR < 4) {
+    // generate 10 HTTP requests so all sockets are going to be used at least once, this way we ara going to bypass LwIP bug that causes a minor 
+    // memory loss but could cause memory fragmentation in multi threaded environment, see: https://github.com/espressif/esp-idf/issues/8168
+    for (int i = 0; i < CONFIG_LWIP_MAX_SOCKETS; i++) { WiFiClient client; if (!client.connect ("127.0.0.1", 80)) Serial.printf ("[httpServer] not accessible on local loopback\n"); }
+  }
+  
   // initialize GPIOs you are going to use here:
   // ...
 
