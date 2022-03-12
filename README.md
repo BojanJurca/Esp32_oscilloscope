@@ -19,11 +19,11 @@ Honestly, not much, only only a new version, 2.0 of servers is used with improve
 
 ## Setup instructions
 
-1. Copy all files in this package into Esp32_oscilloscope directory.
+1. Copy all files in this package to Esp32_oscilloscope directory.
 2. Open Esp32_oscilloscope.ino with Arduino IDE.
 3. Find and change YOUR-STA-SSID to your WiFi SSID and YOUR-STA-PASSWORD to your WiFi password.
 4. Oscilloscope uses FAT file system so select one of FATFS partition schemas (Tools | Partition scheme | ...)
-5. Compile sketch and run it on your ESP32 for the first time. Doing this, ESP32 flash memory will be formatted with FAT file system. WARNING: every information you have stored into ESP32’s flash memory will be lost.
+5. Compile sketch and run it on your ESP32 for the first time. Doing this, ESP32 flash memory will be formatted with FAT file system. WARNING: every information you have stored into ESP32â€™s flash memory will be lost.
 6. FTP to your ESP32 (By using ftp command line utility or Windows explorer. User name and password are not required) and upload the following files into /var/www/html directory:
 
    - android-192-osc.png,
@@ -60,10 +60,9 @@ ftp>
 ## Things to consider when analogReading GPIOs
 
 
-
 ESP32 has two SARs (Successive Approximation Registers) built-in among which only ADC1 (GPIOs: 36, 37, 38, 39, 32, 33, 34, 35) can be used for oscilloscope analogReadings. ADC2 (GPIOs: 4, 0, 2, 15, 13, 12, 14, 27, 25, 26) can perform analogReadings only when WiFi is not working. Since oscilloscope uses WiFi, ADC2 GPIOs are not available at this time.
 
-ESP32 functions that perform ADC conversion (adc1_get_raw or Arduino analogRead for example) are not thread safe. If your sketch is analogReading ADC1 GPIOs then you are not supposed to use oscilloscope on these GPIOs. If you must you can use adc () function (from oscilloscope.h) instead of adc1_get_raw () or do your own reading inside critical section like oscilloscope does:
+ESP32 functions that perform ADC conversion (adc1_get_raw or Arduino analogRead for example) are not thread safe. If your sketch is analogReading ADC1 GPIOs then you are not supposed to use oscilloscope on these GPIOs. If you must, you can use adc () function (from oscilloscope.h) instead of adc1_get_raw () or do your own reading inside critical section like oscilloscope does:
 
 ```C++
 inline int16_t adc (adc1_channel_t channel) __attribute__((always_inline));
