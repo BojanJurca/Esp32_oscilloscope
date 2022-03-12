@@ -117,7 +117,7 @@
 
     <hr />
     <div class='d1' style='height: 50px;'>
-      <div class='d2'>&nbsp;Prim. (and sec.) ESP32 GPIOs</div>
+      <div class='d2'>&nbsp;ESP32 GPIOs <small><small>(primary, secondary)</small></div>
       <div class='d3' style='color: gray;'>
         <select id='gpio1'>
                 <option value='1'>GPIO  1</option><option value='2' selected='selected'>GPIO  2</option><option value='3'>GPIO  3</option><option value='4'>GPIO  4</option><option value='5'>GPIO  5</option>
@@ -267,13 +267,14 @@
 
     <hr />
     <div class='d1'>
-      <div class='d2'><button class='button button2' id='startButton' onclick="
+      <div class='d2'>&nbsp;</div>
+      <div class='d3'><button class='button button2' id='startButton' onclick="
         saveSettings ();
         drawBackgroundAndCalculateParameters ();
         enableDisableControls (true);
         startOscilloscope ();
       ">&nbsp;START&nbsp;</button></div>
-      <div class='d2'><button class='button button3' id='stopButton' disabled onclick="
+      <div class='d4'><button class='button button3' id='stopButton' disabled onclick="
         stopOscilloscope ();
         enableDisableControls (false);
       ">&nbsp;STOP&nbsp;</button></div>
@@ -491,13 +492,11 @@
             }
           };
 
-          /*
           ws.onclose = function () {
             // websocket is closed.
             console.log ('WebSocket closed.');
             enableDisableControls (false);
           };
-          */
 
           ws.onerror = function (event) {
             ws.close ();
