@@ -168,13 +168,13 @@
         return; // if there is no file system, we can not write configuration files and read from them
       }
       // create dirctory structure
-      if (!isDirectory ("/etc")) { FFat.mkdir ("/etc"); }
+      if (!isDirectory ("/etc")) { fileSystem.mkdir ("/etc"); }
       // create /etc/passwd if it doesn't exist
       {
         if (!isFile ("/etc/passwd")) {
           Serial.printf ("[%10lu] [user_management] /etc/passwd does not exist, creating default one ... ", millis ());
           bool created = false;
-          File f = FFat.open ("/etc/passwd", FILE_WRITE);
+          File f = fileSystem.open ("/etc/passwd", FILE_WRITE);
           if (f) {
             char *defaultContent = (char *) "root:x:0:::/:\r\n"
                                             "webadmin:x:1000:::/var/www/html/:\r\n";
@@ -192,7 +192,7 @@
         if (!isFile ("/etc/shadow")) {
           Serial.printf ("[%10lu] [user_management] /etc/shadow does not exist, creating default one ... ", millis ());
           bool created = false;
-          File f = FFat.open ("/etc/shadow", FILE_WRITE);
+          File f = fileSystem.open ("/etc/shadow", FILE_WRITE);
           if (f) {
             char rootpassword [65]; sha256 (rootpassword, sizeof (rootpassword), DEFAULT_ROOT_PASSWORD);
             char webadminpassword [65]; sha256 (webadminpassword, sizeof (webadminpassword), DEFAULT_WEBADMIN_PASSWORD);
@@ -217,7 +217,7 @@
       
       char srchStr [USER_PASSWORD_MAX_LENGTH + 65 + 6];
       sprintf (srchStr, "%s:$5$", userName); sha256 (srchStr + strlen (srchStr), 65, password); strcat (srchStr, ":"); // we get something like "root:$5$de362bbdf11f2df30d12f318eeed87b8ee9e0c69c8ba61ed9a57695bbd91e481:"
-      File f = FFat.open ("/etc/shadow", FILE_READ); 
+      File f = fileSystem.open ("/etc/shadow", FILE_READ); 
       if (f) { 
         char line [USER_PASSWORD_MAX_LENGTH + 65 + 6]; // this should do, we don't even need the whole line which looks something like "root:$5$de362bbdf11f2df30d12f318eeed87b8ee9e0c69c8ba61ed9a57695bbd91e481:::::::"
         int i = 0;
@@ -247,7 +247,7 @@
       *buffer = 0;
       char srchStr [USER_PASSWORD_MAX_LENGTH + 2]; 
       sprintf (srchStr, "%s:", userName);
-      File f = FFat.open ("/etc/passwd", FILE_READ); 
+      File f = fileSystem.open ("/etc/passwd", FILE_READ); 
       if (f) { 
         char line [USER_PASSWORD_MAX_LENGTH + 32 + FILE_PATH_MAX_LENGTH + 1]; // this should do for one line which looks something like "webserver::100:::/var/www/html/:"
         int i = 0;
@@ -302,7 +302,7 @@
       // read /etc/shadow
       char buffer [MAX_ETC_SHADOW_SIZE + 3]; buffer [0] = '\n'; 
       int i = 1;
-      File f = FFat.open ("/etc/shadow", FILE_READ); 
+      File f = fileSystem.open ("/etc/shadow", FILE_READ); 
       if (f) { 
         while (f.available () && i <= MAX_ETC_SHADOW_SIZE) if ((buffer [i] = f.read ()) != '\r') i++; buffer [i++] = '\n'; buffer [i] = 0; // read the whole file in C string ignoring \r
         if (f.available ()) { f.close (); return false; } // /etc/shadow too large
@@ -315,7 +315,7 @@
       if (!u && !__ignoreIfUserDoesntExist__) return false; // user not found in /etc/shadow
 
       // write all the buffer except user's record back to /etc/shadow and then add a new record for the user
-      f = FFat.open ("/etc/shadow", FILE_WRITE);
+      f = fileSystem.open ("/etc/shadow", FILE_WRITE);
       if (f) {
         char *lineBeginning = buffer + 1;
         char *lineEnd;
@@ -366,7 +366,7 @@
       // read /etc/passwd
       char buffer [MAX_ETC_PASSWD_SIZE + 3]; buffer [0] = '\n'; 
       int i = 1;
-      File f = FFat.open ("/etc/passwd", FILE_READ); 
+      File f = fileSystem.open ("/etc/passwd", FILE_READ); 
       if (f) { 
         while (f.available () && i <= MAX_ETC_PASSWD_SIZE) if ((buffer [i] = f.read ()) != '\r') i++; buffer [i++] = '\n'; buffer [i] = 0; // read the whole file in C string ignoring \r
         if (f.available ()) { f.close (); return (char *) "/etc/shadow is too large."; } 
@@ -380,7 +380,7 @@
       if (!__dontWriteNewUser__ && strlen (buffer) + strlen (userName) + strlen (userId) + strlen (homeDirectory) + 10 > MAX_ETC_PASSWD_SIZE) return (char *) "Can't add a user because /etc/passwd file is already too long.";
 
       // write all the buffer back to /etc/passwd and then add a new record for the new user
-      f = FFat.open ("/etc/passwd", FILE_WRITE);
+      f = fileSystem.open ("/etc/passwd", FILE_WRITE);
       if (f) {
         char *lineBeginning = buffer + 1;
         char *lineEnd;
@@ -419,7 +419,7 @@
       // crate user's home directory
       bool b = false;
       for (int i = 0; homeDirectory [i] && homeDirectory [i]; i++) if (i && homeDirectory [i] == '/') { 
-        homeDirectory [i] = 0; b = FFat.mkdir (homeDirectory); homeDirectory [i] = '/'; 
+        homeDirectory [i] = 0; b = fileSystem.mkdir (homeDirectory); homeDirectory [i] = '/'; 
       }
       if (!b) return (char *) "User created with default password '" DEFAULT_USER_PASSWORD "' but couldn't create user's home directory.";
 
@@ -445,7 +445,7 @@
         bool firstDirectory = true;
         for (int i = strlen (homeDirectory); i; i--) if (homeDirectory [i] == '/') { 
           homeDirectory [i] = 0; 
-          if (!FFat.rmdir (homeDirectory)) break;
+          if (!fileSystem.rmdir (homeDirectory)) break;
           if (firstDirectory) homeDirectoryRemoved = true;
           firstDirectory = false;
         }

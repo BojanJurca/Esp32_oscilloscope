@@ -709,7 +709,7 @@
                           // ... add more if needed but Contet-Type can often be omitted without problems ...
                         }
                   
-                        File f = FFat.open (fileName.c_str (), FILE_READ);           
+                        File f = fileSystem.open (fileName.c_str (), FILE_READ);           
                         if (f) {
                           if (!f.isDirectory ()) {
                             #ifdef __PERFMON__
@@ -835,7 +835,7 @@
                         // create directory structure
                         #ifdef __FILE_SYSTEM__
                           if (__fileSystemMounted__) {
-                            if (!isDirectory ("/var/www/html")) { FFat.mkdir ("/var"); FFat.mkdir ("/var/www"); FFat.mkdir ("/var/www/html"); }
+                            if (!isDirectory ("/var/www/html")) { fileSystem.mkdir ("/var"); fileSystem.mkdir ("/var/www"); fileSystem.mkdir ("/var/www/html"); }
                           }
                         #endif
                         // create a local copy of parameters for later use

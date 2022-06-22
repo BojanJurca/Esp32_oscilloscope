@@ -404,12 +404,12 @@
     #ifdef __FILE_SYSTEM__
       if (__fileSystemMounted__) {
         // create directory structure
-        if (!isDirectory ("/etc")) { FFat.mkdir ("/etc"); }
+        if (!isDirectory ("/etc")) { fileSystem.mkdir ("/etc"); }
         // read NTP configuration from /etc/ntp.conf, create a new one if it doesn't exist
         if (!isFile ("/etc/ntp.conf")) {
           Serial.printf ("[%10lu] [cronDaemon] /etc/ntp.conf does not exist, creating default one ... ", millis ());
           bool created = false;
-          File f = FFat.open ("/etc/ntp.conf", FILE_WRITE);
+          File f = fileSystem.open ("/etc/ntp.conf", FILE_WRITE);
           if (f) {
             char *defaultContent = (char *) "# configuration for NTP - reboot for changes to take effect\r\n\r\n"
                                             "server1 " DEFAULT_NTP_SERVER_1 "\r\n"
@@ -439,7 +439,7 @@
         if (!isFile ("/etc/crontab")) {
           Serial.printf ("[%10lu] [cronDaemon] /etc/crontab does not exist, creating default one ... ", millis ());
           bool created = false;
-          File f = FFat.open ("/etc/crontab", FILE_WRITE);          
+          File f = fileSystem.open ("/etc/crontab", FILE_WRITE);          
           if (f) {
             char *defaultContent = (char *) "# scheduled tasks (in local time) - reboot for changes to take effect\r\n"
                                             "#\r\n"

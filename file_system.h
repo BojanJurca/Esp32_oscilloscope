@@ -16,11 +16,30 @@
     // ----- includes, definitions and supporting functions -----
 
     #include <WiFi.h>
-    #include <FFat.h>
+    #include <FS.h>
     
 
 #ifndef __FILE_SYSTEM__
   #define __FILE_SYSTEM__
+
+    // TUNNING PARAMETERS
+
+    // choose file system (it must correspond to Tools | Partition scheme setting)
+          #define FILE_SYSTEM_FAT      1   
+          #define FILE_SYSTEM_LITTLEFS 2
+    // one of the above
+    #ifndef FILE_SYSTEM
+      #define FILE_SYSTEM FILE_SYSTEM_FAT // by default
+    #endif
+
+    #if FILE_SYSTEM == FILE_SYSTEM_FAT
+      #include <FFat.h>
+      #define fileSystem FFat
+    #endif
+    #if FILE_SYSTEM == FILE_SYSTEM_LITTLEFS
+      #include <LittleFS.h>
+      #define fileSystem LittleFS
+    #endif
 
 
     // ----- functions and variables in this modul -----
@@ -51,14 +70,14 @@
     bool mountFileSystem (bool formatIfUnformatted) { 
       __fileSystemMounted__ = false;
       
-      if (FFat.begin (false)) {
+      if (fileSystem.begin (false)) {
         __fileSystemMounted__ = true;
       } else {
         if (formatIfUnformatted) {
           Serial.printf ("[%10lu] [file system] formatting, please wait ...\n", millis ());
-          if (FFat.format ()) {
+          if (fileSystem.format ()) {
             dmesg ("[file system] formatted.");
-            if (FFat.begin (false)) {
+            if (fileSystem.begin (false)) {
               __fileSystemMounted__ = true;
             }
           } else {
@@ -80,7 +99,7 @@
       bool inComment = false; // if reading comment text
       char lastCharacter = 0; // the last character read from the file
   
-      File f = FFat.open (fileName, FILE_READ);
+      File f = fileSystem.open (fileName, FILE_READ);
       if (f) {
         if (!f.isDirectory ()) {
           
@@ -120,7 +139,7 @@
     }  
 
     bool deleteFile (String fileName) {
-      if (!FFat.remove (fileName)) {
+      if (!fileSystem.remove (fileName)) {
         dmesg ("[file system] unable to delete ", (char *) fileName.c_str ());
         return false;
       }
@@ -128,7 +147,7 @@
     }
   
     bool makeDir (String directory) {
-      if (!FFat.mkdir (directory)) {
+      if (!fileSystem.mkdir (directory)) {
         dmesg ("[file system] unable to make ", (char *) directory.c_str ());
         return false;
       }
@@ -136,7 +155,7 @@
     }
 
     bool removeDir (String directory) {
-      if (!FFat.rmdir (directory)) {
+      if (!fileSystem.rmdir (directory)) {
         dmesg ("[file system] unable to remove ", (char *) directory.c_str ());
         return false;
       }
@@ -183,7 +202,7 @@
     bool isDirectory (String fullPath) {
       bool b = false;
       
-      File f = FFat.open (fullPath, FILE_READ);
+      File f = fileSystem.open (fullPath, FILE_READ);
       if (f) {
         b = f.isDirectory ();
         f.close ();
@@ -195,7 +214,7 @@
     bool isFile (String fullPath) {
       bool b = false;
       
-      File f = FFat.open (fullPath, FILE_READ);
+      File f = fileSystem.open (fullPath, FILE_READ);
       if (f) {
         b = !f.isDirectory ();
         f.close ();
@@ -206,7 +225,7 @@
     // returns file information in Unix like format
     String fileInfo (String fileOrDirectory, bool showFullPath) {
       String s ("");
-      File f = FFat.open (fileOrDirectory, FILE_READ);
+      File f = fileSystem.open (fileOrDirectory, FILE_READ);
       if (f) { 
         char line [100 + FILE_PATH_MAX_LENGTH];  
         unsigned long fSize = 0;
@@ -217,7 +236,7 @@
         bool d = f.isDirectory ();
         sprintf (line, "%crw-rw-rw-   1 root     root           %6lu ", d ? 'd' : '-', fSize);  
         strftime (line + strlen (line), 25, " %b %d %H:%M      ", &fTime);  
-        #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL (4, 4, 0)  // f.name contains only a file name without a path
+        #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL (4, 4, 0) || FILE_SYSTEM == FILE_SYSTEM_LITTLEFS  // f.name contains only a file name without a path
           s = String (line) + (showFullPath ? fileOrDirectory : String (f.name ()));      
         #else                                                 // f.name contains full file path
           if (showFullPath) { s = String (line) + String (f.name ()); }
@@ -231,10 +250,10 @@
     // returns the content of the whole directory in UNIX like format
      String listDirectory (String directoryName) { // directoryName = full path
       String list ("");
-      File d = FFat.open (directoryName);
+      File d = fileSystem.open (directoryName);
       if (d) {
         for (File f = d.openNextFile (); f; f = d.openNextFile ()) {
-          #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL (4, 4, 0)  // f.name contains only a file name without a path
+          #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL (4, 4, 0) || FILE_SYSTEM == FILE_SYSTEM_LITTLEFS  // f.name contains only a file name without a path
             String fp = directoryName; if (fp.charAt (fp.length () - 1) != '/') fp += '/'; fp += f.name (); 
             String s = fileInfo (fp, false);
           #else                                                 // f.name contains full file path
@@ -262,21 +281,21 @@
       if (s > "") if (fileList > "") fileList += "\r\n"; fileList += s; 
   
       // 2. display information about files and remember subdirectories
-      File d = FFat.open (directoryName);
+      File d = fileSystem.open (directoryName);
       if (!d) {
         return "";
       } else {
         for (File f = d.openNextFile (); f; f = d.openNextFile ()) {
           if (f.isDirectory ()) {
             // save directory name for later recursion
-            #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL (4, 4, 0)  // f.name contains only a file name without a path
+            #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL (4, 4, 0) || FILE_SYSTEM == FILE_SYSTEM_LITTLEFS  // f.name contains only a file name without a path
               String fp = directoryName; if (fp.charAt (fp.length () - 1) != '/') fp += '/'; fp += f.name ();
               dirList += fp; dirList += '\n';
             #else                                                 // f.name contains full file path
               dirList += f.name (); dirList += '\n';
             #endif
           } else {
-            #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL (4, 4, 0)  // f.name contains only a file name without a path
+            #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL (4, 4, 0) || FILE_SYSTEM == FILE_SYSTEM_LITTLEFS  // f.name contains only a file name without a path
               String fp = directoryName; if (fp.charAt (fp.length () - 1) != '/') fp += '/'; fp += f.name ();
               String s = fileInfo (fp, true);
             #else                                                 // f.name contains full file path

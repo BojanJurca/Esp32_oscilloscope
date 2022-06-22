@@ -21,6 +21,8 @@
 
 
 #include "dmesg_functions.h"
+  // choose file system (it must correspond to Tools | Partition scheme setting: FAT for FAT partition scheme, LittleFS for SPIFFS partition scheme)
+  #define FILE_SYSTEM FILE_SYSTEM_FAT // FILE_SYSTEM_LITTLEFS 
 #include "file_system.h"
   // #define network parameters before #including network.h
   #define HOSTNAME                                  "MyESP32Server"

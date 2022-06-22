@@ -344,7 +344,7 @@
           if (!ftpUserHasRightToAccess (fp.c_str ())) return F ("550 access denyed\r\n");
 
           unsigned long fSize = 0;
-          File f = FFat.open (fp, FILE_READ);
+          File f = fileSystem.open (fp, FILE_READ);
           if (f) { fSize = f.size (); f.close (); }
                                                       return "213 " + String (fSize) + "\r\n";
         }
@@ -519,7 +519,7 @@
           if (sendAll (__controlConnectionSocket__, (char *) "150 starting data transfer\r\n", strlen ("150 starting data transfer\r\n"), FTP_CONTROL_CONNECTION_TIME_OUT) == -1) { closeDataConnection (); return ""; } // if control connection is closed
 
             int bytesReadTotal = 0; int bytesSentTotal = 0;
-            File f = FFat.open (fp, FILE_READ);
+            File f = fileSystem.open (fp, FILE_READ);
             if (f) {
               // read data from file and transfer it through data connection
               #define BUFF_SIZE TCP_SND_BUF // TCP_SND_BUF = 5744, a maximum block size that ESP32 can send 
@@ -559,7 +559,7 @@
           if (sendAll (__controlConnectionSocket__, (char *) "150 starting data transfer\r\n", strlen ("150 starting data transfer\r\n"), FTP_CONTROL_CONNECTION_TIME_OUT) == -1) { closeDataConnection (); return ""; } // if control connection is closed
 
             int bytesRecvTotal = 0; int bytesWrittenTotal = 0;
-            File f = FFat.open (fp, FILE_WRITE);
+            File f = fileSystem.open (fp, FILE_WRITE);
             if (f) {
               // read data from data connection and store it to the file
               #define BUFF_SIZE TCP_SND_BUF // TCP_SND_BUF = 5744, a maximum block size that ESP32 can send 
@@ -641,7 +641,7 @@
           if (!ftpUserHasRightToAccess (fp.c_str ()))           return F ("550 access denyed\r\n"); 
 
           // rename file from temporal result
-          if (FFat.rename (__rnfrPath__, (char *) fp.c_str ())) return F ("250 renamed\r\n");
+          if (fileSystem.rename (__rnfrPath__, (char *) fp.c_str ())) return F ("250 renamed\r\n");
                                                                 return F ("553 unable to rename\r\n");          
         }
           

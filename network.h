@@ -302,9 +302,9 @@
           } else { // save default configuration
       
             Serial.printf ("[%10lu] [network] /network/interfaces does not exist or it is empty, creating a new one ... ", millis ());
-            if (!isDirectory ("/network")) FFat.mkdir ("/network"); // location of this file
+            if (!isDirectory ("/network")) fileSystem.mkdir ("/network"); // location of this file
             bool created = false;
-            File f = FFat.open ("/network/interfaces", FILE_WRITE);          
+            File f = fileSystem.open ("/network/interfaces", FILE_WRITE);          
             if (f) {
                 #if defined DEFAULT_STA_IP && defined DEFAULT_STA_SUBNET_MASK && defined DEFAULT_STA_GATEWAY && defined DEFAULT_STA_DNS_1 && defined DEFAULT_STA_DNS_2
                   char *defaultContent = (char *) "# WiFi STA(tion) configuration - reboot for changes to take effect\r\n\r\n"
@@ -374,9 +374,9 @@
           } else { // save default configuration
   
             Serial.printf ("[%10lu] [network] /etc/wpa_supplicant/wpa_supplicant.conf does not exist or it is empty, creating a new one ... ", millis ());
-            if (!isDirectory ("/etc/wpa_supplicant")) { FFat.mkdir ("/etc"); FFat.mkdir ("/etc/wpa_supplicant"); } // location of this file
+            if (!isDirectory ("/etc/wpa_supplicant")) { fileSystem.mkdir ("/etc"); fileSystem.mkdir ("/etc/wpa_supplicant"); } // location of this file
             bool created = false;
-            File f = FFat.open ("/etc/wpa_supplicant/wpa_supplicant.conf", FILE_WRITE);          
+            File f = fileSystem.open ("/etc/wpa_supplicant/wpa_supplicant.conf", FILE_WRITE);          
             if (f) {          
                 char *defaultContent = (char *) "# WiFi STA (station) credentials - reboot for changes to take effect\r\n\r\n"
                                                 #ifdef DEFAULT_STA_SSID
@@ -412,9 +412,9 @@
           } else { // save default configuration
 
             Serial.printf ("[%10lu] [network] /etc/dhcpcd.conf does not exist or it is empty, creating a new one ... ", millis ());
-            if (!isDirectory ("/etc")) FFat.mkdir ("/etc"); // location of this file
+            if (!isDirectory ("/etc")) fileSystem.mkdir ("/etc"); // location of this file
             bool created = false;
-            File f = FFat.open ("/etc/dhcpcd.conf", FILE_WRITE);          
+            File f = fileSystem.open ("/etc/dhcpcd.conf", FILE_WRITE);          
             if (f) {            
                 char *defaultContent = (char *) "# WiFi AP configuration - reboot for changes to take effect\r\n\r\n"
                                                 "iface AP\r\n"
@@ -455,9 +455,9 @@
           } else { // save default configuration
 
             Serial.printf ("[%10lu] [network] /etc/hostapd/hostapd.conf does not exist or it is empty, creating a new one ... ", millis ());
-            if (!isDirectory ("/etc/hostapd")) { FFat.mkdir ("/etc"); FFat.mkdir ("/etc/hostapd"); } // location of this file
+            if (!isDirectory ("/etc/hostapd")) { fileSystem.mkdir ("/etc"); fileSystem.mkdir ("/etc/hostapd"); } // location of this file
             bool created = false;
-            File f = FFat.open ("/etc/hostapd/hostapd.conf", FILE_WRITE);          
+            File f = fileSystem.open ("/etc/hostapd/hostapd.conf", FILE_WRITE);          
             if (f) {            
                 char *defaultContent = (char *) "# WiFi AP credentials - reboot for changes to take effect\r\n\r\n"
                                                 "iface AP\r\n"
