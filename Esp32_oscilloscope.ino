@@ -10,7 +10,7 @@
   
    Copy all files in the package into Esp32_oscilloscope directory, compile them with Arduino (with FAT partition scheme) and run on ESP32.
    
-   March, 12, 2022, Bojan Jurca
+   June, 25, 2022, Bojan Jurca
 
 */
 
@@ -19,6 +19,8 @@
 // we are not actually using Arduino analogRead but rather adc1_get_raw instead, here are defined ADC channels
 #include <driver/adc.h>
 
+// disable watchdog - it gets occasionally triggered when heavily loaded
+#include <soc/rtc_wdt.h>
 
 #include "dmesg_functions.h"
   // choose file system (it must correspond to Tools | Partition scheme setting: FAT for FAT partition scheme, LittleFS for SPIFFS partition scheme)
@@ -59,6 +61,11 @@ void wsRequestHandler (char *wsRequest, WebSocket *webSocket);
 
 
 void setup () {  
+
+  // disable watchdog - it gets occasionally triggered when heavily loaded
+  rtc_wdt_protect_off ();
+  rtc_wdt_disable ();
+  
   Serial.begin (115200);
  
   // FFat.format (); // clear up flash disk to reset everithing
