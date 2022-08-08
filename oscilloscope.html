@@ -14,7 +14,7 @@
 
       h1 {font-family: verdana; font-size: 40px; text-align: center}
 
-      div.d1 {position: relative; width: 100%; height: 48px}
+      div.d1 {position: relative; width: 100%; height: 48px; font-family: verdana; font-size: 16px; color: darkred;}
       div.d2 {position: relative; float: left; width: 48%; font-family: verdana; font-size: 30px; color: gray;}
       div.d3 {position: relative; float: left; width: 13%; font-family: verdana; font-size: 30px; color: black;}
       div.d4 {position: relative; float: left; width: 39%;}
@@ -85,6 +85,14 @@
     </style>
 
     <script type='text/javascript'>
+
+      // DEFINE VALID DIGITAL INPUT GPIOs HERE OR LEAVE EMPTY STRING FOR ALL (note that validAnalogInputs will also prevent digitalReading of listed GPIOs)
+      var validDigitalInputs = '';
+
+      // DEFINE VALID ANALOG INPUT GPIOs HERE OR LEAVE EMPTY STRING FOR ALL
+      var validAnalogInputs = '36,37,38,39,32,33,34,35';
+
+
       // from: https://www.w3schools.com/js/js_cookies.asp
       function getCookie(cname) {
         var name = cname + '=';
@@ -114,6 +122,8 @@
 
   <body>
     <br><h1>ESP32 oscilloscope</h1>
+
+<div class='d1'>Please customize this file, oscilloscope.html, to suit your project needs. Initialize the validDigitalInputs and validAnalogInputs variables with the lists of GPIOs that are valid for your project.</div>
 
     <hr />
     <div class='d1' style='height: 50px;'>
@@ -269,10 +279,24 @@
     <div class='d1'>
       <div class='d2'>&nbsp;</div>
       <div class='d3'><button class='button button2' id='startButton' onclick="
-        saveSettings ();
-        drawBackgroundAndCalculateParameters ();
-        enableDisableControls (true);
-        startOscilloscope ();
+
+	if (document.getElementById ('analog').checked && validAnalogInputs != '' && (',' + validAnalogInputs + ',').indexOf (',' + document.getElementById ('gpio1').value + ',') == -1) { 
+           alert ('Cannot analogRead GPIO ' + document.getElementById ('gpio1').value + '.'); 
+        } else if (document.getElementById ('analog').checked && document.getElementById ('gpio2').value != '40' && validAnalogInputs != '' && (',' + validAnalogInputs + ',').indexOf (',' + document.getElementById ('gpio2').value + ',') == -1) { 
+           alert ('Cannot analogRead GPIO ' + document.getElementById ('gpio2').value + '.'); 
+        } else if (document.getElementById ('digital').checked && (validDigitalInputs != '' && (',' + validDigitalInputs + ',').indexOf (',' + document.getElementById ('gpio1').value + ',') == -1 || (',' + validAnalogInputs + ',').indexOf (',' + document.getElementById ('gpio1').value + ',') > -1)) { 
+           alert ('Cannot digitalRead GPIO ' + document.getElementById ('gpio1').value + '.'); 
+        } else if (document.getElementById ('digital').checked && (document.getElementById ('gpio2').value != '40' && validDigitalInputs != '' && (',' + validDigitalInputs + ',').indexOf (',' + document.getElementById ('gpio2').value + ',') == -1 || (',' + validAnalogInputs + ',').indexOf (',' + document.getElementById ('gpio2').value + ',') > -1)) { 
+           alert ('Cannot digitalRead GPIO ' + document.getElementById ('gpio2').value + '.'); 
+        } else {
+
+           saveSettings ();
+           drawBackgroundAndCalculateParameters ();
+           enableDisableControls (true);
+           startOscilloscope ();
+
+        }
+
       ">&nbsp;START&nbsp;</button></div>
       <div class='d4'><button class='button button3' id='stopButton' disabled onclick="
         stopOscilloscope ();
