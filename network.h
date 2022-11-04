@@ -13,7 +13,7 @@
       /etc/dhcpcd.conf                          - modify the code below with your access point IP addresses 
       /etc/hostapd/hostapd.conf                 - modify the code below with your access point SSID and password
 
-    January, 31, 2022, Bojan Jurca
+    October, 23, 2022, Bojan Jurca
 
 */
 
@@ -36,6 +36,10 @@
 #ifndef __NETWORK__
   #define __NETWORK__
 
+  #ifndef __FILE_SYSTEM__
+    #pragma message "Compiling network.h without file system (file_system.h), network.h will not use configuration files"
+  #endif
+
 
     // ----- functions and variables in this modul -----
 
@@ -50,45 +54,63 @@
     // ----- TUNNING PARAMETERS -----
 
     #ifndef HOSTNAME
+      #pragma message "HOSTNAME was not defined previously, #defining the default MyESP32Server"
       #define HOSTNAME "MyESP32Server"  // use default if not defined previously
     #endif
     // define default STAtion mode parameters to be written to /etc/wpa_supplicant/wpa_supplicant.conf if you want to use ESP as WiFi station
     #ifndef DEFAULT_STA_SSID
+      #pragma message "DEFAULT_STA_SSID was not defined previously, #defining the default YOUR_STA_SSID which most likely will not work"
       #define DEFAULT_STA_SSID          "YOUR_STA_SSID"
     #endif
     #ifndef DEFAULT_STA_PASSWORD
+      #pragma message "DEFAULT_STA_PASSWORD was not defined previously, #defining the default YOUR_STA_PASSWORD which most likely will not work"
       #define DEFAULT_STA_PASSWORD      "YOUR_STA_PASSWORD"
     #endif
     // define default static IP, subnet mask and gateway to be written to /network/interfaces if you want ESP to connect to WiFi with static IP instead of using DHCP
     #ifndef DEFAULT_STA_IP
+      #pragma message "DEFAULT_STA_IP was left undefined, DEFAULT_STA_IP is only needed when static IP address is used"
       // #define DEFAULT_STA_IP            "10.18.1.200"       // IP that ESP32 is going to use if static IP is configured
     #endif
     #ifndef DEFAULT_STA_SUBNET_MASK
+      #pragma message "DEFAULT_STA_SUBNET_MASK was left undefined, DEFAULT_STA_SUBNET_MASK is only needed when static IP address is used"
       // #define DEFAULT_STA_SUBNET_MASK   "255.255.255.0"
     #endif
     #ifndef DEFAULT_STA_GATEWAY
+      #pragma message "DEFAULT_STA_GATEWAY was left undefined, DEFAULT_STA_GATEWAY is only needed when static IP address is used"
       // #define DEFAULT_STA_GATEWAY       "10.18.1.1"       // your router's IP
     #endif
     #ifndef DEFAULT_STA_DNS_1
+      #pragma message "DEFAULT_STA_DNS_1 was left undefined, DEFAULT_STA_DNS_1 is only needed when static IP address is used"
       // #define DEFAULT_STA_DNS_1         "193.189.160.13"    // or whatever your internet provider's DNS is
     #endif
     #ifndef DEFAULT_STA_DNS_2
+      #pragma message "DEFAULT_STA_DNS_2 was left undefined, DEFAULT_STA_DNS_2 is only needed when static IP address is used"
       // #define DEFAULT_STA_DNS_2         "193.189.160.23"    // or whatever your internet provider's DNS is
     #endif  
-
     // define default Access Point parameters to be written to /etc/hostapd/hostapd.conf if you want ESP to serve as an access point  
     #ifndef DEFAULT_AP_SSID
+      #pragma message "DEFAULT_AP_SSID was left undefined, DEFAULT_AP_SSID is only needed when A(ccess) P(point) is used"
       #define DEFAULT_AP_SSID           "" // HOSTNAME            // change to what you want to name your AP SSID by default or "" if AP is not going to be used
     #endif
     #ifndef DEFAULT_AP_PASSWORD
+      #pragma message "DEFAULT_AP_PASSWORD was not defined previously, #defining the default YOUR_AP_PASSWORD in case A(ccess) P(point) is used"
       #define DEFAULT_AP_PASSWORD       "YOUR_AP_PASSWORD"  // at leas 8 characters if AP is used
     #endif
     // define default access point IP and subnet mask to be written to /etc/dhcpcd.conf if you want to define them yourself
-    #define DEFAULT_AP_IP               "192.168.0.1"
-    #define DEFAULT_AP_SUBNET_MASK      "255.255.255.0"
+    #ifndef DEFAULT_AP_IP
+      #pragma message "DEFAULT_AP_IP was not defined previously, #defining the default 192.168.0.1 in case A(ccess) P(point) is used"
+      #define DEFAULT_AP_IP               "192.168.0.1"
+    #endif
+    #ifndef DEFAULT_AP_SUBNET_MASK
+      #pragma message "DEFAULT_AP_SUBNET_MASK was not defined previously, #defining the default 255.255.255.0 in case A(ccess) P(point) is used"
+      #define DEFAULT_AP_SUBNET_MASK      "255.255.255.0"
+    #endif
 
-    #define MAX_NETWORK_CONF_SIZE       512
-  
+    #define MAX_INTERFACES_SIZE         512 // how much memory is needed to temporary store /network/interfaces
+    #define MAX_WPA_SUPPLICANT_SIZE     512 // how much memory is needed to temporary store /etc/wpa_supplicant/wpa_supplicant.conf
+    #define MAX_DHCPCD_SIZE             512 // how much memory is needed to temporary store /etc/dhcpcd.conf
+    #define MAX_HOSTAPD_SIZE            512 // how much memory is needed to temporary store /etc/hostapd/hostapd.conf
+ 
     // ----- CODE -----
 
     #include "dmesg_functions.h"
@@ -170,21 +192,29 @@
         return "";
       }
 
-      char *strBetween (char *buffer, size_t bufferSize, char *src, const char *left, const char *right) { // copies substring of src between left and right to buffer or "" if not found or buffer too small, return bufffer
-        *buffer = 0;
-        char *l, *r;
-        if ((l = strstr (src, left))) {  
-          l += strlen (left);
-          if ((r = strstr (l, right))) { 
-            int len = r - l;
-            if (len < bufferSize - 1) { 
-              strncpy (buffer, l, len); 
-              buffer [len] = 0; 
+        char *strBetween (char *buffer, size_t bufferSize, char *src, const char *left, const char *right) { // copies substring of src between left and right to buffer or "" if not found or buffer too small, return bufffer
+          *buffer = 0;
+          char *l, *r;
+
+          if (*left) l = strstr (src, left);
+          else l = src;
+          
+          if (l) {  
+            l += strlen (left);
+
+            if (*right) r = strstr (l, right);
+            else r = l + strlen (l);
+            
+            if (r) { 
+              int len = r - l;
+              if (len < bufferSize - 1) { 
+                strncpy (buffer, l, len); 
+                buffer [len] = 0; 
+              }
             }
-          }
-        }    
-        return buffer;                                                     
-      }
+          }    
+          return buffer;                                                     
+        }
     #endif
 
     // converts dotted (text) IP address to IPAddress structure
@@ -218,7 +248,7 @@
       #ifdef DEFAULT_STA_SSID
         char staSSID [33] = DEFAULT_STA_SSID;
       #else
-        char staSSID [33] "";
+        char staSSID [33] = "";
       #endif
       #ifdef DEFAULT_STA_PASSWORD
         char staPassword [64] = DEFAULT_STA_PASSWORD;
@@ -278,209 +308,226 @@
   
       #ifdef __FILE_SYSTEM__
         if (__fileSystemMounted__) { 
-          char buffer [MAX_NETWORK_CONF_SIZE];
-        
-          // /network/interfaces STA(tion) configuration - parse configuration file if it exists
-          strcpy (buffer, "\n");
-          if (readConfigurationFile (buffer + 1, sizeof (buffer) - 3, (char *) "/network/interfaces")) {
-            strcat (buffer, "\n");
-            
-            if (strstr (buffer, "iface STA inet static")) {
-              strBetween (staIP, sizeof (staIP), buffer, "\naddress ", "\n");
-              strBetween (staSubnetMask, sizeof (staSubnetMask), buffer, "\nnetmask ", "\n");
-              strBetween (staGateway, sizeof (staGateway), buffer, "\ngateway ", "\n");
-              strBetween (staDns1, sizeof (staDns1), buffer, "\ndns1 ", "\n");
-              strBetween (staDns2, sizeof (staDns2), buffer, "\ndns2 ", "\n");
-            } else {
-              *staIP = 0;
-              *staSubnetMask = 0;
-              *staGateway = 0;
-              *staDns1 = 0;
-              *staDns2 = 0;
-            }
-  
-          } else { // save default configuration
-      
-            Serial.printf ("[%10lu] [network] /network/interfaces does not exist or it is empty, creating a new one ... ", millis ());
-            if (!isDirectory ("/network")) fileSystem.mkdir ("/network"); // location of this file
+          // read interfaces configuration from /network/interfaces, create a new one if it doesn't exist
+          if (!isFile ("/network/interfaces")) {
+            // create directory structure
+            if (!isDirectory ("/network")) { fileSystem.mkdir ("/network"); }
+            Serial.printf ("[%10lu] [network] /network/interfaces does not exist, creating default one ... ", millis ());
             bool created = false;
             File f = fileSystem.open ("/network/interfaces", FILE_WRITE);          
             if (f) {
-                #if defined DEFAULT_STA_IP && defined DEFAULT_STA_SUBNET_MASK && defined DEFAULT_STA_GATEWAY && defined DEFAULT_STA_DNS_1 && defined DEFAULT_STA_DNS_2
-                  char *defaultContent = (char *) "# WiFi STA(tion) configuration - reboot for changes to take effect\r\n\r\n"
-                                                  "# get IP address from DHCP\r\n"
-                                                  "#  iface STA inet dhcp\r\n"                  
-                                                  "\r\n"
-                                                  "# use static IP address\r\n"                   
-                                                  "   iface STA inet static\r\n"
-                                                  "      address " DEFAULT_STA_IP "\r\n" 
-                                                  "      netmask " DEFAULT_STA_SUBNET_MASK "\r\n" 
-                                                  "      gateway " DEFAULT_STA_GATEWAY "\r\n"
-                                                  "      dns1 " DEFAULT_STA_DNS_1 "\r\n"
-                                                  "      dns2 " DEFAULT_STA_DNS_2 "\r\n";    
-                #else
-                  char *defaultContent = (char *) "# WiFi STA(tion) configuration - reboot for changes to take effect\r\n\r\n"
-                                                  "# get IP address from DHCP\r\n"
-                                                  "   iface STA inet dhcp\r\n"                  
-                                                  "\r\n"
-                                                  "# use static IP address (example below)\r\n"   
-                                                  "#  iface STA inet static\r\n"
-                                                  #ifdef DEFAULT_STA_IP
-                                                    "#     address " DEFAULT_STA_IP "\r\n"
-                                                  #else
-                                                    "#     address \r\n"
-                                                  #endif
-                                                  #ifdef DEFAULT_STA_SUBNET_MASK
-                                                    "#     netmask " DEFAULT_STA_SUBNET_MASK "\r\n"
-                                                  #else
-                                                    "#     netmask \r\n"
-                                                  #endif
-                                                  #ifdef DEFAULT_STA_GATEWAY
-                                                    "#     gateway " DEFAULT_STA_GATEWAY "\r\n"
-                                                  #else
-                                                    "#     gateway \r\n"
-                                                  #endif
-                                                  #ifdef DEFAULT_STA_DNS_1
-                                                    "#     dns1 " DEFAULT_STA_DNS_1 "\r\n"
-                                                  #else
-                                                    "#     dns1 \r\n"
-                                                  #endif
-                                                  #ifdef DEFAULT_STA_DNS_2
-                                                    "#     dns2 " DEFAULT_STA_DNS_2 "\r\n"
-                                                  #else
-                                                    "#     dns2 \r\n"
-                                                  #endif
-                                                  ;
-                #endif
-               
-              created = (f.printf (defaultContent) == strlen (defaultContent));                                
+              #if defined DEFAULT_STA_IP && defined DEFAULT_STA_SUBNET_MASK && defined DEFAULT_STA_GATEWAY && defined DEFAULT_STA_DNS_1 && defined DEFAULT_STA_DNS_2
+                String defaultContent = F ("# WiFi STA(tion) configuration - reboot for changes to take effect\r\n\r\n"
+                                            "# get IP address from DHCP\r\n"
+                                            "#  iface STA inet dhcp\r\n"                  
+                                            "\r\n"
+                                            "# use static IP address\r\n"                   
+                                            "   iface STA inet static\r\n"
+                                            "      address " DEFAULT_STA_IP "\r\n" 
+                                            "      netmask " DEFAULT_STA_SUBNET_MASK "\r\n" 
+                                            "      gateway " DEFAULT_STA_GATEWAY "\r\n"
+                                            "      dns1 " DEFAULT_STA_DNS_1 "\r\n"
+                                            "      dns2 " DEFAULT_STA_DNS_2 "\r\n"
+                                           );
+              #else
+                String defaultContent = F ("# WiFi STA(tion) configuration - reboot for changes to take effect\r\n\r\n"
+                                           "# get IP address from DHCP\r\n"
+                                           "   iface STA inet dhcp\r\n"                  
+                                           "\r\n"
+                                           "# use static IP address (example below)\r\n"   
+                                           "#  iface STA inet static\r\n"
+                                           #ifdef DEFAULT_STA_IP
+                                             "#     address " DEFAULT_STA_IP "\r\n"
+                                           #else
+                                             "#     address \r\n"
+                                           #endif
+                                           #ifdef DEFAULT_STA_SUBNET_MASK
+                                             "#     netmask " DEFAULT_STA_SUBNET_MASK "\r\n"
+                                           #else
+                                             "#     netmask \r\n"
+                                           #endif
+                                           #ifdef DEFAULT_STA_GATEWAY
+                                             "#     gateway " DEFAULT_STA_GATEWAY "\r\n"
+                                           #else
+                                             "#     gateway \r\n"
+                                           #endif
+                                           #ifdef DEFAULT_STA_DNS_1
+                                             "#     dns1 " DEFAULT_STA_DNS_1 "\r\n"
+                                           #else
+                                             "#     dns1 \r\n"
+                                           #endif
+                                           #ifdef DEFAULT_STA_DNS_2
+                                             "#     dns2 " DEFAULT_STA_DNS_2 "\r\n"
+                                           #else
+                                             "#     dns2 \r\n"
+                                           #endif
+                                          );
+              #endif
+              created = (f.printf (defaultContent.c_str ()) == defaultContent.length ());                                
               f.close ();
               #ifdef __PERFMON__
-                __perfFSBytesWritten__ += strlen (defaultContent); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                __perfFSBytesWritten__ += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
               #endif                        
             }
             Serial.printf (created ? "created\n" : "error\n");           
           }
-  
-  
-          // /etc/wpa_supplicant/wpa_supplicant.conf STA(tion) credentials - parse configuration file if it exists
-          strcpy (buffer, "\n");
-          if (readConfigurationFile (buffer + 1, sizeof (buffer) - 3, (char *) "/etc/wpa_supplicant/wpa_supplicant.conf")) {
-            strcat (buffer, "\n");
+          {
+            Serial.printf ("[%10lu] [network] reading /network/interfaces\n", millis ());
+            // /network/interfaces STA(tion) configuration - parse configuration file if it exists
+            char buffer [MAX_INTERFACES_SIZE];
+            strcpy (buffer, "\n");
+            if (readConfigurationFile (buffer + 1, sizeof (buffer) - 3, (char *) "/network/interfaces")) {
+              Serial.printf ("----------------------------------------\n%s\n----------------------------------------\n", buffer + 1);
+              strcat (buffer, "\n");
+              if (strstr (buffer, "iface STA inet static")) {
+                strBetween (staIP, sizeof (staIP), buffer, "\naddress ", "\n");
+                strBetween (staSubnetMask, sizeof (staSubnetMask), buffer, "\nnetmask ", "\n");
+                strBetween (staGateway, sizeof (staGateway), buffer, "\ngateway ", "\n");
+                strBetween (staDns1, sizeof (staDns1), buffer, "\ndns1 ", "\n");
+                strBetween (staDns2, sizeof (staDns2), buffer, "\ndns2 ", "\n");
+              } else {
+                *staIP = 0;
+                *staSubnetMask = 0;
+                *staGateway = 0;
+                *staDns1 = 0;
+                *staDns2 = 0;
+              }
+            } 
+          }
 
-            strBetween (staSSID, sizeof (staSSID), buffer, "\nssid ", "\n");
-            strBetween (staPassword, sizeof (staPassword), buffer, "\npsk ", "\n");
-            
-          } else { // save default configuration
-  
-            Serial.printf ("[%10lu] [network] /etc/wpa_supplicant/wpa_supplicant.conf does not exist or it is empty, creating a new one ... ", millis ());
-            if (!isDirectory ("/etc/wpa_supplicant")) { fileSystem.mkdir ("/etc"); fileSystem.mkdir ("/etc/wpa_supplicant"); } // location of this file
+
+          // read STAtion credentials from /etc/wpa_supplicant/wpa_supplicant.conf, create a new one if it doesn't exist
+          if (!isFile ("/etc/wpa_supplicant/wpa_supplicant.conf")) {
+            // create directory structure
+            if (!isDirectory ("/etc/wpa_supplicant")) { fileSystem.mkdir ("/etc"); fileSystem.mkdir ("/etc/wpa_supplicant"); }
+            Serial.printf ("[%10lu] [network] /etc/wpa_supplicant/wpa_supplicant.conf does not exist, creating default one ... ", millis ());
             bool created = false;
             File f = fileSystem.open ("/etc/wpa_supplicant/wpa_supplicant.conf", FILE_WRITE);          
-            if (f) {          
-                char *defaultContent = (char *) "# WiFi STA (station) credentials - reboot for changes to take effect\r\n\r\n"
-                                                #ifdef DEFAULT_STA_SSID
-                                                  "   ssid " DEFAULT_STA_SSID "\r\n"
-                                                #else
-                                                  "   ssid \r\n"
-                                                #endif
-                                                #ifdef DEFAULT_STA_PASSWORD
-                                                  "   psk " DEFAULT_STA_PASSWORD "\r\n"
-                                                #else
-                                                  "   psk \r\n"
-                                                #endif           
-                                                ;
-              created = (f.printf (defaultContent) == strlen (defaultContent));                                
+            if (f) {
+              String defaultContent = F ("# WiFi STA (station) credentials - reboot for changes to take effect\r\n\r\n"
+                                          #ifdef DEFAULT_STA_SSID
+                                            "   ssid " DEFAULT_STA_SSID "\r\n"
+                                          #else
+                                            "   ssid \r\n"
+                                          #endif
+                                          #ifdef DEFAULT_STA_PASSWORD
+                                            "   psk " DEFAULT_STA_PASSWORD "\r\n"
+                                          #else
+                                            "   psk \r\n"
+                                          #endif           
+                                         );
+              created = (f.printf (defaultContent.c_str()) == defaultContent.length ());
               f.close ();
               #ifdef __PERFMON__
-                __perfFSBytesWritten__ += strlen (defaultContent); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                __perfFSBytesWritten__ += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
               #endif                        
             }
             Serial.printf (created ? "created\n" : "error\n");           
-          }    
-
-
-          // /etc/dhcpcd.conf contains A(ccess) P(oint) configuration - parse configuration file if it exists
-          strcpy (buffer, "\n");
-          if (readConfigurationFile (buffer + 1, sizeof (buffer) - 3, (char *) "/etc/dhcpcd.conf")) {
-            strcat (buffer, "\n");
-
-            strBetween (apIP, sizeof (apIP), buffer, "\nstatic ip_address ", "\n");          
-            strBetween (apSubnetMask, sizeof (apSubnetMask), buffer, "\nnetmask ", "\n");
-            strBetween (apGateway, sizeof (apGateway), buffer, "\ngateway ", "\n");
-  
-          } else { // save default configuration
-
-            Serial.printf ("[%10lu] [network] /etc/dhcpcd.conf does not exist or it is empty, creating a new one ... ", millis ());
-            if (!isDirectory ("/etc")) fileSystem.mkdir ("/etc"); // location of this file
-            bool created = false;
-            File f = fileSystem.open ("/etc/dhcpcd.conf", FILE_WRITE);          
-            if (f) {            
-                char *defaultContent = (char *) "# WiFi AP configuration - reboot for changes to take effect\r\n\r\n"
-                                                "iface AP\r\n"
-                                                #ifdef DEFAULT_AP_IP
-                                                  "   static ip_address " DEFAULT_AP_IP "\r\n"
-                                                #else
-                                                  "   static ip_address \r\n"
-                                                #endif
-                                                #ifdef DEFAULT_AP_SUBNET_MASK
-                                                  "   netmask " DEFAULT_AP_SUBNET_MASK "\r\n"
-                                                #else
-                                                  "   netmask \r\n"
-                                                #endif
-                                                #ifdef DEFAULT_AP_IP
-                                                  "   gateway " DEFAULT_AP_IP "\r\n"
-                                                #else
-                                                  "   gateway \r\n"
-                                                #endif
-                                                ;
-              created = (f.printf (defaultContent) == strlen (defaultContent));                                
-              f.close ();
-              #ifdef __PERFMON__
-                __perfFSBytesWritten__ += strlen (defaultContent); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-              #endif                        
-            }
-            Serial.printf (created ? "created\n" : "error\n");    
+          }
+          {              
+            Serial.printf ("[%10lu] [network] reading /etc/wpa_supplicant/wpa_supplicant.conf\n", millis ());
+            // /etc/wpa_supplicant/wpa_supplicant.conf STA(tion) credentials - parse configuration file if it exists
+            char buffer [MAX_WPA_SUPPLICANT_SIZE];
+            strcpy (buffer, "\n");
+            if (readConfigurationFile (buffer + 1, sizeof (buffer) - 3, (char *) "/etc/wpa_supplicant/wpa_supplicant.conf")) {
+              Serial.printf ("----------------------------------------\n%s\n----------------------------------------\n", buffer + 1);
+              strcat (buffer, "\n");
+              strBetween (staSSID, sizeof (staSSID), buffer, "\nssid ", "\n");
+              strBetween (staPassword, sizeof (staPassword), buffer, "\npsk ", "\n");
+            } 
           }
 
 
-          // /etc/hostapd/hostapd.conf contains A(ccess) P(oint) credentials - parse configuration file if it exists
-          strcpy (buffer, "\n");
-          if (readConfigurationFile (buffer + 1, sizeof (buffer) - 3, (char *) "/etc/hostapd/hostapd.conf")) {
-            strcat (buffer, "\n");
-
-            strBetween (apSSID, sizeof (apSSID), buffer, "\nssid ", "\n");          
-            strBetween (apPassword, sizeof (apSubnetMask), buffer, "\nwpa_passphrase ", "\n");
-        
-          } else { // save default configuration
-
-            Serial.printf ("[%10lu] [network] /etc/hostapd/hostapd.conf does not exist or it is empty, creating a new one ... ", millis ());
-            if (!isDirectory ("/etc/hostapd")) { fileSystem.mkdir ("/etc"); fileSystem.mkdir ("/etc/hostapd"); } // location of this file
+          // read A(ccess) P(oint) configuration from /etc/dhcpcd.conf, create a new one if it doesn't exist
+          if (!isFile ("/etc/dhcpcd.conf")) {
+            // create directory structure
+            if (!isDirectory ("/etc")) fileSystem.mkdir ("/etc");
+            Serial.printf ("[%10lu] [network] /etc/dhcpcd.conf does not exist, creating default one ... ", millis ());
             bool created = false;
-            File f = fileSystem.open ("/etc/hostapd/hostapd.conf", FILE_WRITE);          
-            if (f) {            
-                char *defaultContent = (char *) "# WiFi AP credentials - reboot for changes to take effect\r\n\r\n"
-                                                "iface AP\r\n"
-                                                
-                                                #ifdef DEFAULT_AP_SSID
-                                                  "   ssid " DEFAULT_AP_SSID "\r\n"
-                                                #else
-                                                  "   ssid \r\n"
-                                                #endif
-                                                "   # use at least 8 characters for wpa_passphrase\r\n"
-                                                #ifdef DEFAULT_AP_PASSWORD
-                                                  "   wpa_passphrase " DEFAULT_AP_PASSWORD "\r\n"
-                                                #else
-                                                "   wpa_passphrase \r\n"
-                                                #endif                
-                                                ;    
-              created = (f.printf (defaultContent) == strlen (defaultContent));                                
+            File f = fileSystem.open ("/etc/dhcpcd.conf", FILE_WRITE);          
+            if (f) {
+              String defaultContent = F ("# WiFi AP configuration - reboot for changes to take effect\r\n\r\n"
+                                         "iface AP\r\n"
+                                         #ifdef DEFAULT_AP_IP
+                                           "   static ip_address " DEFAULT_AP_IP "\r\n"
+                                         #else
+                                           "   static ip_address \r\n"
+                                         #endif
+                                         #ifdef DEFAULT_AP_SUBNET_MASK
+                                           "   netmask " DEFAULT_AP_SUBNET_MASK "\r\n"
+                                         #else
+                                           "   netmask \r\n"
+                                         #endif
+                                         #ifdef DEFAULT_AP_IP
+                                           "   gateway " DEFAULT_AP_IP "\r\n"
+                                         #else
+                                           "   gateway \r\n"
+                                         #endif
+                                        );
+              created = (f.printf (defaultContent.c_str()) == defaultContent.length ());
               f.close ();
               #ifdef __PERFMON__
-                __perfFSBytesWritten__ += strlen (defaultContent); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                __perfFSBytesWritten__ += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
               #endif                        
             }
-            Serial.printf (created ? "created\n" : "error\n");    
+            Serial.printf (created ? "created\n" : "error\n");           
+          }
+          {              
+            Serial.printf ("[%10lu] [network] reading /etc/dhcpcd.conf\n", millis ());
+            // /etc/dhcpcd.conf contains A(ccess) P(oint) configuration - parse configuration file if it exists
+            char buffer [MAX_DHCPCD_SIZE];
+            strcpy (buffer, "\n");
+            if (readConfigurationFile (buffer + 1, sizeof (buffer) - 3, (char *) "/etc/dhcpcd.conf")) {
+              Serial.printf ("----------------------------------------\n%s\n----------------------------------------\n", buffer + 1);
+              strcat (buffer, "\n");
+              strBetween (apIP, sizeof (apIP), buffer, "\nstatic ip_address ", "\n");          
+              strBetween (apSubnetMask, sizeof (apSubnetMask), buffer, "\nnetmask ", "\n");
+              strBetween (apGateway, sizeof (apGateway), buffer, "\ngateway ", "\n");
+            } 
+          }
+
+
+          // read A(ccess) P(oint) credentials from /etc/hostapd/hostapd.conf, create a new one if it doesn't exist
+          if (!isFile ("/etc/hostapd/hostapd.conf")) {
+            // create directory structure
+            if (!isDirectory ("/etc/hostapd")) { fileSystem.mkdir ("/etc"); fileSystem.mkdir ("/etc/hostapd"); }
+            Serial.printf ("[%10lu] [network] /etc/hostapd/hostapd.conf does not exist, creating default one ... ", millis ());
+            bool created = false;
+            File f = fileSystem.open ("/etc/hostapd/hostapd.conf", FILE_WRITE);          
+            if (f) {
+              String defaultContent = F ("# WiFi AP credentials - reboot for changes to take effect\r\n\r\n"
+                                         "iface AP\r\n"
+                                         #ifdef DEFAULT_AP_SSID
+                                           "   ssid " DEFAULT_AP_SSID "\r\n"
+                                         #else
+                                           "   ssid \r\n"
+                                         #endif
+                                         "   # use at least 8 characters for wpa_passphrase\r\n"
+                                         #ifdef DEFAULT_AP_PASSWORD
+                                           "   wpa_passphrase " DEFAULT_AP_PASSWORD "\r\n"
+                                         #else
+                                         "   wpa_passphrase \r\n"
+                                         #endif                
+                                        );
+              created = (f.printf (defaultContent.c_str()) == defaultContent.length ());
+              f.close ();
+              #ifdef __PERFMON__
+                __perfFSBytesWritten__ += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+              #endif                        
+            }
+            Serial.printf (created ? "created\n" : "error\n");           
+          }
+          {              
+            Serial.printf ("[%10lu] [network] reading /etc/hostapd/hostapd.conf\n", millis ());
+            // /etc/hostapd/hostapd.conf contains A(ccess) P(oint) credentials - parse configuration file if it exists
+            char buffer [MAX_HOSTAPD_SIZE];
+            strcpy (buffer, "\n");
+            if (readConfigurationFile (buffer + 1, sizeof (buffer) - 3, (char *) "/etc/hostapd/hostapd.conf")) {
+              Serial.printf ("----------------------------------------\n%s\n----------------------------------------\n", buffer + 1);
+              strcat (buffer, "\n");
+              strBetween (apSSID, sizeof (apSSID), buffer, "\nssid ", "\n");          
+              strBetween (apPassword, sizeof (apSubnetMask), buffer, "\nwpa_passphrase ", "\n");
+            } 
           }
 
 
@@ -589,8 +636,7 @@
             // ESP.restart ();
             dmesg ("[network] [AP] failed to initialize access point mode"); 
           }
-
-          arp (); // call arp immediatelly after network is set up to obtain pointer to ARP table
+          
       } 
 
       // set WiFi mode
@@ -607,7 +653,6 @@
   	      { esp_err_t e = tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_STA, HOSTNAME); if (e != ESP_OK) dmesg ("[network] couldn't change STA adapter hostname"); } // outdated, use: esp_netif_set_hostname
           // WiFi.setHostname (HOSTNAME); // only for STA interface
           WiFi.mode (WIFI_STA); // only STA mode
-
         }
       } else {
         
@@ -616,7 +661,8 @@
           WiFi.mode (WIFI_AP); // only AP mode
         }
 
-      }      
+      }  
+      arp (); // call arp immediatelly after network is set up to obtain pointer to ARP table    
     }
   
     wifi_mode_t getWiFiMode () {

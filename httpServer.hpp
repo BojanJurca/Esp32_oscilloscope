@@ -9,7 +9,7 @@
     a small "database" to keep valid web session tokens in order to support web login. Text and binary WebSocket straming is
     also supported.
   
-    Januar, 6, 2022, Bojan Jurca
+    October, 23, 2022, Bojan Jurca
 
     Nomenclature used here for easier understaning of the code:
 
@@ -77,6 +77,12 @@
 #ifndef __HTTP_SERVER__
   #define __HTTP_SERVER__
 
+  #ifndef __FILE_SYSTEM__
+    #pragma message "Compiling httpServer.h without file system (file_system.h), httpServer will not be able to serve files"
+  #endif
+  #ifndef __PERFMON__
+    #pragma message "Compiling httpServer.h without performance monitors (perfMon.h)"
+  #endif
 
     // ----- TUNNING PARAMETERS -----
 
@@ -97,7 +103,10 @@
     // ----- CODE -----
 
     #include "dmesg_functions.h"
-    #include "time_functions.h" // to calculate expiration time for cookies
+    #ifndef __TIME_FUNCTIONS__
+      #pragma message "Implicitly including time_functions.h (needed to calculate expiration time of cookies)"
+      #include "time_functions.h"
+    #endif
     
     #ifndef __STRISTR__
       #define __STRISTR__

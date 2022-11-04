@@ -7,79 +7,84 @@
   
    Esp32 oscilloscope is built upon Esp32_web_ftp_telnet_server_template. As a stand-alone project it uses only those 
    parts of Esp32_web_ftp_telnet_server_template that are necessary to run Esp32 oscilloscope.
-  
+
+   See https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template for details on how the servers work.
+
    Copy all files in the package into Esp32_oscilloscope directory, compile them with Arduino (with FAT partition scheme) and run on ESP32.
    
-   June, 25, 2022, Bojan Jurca
+   October, 23, 2022, Bojan Jurca
 
 */
 
+// Compile this code with Arduino for:
+// - one of ESP32 boards (Tools | Board) and 
+// - one of FAT partition schemes (Tools | Partition scheme) and
+// - at least 80 MHz CPU (Tools | CPU Frequency)
+
 
 #include <WiFi.h>
-// we are not actually using Arduino analogRead but rather adc1_get_raw instead, here are defined ADC channels
-#include <driver/adc.h>
+#include <soc/rtc_wdt.h>  // disable watchdog - it gets occasionally triggered when loaded heavily
 
-// disable watchdog - it gets occasionally triggered when heavily loaded
-#include <soc/rtc_wdt.h>
 
-#include "dmesg_functions.h"
-  // choose file system (it must correspond to Tools | Partition scheme setting: FAT for FAT partition scheme, LittleFS for SPIFFS partition scheme)
-  #define FILE_SYSTEM FILE_SYSTEM_FAT // FILE_SYSTEM_LITTLEFS 
+// When file system is used a disc will be created and formatted. You can later FTP .html and other files to /var/www/html directory, 
+// which is the root directory of a HTTP server.
+// Some ESP32 boards do not have a flash disk. In this case just comment the following #include line and Oscilloscope.html will be stored in program memory.
+// This is where HTTP server will fetch it from.
+
 #include "file_system.h"
-  // #define network parameters before #including network.h
-  #define HOSTNAME                                  "MyESP32Server"
-  #define DEFAULT_STA_SSID                          "YOUR_STA_SSID"
-  #define DEFAULT_STA_PASSWORD                      "YOUR_STA_PASSWORD"
-  #define DEFAULT_AP_SSID                           "" // HOSTNAME - leave empty if you don't want to use AP
-  #define DEFAULT_AP_PASSWORD                       "" // "YOUR_AP_PASSWORD" - at least 8 characters
-  // ... add other #definitions from network.h
-#include "network.h"                      // file_system.h is needed prior to #including network.h if you want to store the default parameters
-  // #define how you want to calculate local time and which NTP servers GMT wil be sinchronized with before #including time_functions.h (FTP server needs this to correctly display file creation fime)
-  #define DEFAULT_NTP_SERVER_1                      "1.si.pool.ntp.org"
-  #define DEFAULT_NTP_SERVER_2                      "2.si.pool.ntp.org"
-  #define DEFAULT_NTP_SERVER_3                      "3.si.pool.ntp.org"
-  #define TIMEZONE CET_TIMEZONE                     // or another one supported in time_functions.h
-#include "time_functions.h"                         // file_system.h is needed prior to #including time_functions.h if you want to store the default parameters
-  // #define what kind of user management you want before #including user_management.h
-  #define USER_MANAGEMENT NO_USER_MANAGEMENT // UNIX_LIKE_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
-#include "user_management.h"                        // file_system.h is needed prior to #including user_management.h in case of UNIX_LIKE_USER_MANAGEMENT
-#include "ftpServer.hpp"                            // file_system.h is also necessary to use ftpServer.h
-#include "httpServer.hpp"                           // file_system.h is needed prior to #including httpServer.h if you want server also to serve .html and other files
+
+
+// #define network parameters before #including network.h
+#define DEFAULT_STA_SSID                          "YOUR_STA_SSID"
+#define DEFAULT_STA_PASSWORD                      "YOUR_STA_PASSWORD"
+#define DEFAULT_AP_SSID                           "" // HOSTNAME - leave empty if you don't want to use AP
+#define DEFAULT_AP_PASSWORD                       "" // "YOUR_AP_PASSWORD" - at least 8 characters
+// ... add other #definitions from network.h
+#include "version_of_servers.h"
+#define HOSTNAME                                  "Oscilloscope" // choose your own
+#define MACHINETYPE                               "ESP32 Dev Modue" // your board
+
+#include "network.h"
+
+// #define what kind of user management you want before #including user_management.h
+#define USER_MANAGEMENT NO_USER_MANAGEMENT // UNIX_LIKE_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
+#include "user_management.h"                      // file_system.h is needed prior to #including user_management.h in case of UNIX_LIKE_USER_MANAGEMENT
+
+#include "httpServer.hpp"                         // file_system.h is needed prior to #including httpServer.h if you want server also to serve .html and other files
+
+#ifdef __FILE_SYSTEM__
+  #include "ftpServer.hpp"                        // file_system.h is also necessary to use ftpServer.h
+#else
+  #include "progMem.h"                            // for ESP32 boards without file system oscilloscope.html is also available in PROGMEM
+#endif
 
 // oscilloscope
 #include "oscilloscope.h"
 
-// take a look at https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template for details on how this works
-
-
 String httpRequestHandler (char *httpRequest, httpConnection *hcn);
 void wsRequestHandler (char *wsRequest, WebSocket *webSocket);
 
-
-              // ----- examples - delete this code when if it is not needed -----
-              // byte sinus [256];
-
-
 void setup () {  
 
-  // disable watchdog - it gets occasionally triggered when heavily loaded
-  rtc_wdt_protect_off ();
-  rtc_wdt_disable ();
+  // disable watchdog if you can afford it - watchdog gets occasionally triggered when loaded heavily
+  // rtc_wdt_protect_off ();
+  // rtc_wdt_disable ();
+  // disableCore0WDT ();
+  // disableCore1WDT ();
+  // disableLoopWDT ();
+
   
   Serial.begin (115200);
- 
-  // FFat.format (); // clear up flash disk to reset everithing
-  mountFileSystem (true);                                                   // this is the first thing to do - all configuration files reside on the file system
+  Serial.println (String (MACHINETYPE) + " (" + ESP.getCpuFreqMHz () + " MHz) " + HOSTNAME + " SDK: " + ESP.getSdkVersion () + " " + VERSION_OF_SERVERS + ", compiled at: " + String (__DATE__) + " " + String (__TIME__));
+  
+  #ifdef __FILE_SYSTEM__
+  
+    // FFat.format (); Serial.printf ("\nFormatting FAT file system ...\n\n"); // format flash disk to reset everithing and start from the scratch
+    mountFileSystem (true);                                                 // this is the first thing to do - all configuration files reside on the file system
 
-  // deleteFile ("/etc/ntp.conf");                                          // contains ntp server names for time sync - deleting this file would cause creating default one
-  // deleteFile ("/etc/crontab");                                           // contains cheduled tasks                 - deleting this file would cause creating empty one
-  startCronDaemon (NULL);                                                   // creates /etc/ntp.conf with default NTP server names and syncronize ESP32 time with them once a day
-                                                                            // creates empty /etc/crontab, reads it at startup and executes cronHandler when the time is right
-                                                                            // 3 KB stack size is minimal requirement for NTP time synchronization, add more if your cronHandler requires more
+  #endif
 
-  // deleteFile ("/etc/passwd");                                            // contains users' accounts information    - deleting this file would cause creating default one
-  // deleteFile ("/etc/shadow");                                            // contains users' passwords               - deleting this file would cause creating default one
-  initializeUsers ();                                                       // creates user management files with root and webadmin users, if they don't exist yet
+  // initializeUsers ();                                                    // creates user management files with root and webadmin users, if they don't exist yet, not needed for NO_USER_MANAGEMENT 
 
   // deleteFile ("/network/interfaces");                                    // contation STA(tion) configuration       - deleting this file would cause creating default one
   // deleteFile ("/etc/wpa_supplicant/wpa_supplicant.conf");                // contation STA(tion) credentials         - deleting this file would cause creating default one
@@ -95,41 +100,32 @@ void setup () {
                                         NULL);                              // we won't use firewallCallback function for HTTP server
   if (!httpSrv && httpSrv->state () != httpServer::RUNNING) dmesg ("[httpServer] did not start.");
 
-  // start FTP server
-  ftpServer *ftpSrv = new ftpServer ((char *) "0.0.0.0",                    // start FTP server on all available ip addresses
-                                     21,                                    // default FTP port
-                                     NULL);                                 // we won't use firewallCallback function for FTP server
-  if (ftpSrv && ftpSrv->state () != ftpServer::RUNNING) dmesg ("[ftpServer] did not start.");
+  #ifdef __FILE_SYSTEM__
 
+    // start FTP server
+    ftpServer *ftpSrv = new ftpServer ((char *) "0.0.0.0",                    // start FTP server on all available ip addresses
+                                       21,                                    // default FTP port
+                                       NULL);                                 // we won't use firewallCallback function for FTP server
+    if (ftpSrv && ftpSrv->state () != ftpServer::RUNNING) dmesg ("[ftpServer] did not start.");
+
+  #endif
   
   // initialize GPIOs you are going to use here:
   // ...
 
-              /*
               // ----- examples - delete this code when if it is not needed -----
-              // example: PWM on GPIO 16
-              ledcSetup (0, 83, 10);                    // channel 0, 83 Hz, 10 bit resolution (1024 values)
-              ledcAttachPin (16, 0);                    // attach pin 2 (built-in led) to channel 0
-              ledcWrite (0, 307);                       // PWM of built-in LED (channel 0 -> pin 2) with 1/3 of period (307 out of 1023)
-              // example: ADC on GPIO 25
-              analogReadResolution (12);                // set 12 bit analog read resolution (defaule)
-              analogSetPinAttenuation (25, ADC_11db);   // set attenuation for pin 32 to 2600 mV range (default)
-              #define BYTE2RAD 2 * PI / 256
-              for (int i = 0; i < 256; i++) sinus [i] = sin (i * BYTE2RAD) * 100 + 110; // one period with 256 samples
-              // after IDF 4.? we can not read the signal on GPIO2 directly but we can connec it with a wire to another GPIO and read it there
-              */
-              
+              #undef LED_BUILTIN
+              #define LED_BUILTIN 2
+              Serial.printf ("\nGenerating 1 KHz PWM signal on built-in LED pin %i, just for demonstration purposes.\n"
+                             "Please, delete this code when if it is no longer needed.\n\n", LED_BUILTIN);
+              pinMode (LED_BUILTIN, OUTPUT | INPUT);
 }
 
 void loop () {
 
               // ----- examples - delete this code when if it is not needed -----
-              /*
-              delayMicroseconds (48);
-              static byte b = 0;
-              dacWrite (25, sinus [b++]); 
-              */
-              
+              digitalWrite (LED_BUILTIN, !digitalRead (LED_BUILTIN));
+              delayMicroseconds (500);
 }
 
 
@@ -138,19 +134,24 @@ String httpRequestHandler (char *httpRequest, httpConnection *hcn) {
 
   #define httpRequestStartsWith(X) (strstr(httpRequest,X)==httpRequest)
 
+  #ifdef __FILE_SYSTEM__
 
-  if (httpRequestStartsWith ("GET / ") || httpRequestStartsWith ("GET /index.html ")) {
-    // redirect browser to /var/www/html/oscilloscope.html
-    String host = hcn->getHttpRequestHeaderField ((char *) "Host");
-    char location [66]; sprintf (location, "http://%s/oscilloscope.html", (char *) host.c_str ());
-    hcn->setHttpReplyHeaderField ("Location", location);
-    hcn->setHttpReplyStatus ((char *) "307 temporary redirect"); // change reply status to 307 and set Location so client browser will know where to go next
-    return "Redirecting ...";
-  // } else if (httpRequestStartsWith ("GET /oscilloscope.html ") {
-  //   // don't have to handle this request, httpServer will look for /var/www/html/oscilloscope.html itself
-  }
+    // if HTTP request is GET /oscilloscope.html HTTP server will fetch the file but let us redirect GET / and GET /index.html to it as well
+    if (httpRequestStartsWith ("GET / ") || httpRequestStartsWith ("GET /index.html ")) {
+      hcn->setHttpReplyHeaderField ("Location", "/oscilloscope.html");
+      hcn->setHttpReplyStatus ((char *) "307 temporary redirect"); // change reply status to 307 and set Location so client browser will know where to go next
+      return "Redirecting ..."; // whatever
+    }
+
+  #else
+
+    if (httpRequestStartsWith ("GET / ") || httpRequestStartsWith ("GET /index.html ") || httpRequestStartsWith ("GET /oscilloscope.html ")) {
+      return F (oscilloscopeHtml);  
+    }
+
+  #endif
+
   // if the request is GET /oscilloscope.html we don't have to interfere - web server will read the file from file system
- 
   return ""; // HTTP request has not been handled by httpRequestHandler - let the httpServer handle it itself
 }
 

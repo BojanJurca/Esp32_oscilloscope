@@ -4,7 +4,7 @@
   
   This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
   
-  March, 12, 2022, Bojan Jurca
+  October, 23, 2022, Bojan Jurca
 
   FFAT behaves somewhat differently in different IDF versions. I'm not 100 % sure that version 4.4 and above should be treated differently since
   I have not tested all differnt versions. What matters is that file name once returns full path and in the other case just a name within directory.
@@ -35,10 +35,12 @@
     #if FILE_SYSTEM == FILE_SYSTEM_FAT
       #include <FFat.h>
       #define fileSystem FFat
+      #pragma message "Compiling file_system.h for FAT file system"
     #endif
     #if FILE_SYSTEM == FILE_SYSTEM_LITTLEFS
       #include <LittleFS.h>
       #define fileSystem LittleFS
+      #pragma message "Compiling file_system.h for LittleFS file system"
     #endif
 
 
@@ -63,8 +65,10 @@
     // ----- CODE -----
 
     #include "dmesg_functions.h"  
-    #include "time_functions.h"
-
+    #ifndef __TIME_FUNCTIONS__
+      #pragma message "Implicitly including time_functions.h (needed to display file times)"
+      #include "time_functions.h"
+    #endif
 
     // mount file system by calling this function
     bool mountFileSystem (bool formatIfUnformatted) { 

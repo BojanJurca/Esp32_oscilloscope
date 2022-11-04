@@ -15,7 +15,7 @@
             - https://www.cyberciti.biz/faq/understanding-etcpasswd-file-format/
             - https://www.cyberciti.biz/faq/understanding-etcshadow-file/          
 
-    November 26, 2021, Bojan Jurca
+    October 23, 2022, Bojan Jurca
 
    Nomenclature used in webServer.hpp - for easier understaning of the code:
 
@@ -37,7 +37,7 @@
 #ifndef __USER_MANAGEMENT__
   #define __USER_MANAGEMENT__
 
-
+  
     // TUNNING PARAMETERS
 
     // choose the way ESP32 server is going to handle users
@@ -46,6 +46,7 @@
           #define UNIX_LIKE_USER_MANAGEMENT 3   // user names and passwords will be stored in UNIX like configuration files and checked by user_management.h functions
     // one of the above
     #ifndef USER_MANAGEMENT
+      #pragma message "USER_MANAGEMENT was not defined previously, #defining the default UNIX_LIKE_USER_MANAGEMENT"
       #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT // by default
     #endif
 
@@ -74,6 +75,12 @@
     // ----- CODE -----
 
     #if USER_MANAGEMENT == UNIX_LIKE_USER_MANAGEMENT
+
+      #ifndef __FILE_SYSTEM__
+        #error "You can't use UNIX_LIKE_USER_MANAGEMENT without file_system.h. Either #include file_system.h prior to including user_management.h or choose NO_USER_MANAGEMENT or HARDCODED_USER_MANAGEMENT"
+      #endif
+      #pragma message "Compiling user_management.h for UNIX_LIKE_USER_MANAGEMENT. user_management.h will use /etc/passwd and /etc/shadow files to store users' credentials"
+    
       // needed for storing sha of passwords
       #include <mbedtls/md.h>
 
@@ -97,8 +104,6 @@
           }
       #endif    
 
-      #include "file_system.h"  // we need file_system.h to read and store configuration files /etc/passwd and /etc/shadow
-
       #ifndef __STR_BETWEEN__  
         #define __STR_BETWEEN__
         String strBetween (String input, String openingBracket, String closingBracket) { // returns content inside of opening and closing brackets
@@ -118,9 +123,17 @@
         char *strBetween (char *buffer, size_t bufferSize, char *src, const char *left, const char *right) { // copies substring of src between left and right to buffer or "" if not found or buffer too small, return bufffer
           *buffer = 0;
           char *l, *r;
-          if ((l = strstr (src, left))) {  
+
+          if (*left) l = strstr (src, left);
+          else l = src;
+          
+          if (l) {  
             l += strlen (left);
-            if ((r = strstr (l, right))) { 
+
+            if (*right) r = strstr (l, right);
+            else r = l + strlen (l);
+            
+            if (r) { 
               int len = r - l;
               if (len < bufferSize - 1) { 
                 strncpy (buffer, l, len); 
@@ -135,7 +148,9 @@
     #endif
   
     #if USER_MANAGEMENT == NO_USER_MANAGEMENT // no user management at all
-  
+
+     #pragma message "Compiling user_management.h for NO_USER_MANAGEMENT. Everyone will be allowed to login on to the servers"
+
       void initializeUsers () {;}                                                     // don't need to initialize users in this mode, we are not going to use user name and password at all
       bool checkUserNameAndPassword (char *userName, char *password) { return true; } // everyone can logg in
       bool getUserHomeDirectory (char *buffer, size_t bufferSize, char *userName) {   // must always end with '/'    
@@ -148,6 +163,9 @@
     #endif
   
     #if USER_MANAGEMENT == HARDCODED_USER_MANAGEMENT // only 'root' user with hard-coded password
+    
+      #pragma message "Compiling user_management.h for HARDCODED_USER_MANAGEMENT. Only root user will be allowed do login with password defined in DEFAULT_USER_PASSWORD"
+    
       void initializeUsers () {;}                                                     // don't need to initialize users in this mode, we are not going to use user name and password at all
       bool checkUserNameAndPassword (char *userName, char *password) { return (!strcmp (userName, "root") && !strcmp (password, DEFAULT_ROOT_PASSWORD)); }
       bool getUserHomeDirectory (char *buffer, size_t bufferSize, char *userName) { // always ends with /

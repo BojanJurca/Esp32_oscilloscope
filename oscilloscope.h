@@ -7,7 +7,7 @@
     Issues:
             - when WiFi is in WIFI_AP or WIFI_STA_AP mode is oscillospe causes WDT problem when working at higher frequenceses
 
-    March, 12, 2022, Bojan Jurca
+    October, 23, 2022, Bojan Jurca
              
 */
 
@@ -22,15 +22,10 @@
 
     #include "httpServer.hpp"                 // oscilloscope uses websockets defined in webServer.hpp  
 
-    // analogRead is not thread safe, well have to use critical section, but that will slow down the reading:
-    portMUX_TYPE analogReadMutex = portMUX_INITIALIZER_UNLOCKED;
-    inline int16_t adc (adc1_channel_t channel) __attribute__((always_inline));
-    int16_t adc (adc1_channel_t channel) {
-      taskENTER_CRITICAL (&analogReadMutex);
-      int i = adc1_get_raw (channel);
-      taskEXIT_CRITICAL (&analogReadMutex);
-      return i;
-    }
+      // deprecated, for backwards compatibility only:
+      [[deprecated("adc (channel) is deprecated, use adc1_get_raw (channel) instead.")]]
+      inline int16_t adc (adc1_channel_t channel) __attribute__((always_inline));
+      int16_t adc (adc1_channel_t channel) { return adc1_get_raw (channel); };
 
     // oscilloscope samples
     struct oscSample {                        // one sample
@@ -44,6 +39,8 @@
        int sampleCount;                       // number of samples in the buffer
        bool samplesAreReady;                  // is the buffer ready for sending
     }; // = max 64 samples of 384 bytes
+
+    enum readerState { readerRunning = 0, readerShouldStop =  1, readerStopped = 2 };
 
     struct oscSharedMemory {                  // data structure to be shared among oscilloscope tasks
       // basic data
@@ -70,6 +67,8 @@
       // buffers holding samples 
       oscSamples readBuffer;                  // we'll read samples into this buffer
       oscSamples sendBuffer;                  // we'll copy red buffer into this buffer before sending samples to the client
+      // reader state
+      readerState oscReaderState;             // helps to execute a proper stopping sequence
     };
 
     // oscilloscope reader read samples to read-buffer of shared memory - it will be copied to send buffer when it is ready to be sent
@@ -98,7 +97,7 @@
       int16_t deltaTime;                  // how far last sample is from the previous one
       int screenRefreshCounter = 0;
       
-      while (true) {
+      while (((oscSharedMemory *) sharedMemory)->oscReaderState == readerRunning) {
     
         // insert first dummy sample to read-buffer that tells javascript client to start drawing from the left of the screen
         readBuffer->samples [0] = {-1, -1, -1}; // no normal data sample can look like this
@@ -112,17 +111,16 @@
     
           lastSampleTime = unitIsMicroSeconds ? micros () : millis ();
           oscSample lastSample; 
-          // if (doAnalogRead) lastSample = {(int16_t) analogRead (gpio1), gpio2 < 100 ? (int16_t) analogRead (gpio2) : (int16_t) -1, (int16_t) 0}; else lastSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, (int16_t) 0}; // gpio1 should always be valid 
-          if (doAnalogRead) lastSample = {adc (adcchannel1), gpio2 < 100 ? adc (adcchannel2) : (int16_t) -1, (int16_t) 0}; else lastSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, (int16_t) 0}; // gpio1 should always be valid 
+          if (doAnalogRead) lastSample = {adc1_get_raw (adcchannel1), gpio2 < 100 ? adc1_get_raw (adcchannel2) : (int16_t) -1, (int16_t) 0}; else lastSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, (int16_t) 0}; // gpio1 should always be valid 
           
           if (unitIsMicroSeconds) delayMicroseconds (samplingTime); else delay (samplingTime); 
-    
-          while (true) { // wait for trigger condition
-            
+
+          while (((oscSharedMemory *) sharedMemory)->oscReaderState == readerRunning) { // wait for trigger condition
+            taskYIELD (); // give other tasks a chance to run
             unsigned long newSampleTime = unitIsMicroSeconds ? micros () : millis ();
             oscSample newSample; 
             // if (doAnalogRead) newSample = {(int16_t) analogRead (gpio1), gpio2 < 100 ? (int16_t) analogRead (gpio2) : (int16_t) -1, (int16_t) (screenTime = newSampleTime - lastSampleTime)}; else newSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, (int16_t) (screenTime = newSampleTime - lastSampleTime)}; // gpio1 should always be valid 
-            if (doAnalogRead) newSample = {adc (adcchannel1), gpio2 < 100 ? adc (adcchannel2) : (int16_t) -1, (int16_t) (screenTime = newSampleTime - lastSampleTime)}; else newSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, (int16_t) (screenTime = newSampleTime - lastSampleTime)}; // gpio1 should always be valid 
+            if (doAnalogRead) newSample = {adc1_get_raw (adcchannel1), gpio2 < 100 ? adc1_get_raw (adcchannel2) : (int16_t) -1, (int16_t) (screenTime = newSampleTime - lastSampleTime)}; else newSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, (int16_t) (screenTime = newSampleTime - lastSampleTime)}; // gpio1 should always be valid 
 
             if ((positiveTrigger && lastSample.signal1 < positiveTriggerTreshold && newSample.signal1 >= positiveTriggerTreshold) || (negativeTrigger && lastSample.signal1 > negativeTriggerTreshold && newSample.signal1 <= negativeTriggerTreshold)) { // only gpio1 is used to trigger the sampling 
               // insert both samples into read buffer
@@ -143,10 +141,11 @@
             if (unitIsMicroSeconds) delayMicroseconds (samplingTime); else delay (samplingTime);
     
           } // while not triggered
+         
         } // if triggered mode
     
         // take (the rest of the) samples that fit on one screen
-        while (true) { // while screenTime < screenWidthTime
+        while (((oscSharedMemory *) sharedMemory)->oscReaderState == readerRunning) { // while screenTime < screenWidthTime
          
           if (oneSampleAtATime && readBuffer->sampleCount) {
             // copy read buffer to send buffer so that oscilloscope sender can send it to javascript client 
@@ -161,7 +160,6 @@
             // but only if modulus == 0 to reduce refresh frequency to sustainable 20 Hz
             if (triggeredMode || !(screenRefreshCounter = (screenRefreshCounter + 1) % screenRefreshModulus)) {
               // copy read buffer to send buffer
-              // while (sendBuffer->samplesAreReady) if (unitIsMicroSeconds) delayMicroseconds (samplingTime); else delay (samplingTime); // wait until sendBuffer has been send and is free
               if (!sendBuffer->samplesAreReady) *sendBuffer = *readBuffer; // this also copies 'ready' flag from read buffer which is 'true'
             }
             if (unitIsMicroSeconds) delayMicroseconds (samplingTime); else delay (samplingTime);
@@ -174,7 +172,7 @@
           lastSampleTime = newSampleTime;        
           oscSample newSample; 
           // if (doAnalogRead) newSample = {(int16_t) analogRead (gpio1), gpio2 < 100 ? (int16_t) analogRead (gpio2) : (int16_t) -1, deltaTime}; else newSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, deltaTime}; // gpio1 should always be valid 
-          if (doAnalogRead) newSample = {adc (adcchannel1), gpio2 < 100 ? adc (adcchannel2) : (int16_t) -1, deltaTime}; else newSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, deltaTime}; // gpio1 should always be valid 
+          if (doAnalogRead) newSample = {adc1_get_raw (adcchannel1), gpio2 < 100 ? adc1_get_raw (adcchannel2) : (int16_t) -1, deltaTime}; else newSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, deltaTime}; // gpio1 should always be valid 
 
           readBuffer->samples [readBuffer->sampleCount] = newSample;
           readBuffer->sampleCount = (readBuffer->sampleCount + 1) & 0b00111111; // 0 .. 63 max (which is inside buffer size) - just in case, the number of samples will never exceed 41  
@@ -187,11 +185,17 @@
         // one screen frame has already been sent, we have to wait yet screenRefreshModulus - 1 screen frames
         // for the whole screen refresh time to pass
         if (triggeredMode) {
-          if (unitIsMicroSeconds) delay (screenRefreshPeriod - screenWidthTime / 1000); // screenRefreshPeriod is always in ms, neverin us
+          if (unitIsMicroSeconds) delay (screenRefreshPeriod - screenWidthTime / 1000); // screenRefreshPeriod is always in ms, never in us
           else if (screenRefreshPeriod > screenWidthTime) delay (screenRefreshPeriod - screenWidthTime);
                else                                       delay (screenRefreshPeriod);
-        } 
+        } else {
+          taskYIELD (); // give other tasks a chance to run
+        }
+        
       } // while (true)
+
+      ((oscSharedMemory *) sharedMemory)->oscReaderState = readerStopped;
+      vTaskDelete (NULL);
     }
 
     // oscilloscope sender is always sending both streams (both GPIO samples) regardless if only one is in use - let javascript client pick out only those that it rquested
@@ -250,9 +254,6 @@
       // start digital sampling on GPIO 36 every 250 ms screen width = 10000 ms
       // start analog sampling on GPIO 22, 23 every 100 ms screen width = 400 ms set positive slope trigger to 512 set negative slope trigger to 0
       String s = webSocket->readString (); 
-      #ifdef __SYSLOG__
-        syslog (s);
-      #endif
       
       // try to parse what we have got from client
       char posNeg1 [9] = "";
@@ -466,11 +467,10 @@
         Serial.printf ("[oscilloscope] oscReader started\n");
         // start oscilloscope sender in this thread
         oscSender ((void *) &sharedMemory); 
-        #ifdef __SYSLOG__
-          syslog ("stop");
-        #endif        
-        // stop reader
-        vTaskDelete (oscReaderHandle);
+        // stop reader - we cn not simply vTaskDelete (oscReaderHandle) since this could happen in the middle of analogRead which would leave its internal semaphore locked
+        // vTaskDelete (oscReaderHandle);
+        sharedMemory.oscReaderState = readerShouldStop; // tell oscReader to stop
+        while (sharedMemory.oscReaderState != readerStopped) delay (1); // wait until stopped os oscReader can still access sharedMemory meanwhile
       }
 
       #ifdef __PERFMON__

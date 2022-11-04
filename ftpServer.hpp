@@ -6,7 +6,7 @@
   
     FTP server reads and executes FTP commands. The transfer of files in active in passive mode is supported but some of the commands may 
 
-    February, 14, 2022, Bojan Jurca
+    October, 23, 2022, Bojan Jurca
 
     Nomenclature used here for easier understaning of the code:
 
@@ -43,6 +43,14 @@
 #ifndef __FTP_SERVER__
   #define __FTP_SERVER__
 
+  #ifndef __FILE_SYSTEM__
+    #error "You can't use ftpServer.h without file_system.h. Either #include file_system.h prior to including ftpServer.h or exclude ftpServer.h"
+  #endif
+  #ifndef __PERFMON__
+    #pragma message "Compiling ftpServert.h without performance monitors (perfMon.h)"
+  #endif
+
+
     // TUNNING PARAMETERS
 
     #define FTP_SERVER_STACK_SIZE 2 * 1024                      // TCP listener
@@ -61,11 +69,14 @@
     // ----- CODE -----
 
     #include "dmesg_functions.h"
-
-    #include "user_management.h"    // for logging in
-    #include "time_functions.h"     // to display file times, cronDaemon still needs to be run first 
-    #include "file_system.h"        // FTP needs file system, of course but it still needs to be mounted first 
-
+    #ifndef __USER_MANAGEMENT__
+      #pragma message "Implicitly including user_management.h"
+      #include "user_management.h"    // for logging in
+    #endif
+    #ifndef __TIME_FUNCTIONS__
+      #pragma message "Implicitly including time_functions.h (needed to display file times)"
+      #include "time_functions.h"
+    #endif
 
     // control ftpServer critical sections
     static SemaphoreHandle_t __ftpServerSemaphore__ = xSemaphoreCreateMutex (); 

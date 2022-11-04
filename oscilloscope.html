@@ -1,20 +1,22 @@
-
 <!DOCTYPE html>
-<html>
-  <head>
-    <link rel='shortcut icon' type='image/x-icon' sizes='192x192' href='/android-192-osc.png'>
-    <link rel='icon' type='image/png' sizes='192x192' href='/android-192-osc.png'>
-    <link rel='apple-touch-icon' sizes='180x180' href='/apple-180-osc.png'>
-    <meta http-equiv='content-type' content='text/html; charset=utf-8' />
+<html lang='en'>
+<head>
+  <title>Esp32_oscilloscope</title>
 
-    <title>Esp32_oscilloscope</title>
+	<meta charset='UTF-8'>
+	<meta http-equiv='X-UA-Compatible' content='IE=edge'>
+	
+	<link rel='shortcut icon' type='image/x-icon' sizes='192x192' href='/android-192.png'>
+	<link rel='icon' type='image/png' sizes='192x192' href='/android-192.png'>
+	<link rel='apple-touch-icon' sizes='180x180' href='/apple-180.png'>
 
-    <style>
+  <style>
       hr {border: 0; border-top: 1px solid lightgray; border-bottom: 1px solid lightgray}
 
       h1 {font-family: verdana; font-size: 40px; text-align: center}
 
-      div.d1 {position: relative; width: 100%; height: 48px; font-family: verdana; font-size: 16px; color: darkred;}
+      /* define grid for controls - we'll use d2 + d3 + d4 or d2 + d3 + d3 + d5 */
+      div.d1 {position: relative; width: 100%; height: 48px; font-family: verdana; font-size: 16px; color: red;}
       div.d2 {position: relative; float: left; width: 48%; font-family: verdana; font-size: 30px; color: gray;}
       div.d3 {position: relative; float: left; width: 13%; font-family: verdana; font-size: 30px; color: black;}
       div.d4 {position: relative; float: left; width: 39%;}
@@ -87,33 +89,33 @@
     <script type='text/javascript'>
 
       // DEFINE VALID DIGITAL INPUT GPIOs HERE OR LEAVE EMPTY STRING FOR ALL (note that validAnalogInputs will also prevent digitalReading of listed GPIOs)
-      var validDigitalInputs = '';
+      let validDigitalInputs = '';
 
       // DEFINE VALID ANALOG INPUT GPIOs HERE OR LEAVE EMPTY STRING FOR ALL
-      var validAnalogInputs = '36,37,38,39,32,33,34,35';
+      let validAnalogInputs = '36,37,38,39,32,33,34,35';
 
 
       // from: https://www.w3schools.com/js/js_cookies.asp
-      function getCookie(cname) {
-        var name = cname + '=';
-        var decodedCookie = decodeURIComponent(document.cookie);
-        var ca = decodedCookie.split(';');
-        for(var i = 0; i <ca.length; i++) {
-          var c = ca[i];
-          while (c.charAt(0) == ' ') {
-            c = c.substring(1);
+      function getCookie (cname) {
+        let name = cname + '=';
+        let decodedCookie = decodeURIComponent (document.cookie);
+        let ca = decodedCookie.split (';');
+        for (let i = 0; i < ca.length; i++) {
+          let c = ca [i];
+          while (c.charAt (0) == ' ') {
+            c = c.substring (1);
           }
-          if (c.indexOf(name) == 0) {
-            return c.substring(name.length, c.length);
+          if (c.indexOf (name) == 0) {
+            return c.substring (name.length, c.length);
           }
         }
         return '';
       }
       // from: https://www.w3schools.com/js/js_cookies.asp
-      function setCookie(cname, cvalue, exdays) {
-        var d = new Date();
-        d.setTime(d.getTime() + (exdays*24*60*60*1000));
-        var expires = 'expires='+ d.toUTCString();
+      function setCookie (cname, cvalue, exdays) {
+        var d = new Date ();
+        d.setTime (d.getTime () + (exdays * 24 * 60 * 60 * 1000));
+        var expires = 'expires=' + d.toUTCString ();
         document.cookie = cname + '=' + cvalue + ';' + expires + ';' // path=/';  we wont use path - cookies are used in this page only
       }
     </script>
@@ -121,9 +123,12 @@
   </head>
 
   <body>
+    
     <br><h1>ESP32 oscilloscope</h1>
 
-<div class='d1'>Please customize this file, oscilloscope.html, to suit your project needs. Initialize the validDigitalInputs and validAnalogInputs variables with the lists of GPIOs that are valid for your project.</div>
+    <div class='d1'>Please customize this file, oscilloscope.html, to suit your project needs. 
+                    Initialize the validDigitalInputs and validAnalogInputs variables with the 
+                    lists of GPIOs that are valid for your project for example.</div>
 
     <hr />
     <div class='d1' style='height: 50px;'>
@@ -151,7 +156,7 @@
 
     <hr />
     <div class='d1'>
-      <div class='d2'>&nbsp;Do digitalRead (GPIO)</div>
+      <div class='d2'>&nbsp;digitalRead (GPIO)</div>
       <div class='d3'>
         <label class='container'>&nbsp;<input type='radio' checked='checked' name='radio1' id='digital' onchange="
           drawBackgroundAndCalculateParameters ();
@@ -167,7 +172,7 @@
       </div>
     </div>
     <div class='d1'>
-      <div class='d2'>&nbsp;Do analogRead (GPIO)</div>
+      <div class='d2'>&nbsp;analogRead (GPIO)</div>
       <div class='d3'>
         <label class='container'>&nbsp;<input type='radio' name='radio1' id='analog' onchange="
           drawBackgroundAndCalculateParameters ();
@@ -184,7 +189,7 @@
     </div>
 
     <hr />
-    <div class='d1'>
+    <div class='d1' id='vSens'>
       <div class='d2'>&nbsp;Vertical sensitivity</div>
       <div class='d3' id='sensitivityLabel'>100 %</div>
       <div class='d4'> 
@@ -195,7 +200,7 @@
       </div>
     </div>
 
-    <div class='d1'>
+    <div class='d1' id='vPos'>
       <div class='d2'>&nbsp;Vertical position</div>
       <div class='d3' id='positionLabel'>0</div>
       <div class='d4'>
@@ -306,12 +311,27 @@
 
     <br>
 
-    <canvas id='oscilloscope' width='968' height='512';></canvas></div>
+    <canvas id='oscilloscope' width='968' height='512'></canvas></div>
 
     <script type='text/javascript'>
 
-      // initialization
+      let lastWidth = 0;
+		  let currentWidth = document.documentElement.clientWidth; 
+		  window.addEventListener ('resize', (e) => {         
+				currentWidth = document.documentElement.clientWidth;
+				// if oscilloscope is not running we can resize and redraw canvas right now
+				if (document.getElementById ('stopButton').disabled == true) drawBackgroundAndCalculateParameters ();
+			});
+			// correct canvas size
+			function resizeCanvas () {
+				if (lastWidth != currentWidth) {
+					document.getElementById ('oscilloscope').width = document.getElementById ('vSens').clientWidth;
+					lastWidth = currentWidth;
+				}
+			}
+			resizeCanvas ();
 
+      // initialization
       function sensitivityLabelFromSensitivitySlider (value) {
         switch (value) {
           case '0': return '100 %';
@@ -322,7 +342,6 @@
           case '5': return '4000 %';
         }
       }
-
       function frequencyLabelFromFrequencySlider (value) {
         switch (value) {
           case '1': return '0,1 Hz';
@@ -546,6 +565,8 @@
       var yLast;
 
       function drawBackgroundAndCalculateParameters () {
+
+        resizeCanvas ();
 
         var x;    // x coordinate
         var y;    // y coordinate
