@@ -170,7 +170,7 @@
     String fullFilePath (String path, String workingDirectory) {
       // remove extra /
       if (path.charAt (path.length () - 1) == '/') path = path.substring (0, path.length () - 1); 
-      if (path == "") path = "/"; 
+      if (path == "") path = "/";
       if (workingDirectory.substring (workingDirectory.length () - 1) != "/") workingDirectory += '/'; // workingDirectory now always ends with /
       
       String s = "";
@@ -192,15 +192,17 @@
                     if (s == "") s = "/";
         }
       }
-      return s; // never executes
+      return ""; // never executes
     }
   
     // the same as fullFilePath except that it always ends with /
+    /*
     String fullDirectoryPath (String path, String workingDirectory) {  
       String s = fullFilePath (path, workingDirectory);
       if (s != "") if (s.charAt (s.length () - 1) != '/') s += '/';
       return s;
     }
+    */
   
     // check if full path is a directory
     bool isDirectory (String fullPath) {

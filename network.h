@@ -114,6 +114,23 @@
     // ----- CODE -----
 
     #include "dmesg_functions.h"
+
+     // missing hstrerror function
+      #include <lwip/netdb.h>
+      char *hstrerror (int h_errno) {
+        switch (h_errno) {
+          case EAI_NONAME:      return "Name or service is unknown";
+          case EAI_SERVICE:     return "Service not supported for 'ai_socktype'";
+          case EAI_FAIL:        return "Non-recoverable failure in name res";
+          case EAI_MEMORY:      return "Memory allocation failure";
+          case EAI_FAMILY:      return "'ai_family' not supported";
+          case HOST_NOT_FOUND:  return "The specified host is unknown";
+          case NO_DATA:         return "The requested name is valid but does not have an IP address";
+          case NO_RECOVERY:     return "The requested name is valid but does not have an IP address";
+          case TRY_AGAIN:       return "A temporary error occurred on an authoritative name server. Try again later";
+          default:              return "Invalid h_errno code";
+        }
+      }
     
       // returns len which is the number of bytes actually sent or 0 indicatig an error, buf is send in separate blocks of size TCP_SND_BUF (the maximum size that ESP32 can send)
       int sendAll (int sockfd, char *buf, size_t len, unsigned long timeOut) {
@@ -1023,7 +1040,7 @@
       // get target address
       struct hostent *he = gethostbyname (targetName);
       if (!he) {
-        dmesg ("[ping] gethostbyname() error: ", h_errno);
+        dmesg ("[ping] gethostbyname() error: ", h_errno, hstrerror (h_errno));
         if (telnetSocket > 0) sendAll (telnetSocket, (char *) "gethostbyname() error", strlen ("gethostbyname() error"), 1000); // if called from Telnet server
         return 0;
       }

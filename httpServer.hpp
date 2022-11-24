@@ -214,7 +214,7 @@
                       #ifdef __PERFMON__
                         xSemaphoreTake (__httpServerSemaphore__, portMAX_DELAY);
                           __perOpenedfWebSockets__ ++;
-                          __perfConcurrentWebSockets__ ++;
+                          __perfCurrentWebSockets__ ++;
                         xSemaphoreGive (__httpServerSemaphore__);
                       #endif
                     }
@@ -227,7 +227,7 @@
 
                         #ifdef __PERFMON__
                           xSemaphoreTake (__httpServerSemaphore__, portMAX_DELAY);
-                            __perfConcurrentWebSockets__ --;
+                            __perfCurrentWebSockets__ --;
                           xSemaphoreGive (__httpServerSemaphore__);
                         #endif
                       } 
@@ -537,7 +537,7 @@
                             #ifdef __PERFMON__
                               xSemaphoreTake (__httpServerSemaphore__, portMAX_DELAY);
                                 __perfOpenedHttpConnections__ ++;
-                                __perfConcurrentHttpConnections__ ++;
+                                __perfCurrentHttpConnections__ ++;
                               xSemaphoreGive (__httpServerSemaphore__);
                             #endif
                           }
@@ -549,7 +549,7 @@
                                 connectionSocket = __connectionSocket__;
                                 __connectionSocket__ = -1;
                                 #ifdef __PERFMON__
-                                  __perfConcurrentHttpConnections__ --;
+                                  __perfCurrentHttpConnections__ --;
                                 #endif
                               xSemaphoreGive (__httpServerSemaphore__);
                               if (connectionSocket > -1) close (connectionSocket);
@@ -630,7 +630,7 @@
             do {
               receivedTotal = recvAll (ths->__connectionSocket__, ths->__httpRequest__ + receivedTotal, HTTP_REQUEST_BUFFER_SIZE - 1 - receivedTotal, (char *) "\r\n\r\n", HTTP_CONNECTION_TIME_OUT);
               if (receivedTotal <= 0) {
-                if (errno != 11) dmesg ("[httpConnection] recv error: ", errno); // don't record time-out, it often happens 
+                if (errno != 11) dmesg ("[httpConnection] recv error: ", errno, strerror (errno)); // don't record time-out, it often happens 
                 goto endOfConnection;
               }
 
@@ -669,18 +669,18 @@
                   size_t httpReplyContentLen = httpReplyContent.length ();
                   if (httpReplyHeaderLen + httpReplyContentLen <= TCP_SND_BUF) {
                     if (sendAll (ths->__connectionSocket__, (char *) (httpReplyHeader + httpReplyContent).c_str (), httpReplyHeaderLen + httpReplyContentLen, HTTP_CONNECTION_TIME_OUT) <= 0) {
-                      dmesg ("[httpConnection] send error: ", errno);
+                      dmesg ("[httpConnection] send error: ", errno, strerror (errno));
                       goto endOfConnection;
                     }
                     // HTTP reply sent
                     goto nextHttpRequest;
                   } else {
                     if (sendAll (ths->__connectionSocket__, (char *) httpReplyHeader.c_str (), httpReplyHeaderLen, HTTP_CONNECTION_TIME_OUT) <= 0) {
-                      dmesg ("[httpConnection] send error: ", errno);
+                      dmesg ("[httpConnection] send error: ", errno, strerror (errno));
                       goto endOfConnection;
                     }
                     if (sendAll (ths->__connectionSocket__, (char *) httpReplyContent.c_str (), httpReplyContentLen, HTTP_CONNECTION_TIME_OUT) <= 0) {
-                      dmesg ("[httpConnection] send error: ", errno);
+                      dmesg ("[httpConnection] send error: ", errno, strerror (errno));
                       goto endOfConnection;
                     }
                     // HTTP reply sent
@@ -734,7 +734,7 @@
                               dmesg ("[httpConnection] malloc error (out of memory)");
                               f.close ();
                               if (sendAll (ths->__connectionSocket__, reply503, strlen (reply503), HTTP_CONNECTION_TIME_OUT) <= 0) {
-                                dmesg ("[httpConnection] send error: ", errno);
+                                dmesg ("[httpConnection] send error: ", errno, strerror (errno));
                                 goto endOfConnection;
                               }
                               goto nextHttpRequest;
@@ -768,7 +768,12 @@
                                 int bytesSentThisTime = 0;
                                 bytesReadThisTime = f.read ((uint8_t *) outputBuffer + i, outputBufferSize - i);
                                 if (i || bytesReadThisTime) bytesSentThisTime = sendAll (ths->__connectionSocket__, outputBuffer, i + bytesReadThisTime, HTTP_CONNECTION_TIME_OUT);
-                                if (bytesSentThisTime < i + bytesReadThisTime) { dmesg ("[httpConnection] send error: ", errno); break; } // error
+                                if (bytesSentThisTime < i + bytesReadThisTime) { 
+                                  dmesg ("[httpConnection] send error: ", errno, strerror (errno)); 
+                                  free (outputBuffer);
+                                  f.close ();
+                                  goto endOfConnection;
+                                } // error
                                 i = 0;
                               } while (bytesReadThisTime);
                               
@@ -788,7 +793,7 @@
                 // SEND 404 HTTP REPLY SEND 404 HTTP REPLY SEND 404 HTTP REPLY SEND 404 HTTP REPLY SEND 404 HTTP REPLY SEND 404 HTTP REPLY
   
                 if (sendAll (ths->__connectionSocket__, reply404, strlen (reply404), HTTP_CONNECTION_TIME_OUT) <= 0) {
-                  dmesg ("[httpConnection] send error: ", errno);
+                  dmesg ("[httpConnection] send error: ", errno, strerror (errno));
                   goto endOfConnection;
                 }
   
@@ -899,12 +904,12 @@
             // start listener
             ths->__listeningSocket__ = socket (PF_INET, SOCK_STREAM, 0);
             if (ths->__listeningSocket__ == -1) {
-              dmesg ("[httpServer] socket error: ", errno);
+              dmesg ("[httpServer] socket error: ", errno, strerror (errno));
             } else {
               // make address reusable - so we won't have to wait a few minutes in case server will be restarted
               int flag = 1;
               if (setsockopt (ths->__listeningSocket__, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof (flag)) == -1) {
-                dmesg ("[httpServer] setsockopt error: ", errno);
+                dmesg ("[httpServer] setsockopt error: ", errno, strerror (errno));
               } else {
                 // bind listening socket to IP address and port     
                 struct sockaddr_in serverAddress; 
@@ -913,12 +918,12 @@
                 serverAddress.sin_addr.s_addr = inet_addr (ths->__serverIP__);
                 serverAddress.sin_port = htons (ths->__serverPort__);
                 if (bind (ths->__listeningSocket__, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
-                  dmesg ("[httpServer] bind error: ", errno);
+                  dmesg ("[httpServer] bind error: ", errno, strerror (errno));
                } else {
                  // mark socket as listening socket
                  #define BACKLOG 5
                  if (listen (ths->__listeningSocket__, TCP_LISTEN_BACKLOG) == -1) {
-                  dmesg ("[httpServer] listen error: ", errno);
+                  dmesg ("[httpServer] listen error: ", errno, strerror (errno));
                  } else {
           
                   // listener is ready for accepting connections
@@ -931,7 +936,7 @@
                       socklen_t connectingAddressSize = sizeof (connectingAddress);
                       connectingSocket = accept (ths->__listeningSocket__, (struct sockaddr *) &connectingAddress, &connectingAddressSize);
                       if (connectingSocket == -1) {
-                        if (ths->__listeningSocket__ > -1) dmesg ("[httpServer] accept error: ", errno);
+                        if (ths->__listeningSocket__ > -1) dmesg ("[httpServer] accept error: ", errno, strerror (errno));
                       } else {
                         // get client's IP address
                         char clientIP [46]; inet_ntoa_r (connectingAddress.sin_addr, clientIP, sizeof (clientIP)); 
@@ -945,7 +950,7 @@
                         } else {
                           // make the socket non-blocking so that we can detect time-out
                           if (fcntl (connectingSocket, F_SETFL, O_NONBLOCK) == -1) {
-                            dmesg ("[httpServer] fcntl error: ", errno);
+                            dmesg ("[httpServer] fcntl error: ", errno, strerror (errno));
                             close (connectingSocket);
                           } else {
                                 // create httpConnection instence that will handle the connection, then we can lose reference to it - httpConnection will handle the rest

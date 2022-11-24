@@ -64,6 +64,11 @@
 String httpRequestHandler (char *httpRequest, httpConnection *hcn);
 void wsRequestHandler (char *wsRequest, WebSocket *webSocket);
 
+
+#include <soc/gpio_sig_map.h>
+#include <soc/io_mux_reg.h>
+
+
 void setup () {  
 
   // disable watchdog if you can afford it - watchdog gets occasionally triggered when loaded heavily
@@ -76,6 +81,13 @@ void setup () {
   
   Serial.begin (115200);
   Serial.println (String (MACHINETYPE) + " (" + ESP.getCpuFreqMHz () + " MHz) " + HOSTNAME + " SDK: " + ESP.getSdkVersion () + " " + VERSION_OF_SERVERS + ", compiled at: " + String (__DATE__) + " " + String (__TIME__));
+
+
+ledcSetup (0, 1000, 10);
+ledcAttachPin (22, 0); // built-in LED
+ledcWrite (0, 307); // 1/3 duty cycle
+// PIN_INPUT_ENABLE (GPIO_PIN_MUX_REG [22]);
+
   
   #ifdef __FILE_SYSTEM__
   
@@ -118,14 +130,14 @@ void setup () {
               #define LED_BUILTIN 2
               Serial.printf ("\nGenerating 1 KHz PWM signal on built-in LED pin %i, just for demonstration purposes.\n"
                              "Please, delete this code when if it is no longer needed.\n\n", LED_BUILTIN);
-              pinMode (LED_BUILTIN, OUTPUT | INPUT);
+              ledcSetup (0, 1000, 10);        // channel, freqency, resolution_bits
+              ledcAttachPin (LED_BUILTIN, 0); // GPIO, channel
+              ledcWrite (0, 307);             // channel, 1/3 duty cycle (307 out of 1024 (10 bit resolution))
+                       
 }
 
 void loop () {
 
-              // ----- examples - delete this code when if it is not needed -----
-              digitalWrite (LED_BUILTIN, !digitalRead (LED_BUILTIN));
-              delayMicroseconds (500);
 }
 
 

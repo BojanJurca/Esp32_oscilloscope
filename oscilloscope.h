@@ -15,7 +15,9 @@
     // ----- includes, definitions and supporting functions -----
 
     #include <WiFi.h>
-    #include "driver/adc.h" // to use adc1_get_raw instead of analogRead
+    #include <soc/gpio_sig_map.h> // to digitalRead PWM and other GPUOs ...
+    #include <soc/io_mux_reg.h>   // thanks to gin66: https://github.com/BojanJurca/Esp32_oscilloscope/issues/19    
+    #include "driver/adc.h"       // to use adc1_get_raw instead of analogRead
 
 
     // ----- CODE -----
@@ -96,7 +98,11 @@
       int screenTime;                     // how far we have already got from the left of the screen (we'll compare this value with screenWidthTime)
       int16_t deltaTime;                  // how far last sample is from the previous one
       int screenRefreshCounter = 0;
-      
+
+      // thanks to gin66 (https://github.com/BojanJurca/Esp32_oscilloscope/issues/19 we can also read GPIOs that were configured for OUTPUT or PWM
+      if (gpio1 <= 39) PIN_INPUT_ENABLE (GPIO_PIN_MUX_REG [gpio1]);
+      if (gpio2 <= 39) PIN_INPUT_ENABLE (GPIO_PIN_MUX_REG [gpio2]);
+            
       while (((oscSharedMemory *) sharedMemory)->oscReaderState == readerRunning) {
     
         // insert first dummy sample to read-buffer that tells javascript client to start drawing from the left of the screen
@@ -449,7 +455,7 @@
     
       #ifdef __PERFMON__
         xSemaphoreTake (__httpServerSemaphore__, portMAX_DELAY);
-          __perfConcurrentOscWebSockets__ ++;
+          __perfCurrentOscWebSockets__ ++;
         xSemaphoreGive (__httpServerSemaphore__);
       #endif
 
@@ -475,7 +481,7 @@
 
       #ifdef __PERFMON__
         xSemaphoreTake (__httpServerSemaphore__, portMAX_DELAY);
-          __perfConcurrentOscWebSockets__ --;
+          __perfCurrentOscWebSockets__ --;
         xSemaphoreGive (__httpServerSemaphore__);
       #endif
       

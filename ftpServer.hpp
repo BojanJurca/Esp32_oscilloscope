@@ -124,7 +124,7 @@
                             #ifdef __PERFMON__
                               xSemaphoreTake (__ftpServerSemaphore__, portMAX_DELAY);
                                 __perfOpenedFtpControlConnections__ ++;
-                                __perfConcurrentFtpControlConnections__ ++;
+                                __perfCurrentFtpControlConnections__ ++;
                               xSemaphoreGive (__ftpServerSemaphore__);
                             #endif
                           }
@@ -134,7 +134,7 @@
                                 closeDataConnection ();
                                 #ifdef __PERFMON__
                                   xSemaphoreTake (__ftpServerSemaphore__, portMAX_DELAY);
-                                    __perfConcurrentFtpControlConnections__ --;
+                                    __perfCurrentFtpControlConnections__ --;
                                   xSemaphoreGive (__ftpServerSemaphore__);
                                 #endif
                             }
@@ -200,7 +200,7 @@
             do {
               receivedTotal = recvAll (ths->__controlConnectionSocket__, ths->__cmdLine__ + receivedTotal, FTP_CMDLINE_BUFFER_SIZE - 1 - receivedTotal, (char *) "\n", FTP_CONTROL_CONNECTION_TIME_OUT);
               if (receivedTotal <= 0) {
-                dmesg ("[ftpControlConnection] recv error: ", errno);
+                dmesg ("[ftpControlConnection] recv error: ", errno, strerror (errno));
                 goto endOfConnection;
               }
                // DEBUG: Serial.printf ("cmdLine = |%s|, |%i|\n", ths->__cmdLine__, strlen (ths->__cmdLine__));
@@ -226,7 +226,7 @@
                 if (ths->__controlConnectionSocket__ == -1) goto endOfConnection; // in case of quit
                 // write the reply
                 if (s != "" && sendAll (ths->__controlConnectionSocket__, (char *) s.c_str (), s.length (), FTP_CONTROL_CONNECTION_TIME_OUT) <= 0) {
-                  dmesg ("[ftpControlConnection] send error: ", errno);
+                  dmesg ("[ftpControlConnection] send error: ", errno, strerror (errno));
                   goto endOfConnection;
                 }
               }
@@ -311,14 +311,15 @@
           }
         }
 
-        #define ftpUserHasRightToAccess(fullPath) (strstr(fullPath,__homeDir__)==fullPath) // user has a right to access file or directory if it begins with user's home directory
-
+        bool ftpUserHasRightToAccessFile (String& fullPath) { return strstr (fullPath.c_str (), __homeDir__) == fullPath.c_str (); }
+        bool ftpUserHasRightToAccessDirectory (String& fullPath) { return ftpUserHasRightToAccessFile (fullPath + '/'); }
+        
         String __CWD__ (char *directoryName) { 
           if (!*__homeDir__)                                                                            return F ("530 not logged in\r\n");
           if (!__fileSystemMounted__)                                                                   return F ("421 file system not mounted\r\n");
           String fp = fullFilePath (directoryName, __workingDir__);
           if (fp == "" || !isDirectory (fp))                                                            return F ("501 invalid directory name\r\n");
-          if (!ftpUserHasRightToAccess (fp.c_str ()))                                                   return F ("550 access denyed\r\n");
+          if (!ftpUserHasRightToAccessDirectory (fp))                                                   return F ("550 access denyed\r\n");
 
           // shoud be OK but check anyway:
           if (fp.length () < sizeof (__workingDir__)) strcpy (__workingDir__, (char *) fp.c_str ());    return "250 your working directory is " + fp + "\r\n";
@@ -352,7 +353,7 @@
           if (!__fileSystemMounted__)                 return F ("421 file system not mounted\r\n");
           String fp = fullFilePath (fileName, __workingDir__);
           if (fp == "" || !isFile (fp))               return F ("501 invalid file name\r\n");
-          if (!ftpUserHasRightToAccess (fp.c_str ())) return F ("550 access denyed\r\n");
+          if (!ftpUserHasRightToAccessFile (fp))      return F ("550 access denyed\r\n");
 
           unsigned long fSize = 0;
           File f = fileSystem.open (fp, FILE_READ);
@@ -382,12 +383,12 @@
             // create socket
             __dataConnectionSocket__ = socket (PF_INET, SOCK_STREAM, 0);
             if (__dataConnectionSocket__ == -1) {
-              dmesg ("[ftpActiveDataConnection] socket() error: ", errno);
+              dmesg ("[ftpActiveDataConnection] socket() error: ", errno, strerror (errno));
                                                       return ftpServiceUnavailable;
             }
             // make the socket not-blocking so that time-out can be detected
             if (fcntl (__dataConnectionSocket__, F_SETFL, O_NONBLOCK) == -1) {
-              dmesg ("[ftpActiveDataConnection] fcntl() error: ", errno);
+              dmesg ("[ftpActiveDataConnection] fcntl() error: ", errno, strerror (errno));
               closeDataConnection ();              
                                                       return F ("425 can't open active data connection\r\n");
             }
@@ -398,7 +399,7 @@
             serverAddress.sin_addr.s_addr = inet_addr (activeDataIP); // serverAddress.sin_addr.s_addr = *(in_addr_t *) he->h_addr; 
             if (connect (__dataConnectionSocket__, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
               if (errno != EINPROGRESS) {
-                dmesg ("[ftpActiveDataConnection] connect() error: ", errno); 
+                dmesg ("[ftpActiveDataConnection] connect() error: ", errno, strerror (errno)); 
                 closeDataConnection ();
                                                       return F ("425 can't open active data connection\r\n");
               }
@@ -426,7 +427,7 @@
         
           __dataConnectionSocket__ = socket (PF_INET, SOCK_STREAM, 0);
           if (__dataConnectionSocket__ == -1) {
-            dmesg ("[ftpPasiveDataConnection] socket() error: ", errno);
+            dmesg ("[ftpPasiveDataConnection] socket() error: ", errno, strerror (errno));
                                                       return ftpServiceUnavailable;
           }
           // make address reusable - so we won't have to wait a few minutes in case server will be restarted
@@ -439,19 +440,19 @@
           serverAddress.sin_addr.s_addr = inet_addr (__serverIP__);
           serverAddress.sin_port = htons (pasiveDataPort);
           if (bind (__dataConnectionSocket__, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
-            dmesg ("[ftpPasiveDataConnection] bind() error: ", errno);
+            dmesg ("[ftpPasiveDataConnection] bind() error: ", errno, strerror (errno));
             closeDataConnection ();
                                                       return F ("425 can't open pasive data connection\r\n");            
           }
           // mark socket as listening socket
           if (listen (__dataConnectionSocket__, 1) == -1) {
-            dmesg ("[ftpPasiveDataConnection] listen() error: ", errno);
+            dmesg ("[ftpPasiveDataConnection] listen() error: ", errno, strerror (errno));
             closeDataConnection ();
                                                       return F ("425 can't open pasive data connection\r\n");                
           }
           // make socket not-blocking so that time-out can be detected
           if (fcntl (__dataConnectionSocket__, F_SETFL, O_NONBLOCK) == -1) {
-            dmesg ("[ftpPasiveDataConnection] fcntl() error: ", errno);
+            dmesg ("[ftpPasiveDataConnection] fcntl() error: ", errno, strerror (errno));
             closeDataConnection ();
                                                       return F ("425 can't open pasive data connection\r\n");    
           }
@@ -490,7 +491,7 @@
           if (listeningSocket > -1) close (listeningSocket);   
           // make the socket not-blocking so that time-out can be detected
           if (fcntl (__dataConnectionSocket__, F_SETFL, O_NONBLOCK) == -1) {
-            dmesg ("[ftpPasiveDataConnection] fcntl() error: ", errno);
+            dmesg ("[ftpPasiveDataConnection] fcntl() error: ", errno, strerror (errno));
             closeDataConnection ();              
             return ""; // no error/success replies any more // return F ("425 can't open pasive data connection\r\n"); // it is probabbly too late to report this issue now
           }
@@ -504,7 +505,7 @@
           if (!__fileSystemMounted__)                 { closeDataConnection (); return F ("421 file system not mounted\r\n"); }
           String fp = fullFilePath (directoryName, __workingDir__);
           if (fp == "" || !isDirectory (fp))          { closeDataConnection (); return F ("501 invalid directory name\r\n"); }
-          if (!ftpUserHasRightToAccess (fp.c_str ())) { closeDataConnection (); return F ("550 access denyed\r\n"); }
+          if (!ftpUserHasRightToAccessDirectory (fp)) { closeDataConnection (); return F ("550 access denyed\r\n"); }
 
           if (__dataConnectionSocket__ == -1)         return F ("425 can't open data connection\r\n");    
 
@@ -523,7 +524,7 @@
           if (!__fileSystemMounted__)                 { closeDataConnection (); return F ("421 file system not mounted\r\n"); }
           String fp = fullFilePath (fileName, __workingDir__);
           if (fp == "" || !isFile (fp))               { closeDataConnection (); return F ("501 invalid file name\r\n"); }
-          if (!ftpUserHasRightToAccess (fp.c_str ())) { closeDataConnection (); return F ("550 access denyed\r\n"); }
+          if (!ftpUserHasRightToAccessFile (fp))      { closeDataConnection (); return F ("550 access denyed\r\n"); }
 
           if (__dataConnectionSocket__ == -1)         return F ("425 can't open data connection\r\n");    
 
@@ -563,7 +564,7 @@
           if (!__fileSystemMounted__)                 { closeDataConnection (); return F ("421 file system not mounted\r\n"); }
           String fp = fullFilePath (fileName, __workingDir__);
           if (fp == "" || isDirectory (fp))           { closeDataConnection (); return F ("501 invalid file name\r\n"); }
-          if (!ftpUserHasRightToAccess (fp.c_str ())) { closeDataConnection (); return F ("550 access denyed\r\n"); }
+          if (!ftpUserHasRightToAccessFile (fp))      { closeDataConnection (); return F ("550 access denyed\r\n"); }
 
           if (__dataConnectionSocket__ == -1)         return F ("425 can't open data connection\r\n");    
 
@@ -604,7 +605,7 @@
           if (!__fileSystemMounted__)                 return F ("421 file system not mounted\r\n"); 
           String fp = fullFilePath (directoryName, __workingDir__);
           if (fp == "")                               return F ("501 invalid directory name\r\n"); 
-          if (!ftpUserHasRightToAccess (fp.c_str ())) return F ("550 access denyed\r\n"); 
+          if (!ftpUserHasRightToAccessDirectory (fp)) return F ("550 access denyed\r\n"); 
   
           if (makeDir (fp))                           return F ("257 directory created\r\n");
                                                       return F ("550 could not create directory\r\n"); 
@@ -615,7 +616,7 @@
           if (!__fileSystemMounted__)                 return F ("421 file system not mounted\r\n"); 
           String fp = fullFilePath (fileOrDirName, __workingDir__);
           if (fp == "")                               return F ("501 invalid file or directory name\r\n"); 
-          if (!ftpUserHasRightToAccess (fp.c_str ())) return F ("550 access denyed\r\n"); 
+          if (!ftpUserHasRightToAccessDirectory (fp)) return F ("550 access denyed\r\n"); 
 
           if (isFile (fp)) {
             if (deleteFile (fp))                      return F ("250 file deleted\r\n");
@@ -629,19 +630,29 @@
         }
 
         char __rnfrPath__ [FILE_PATH_MAX_LENGTH + 1];
+        char __rnfrIs__;
 
         String __RNFR__ (char *fileOrDirName) { 
-          if (!*__homeDir__)                          return F ("530 not logged in\r\n");
-          if (!__fileSystemMounted__)                 return F ("421 file system not mounted\r\n"); 
+          __rnfrIs__ = ' ';
+          if (!*__homeDir__)                            return F ("530 not logged in\r\n");
+          if (!__fileSystemMounted__)                   return F ("421 file system not mounted\r\n"); 
           String fp = fullFilePath (fileOrDirName, __workingDir__);
-          if (fp == "")                               return F ("501 invalid file or directory name\r\n"); 
-          if (!ftpUserHasRightToAccess (fp.c_str ())) return F ("550 access denyed\r\n"); 
+          if (fp == "")                                 return F ("501 invalid file or directory name\r\n"); 
+          if (isDirectory (fp)) {
+            if (!ftpUserHasRightToAccessDirectory (fp)) return F ("550 access denyed\r\n"); 
+            __rnfrIs__ = 'd';
+          } else if (isFile (fp)) {
+            if (!ftpUserHasRightToAccessFile (fp))      return F ("550 access denyed\r\n"); 
+            __rnfrIs__ = 'f';
+          } else {
+                                                        return F ("501 invalid file or directory name\r\n"); 
+          }
 
           // save temporal result
           strncpy (__rnfrPath__, (char *) fp.c_str (), FILE_PATH_MAX_LENGTH);
           __rnfrPath__ [FILE_PATH_MAX_LENGTH] = 0;
 
-                                                      return F("350 need more information\r\n"); // RNTO command will follow
+                                                        return F("350 need more information\r\n"); // RNTO command will follow
         }
           
         String __RNTO__ (char *fileOrDirName) { 
@@ -649,11 +660,17 @@
           if (!__fileSystemMounted__)                           return F ("421 file system not mounted\r\n"); 
           String fp = fullFilePath (fileOrDirName, __workingDir__);
           if (fp == "")                                         return F ("501 invalid file or directory name\r\n"); 
-          if (!ftpUserHasRightToAccess (fp.c_str ()))           return F ("550 access denyed\r\n"); 
+          if (__rnfrIs__ == 'd') {
+            if (!ftpUserHasRightToAccessDirectory (fp))         return F ("550 access denyed\r\n"); 
+          } else if (__rnfrIs__ == 'f') {
+            if (!ftpUserHasRightToAccessFile (fp))              return F ("550 access denyed\r\n"); 
+          } else {
+                                                                return F ("501 invalid file or directory name\r\n"); 
+          }
 
           // rename file from temporal result
           if (fileSystem.rename (__rnfrPath__, (char *) fp.c_str ())) return F ("250 renamed\r\n");
-                                                                return F ("553 unable to rename\r\n");          
+                                                                      return F ("553 unable to rename\r\n");          
         }
           
     };
@@ -727,12 +744,12 @@
             // start listener
             ths->__listeningSocket__ = socket (PF_INET, SOCK_STREAM, 0);
             if (ths->__listeningSocket__ == -1) {
-              dmesg ("[ftpServer] socket error: ", errno);
+              dmesg ("[ftpServer] socket error: ", errno, strerror (errno));
             } else {
               // make address reusable - so we won't have to wait a few minutes in case server will be restarted
               int flag = 1;
               if (setsockopt (ths->__listeningSocket__, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof (flag)) == -1) {
-                dmesg ("[ftpServer] setsockopt error: ", errno);
+                dmesg ("[ftpServer] setsockopt error: ", errno, strerror (errno));
               } else {
                 // bind listening socket to IP address and port     
                 struct sockaddr_in serverAddress; 
@@ -741,12 +758,12 @@
                 serverAddress.sin_addr.s_addr = inet_addr (ths->__serverIP__);
                 serverAddress.sin_port = htons (ths->__serverPort__);
                 if (bind (ths->__listeningSocket__, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
-                  dmesg ("[ftpServer] bind error: ", errno);
+                  dmesg ("[ftpServer] bind error: ", errno, strerror (errno));
                } else {
                  // mark socket as listening socket
                  #define BACKLOG 5
                  if (listen (ths->__listeningSocket__, TCP_LISTEN_BACKLOG) == -1) {
-                  dmesg ("[ftpServer] listen error: ", errno);
+                  dmesg ("[ftpServer] listen error: ", errno, strerror (errno));
                  } else {
           
                   // listener is ready for accepting connections
@@ -759,7 +776,7 @@
                       socklen_t connectingAddressSize = sizeof (connectingAddress);
                       connectingSocket = accept (ths->__listeningSocket__, (struct sockaddr *) &connectingAddress, &connectingAddressSize);
                       if (connectingSocket == -1) {
-                        if (ths->__listeningSocket__ > -1) dmesg ("[ftpServer] accept error: ", errno);
+                        if (ths->__listeningSocket__ > -1) dmesg ("[ftpServer] accept error: ", errno, strerror (errno));
                       } else {
                         // get client's IP address
                         char clientIP [46]; inet_ntoa_r (connectingAddress.sin_addr, clientIP, sizeof (clientIP)); 
@@ -773,7 +790,7 @@
                         } else {
                           // make the socket non-blocking so that we can detect time-out
                           if (fcntl (connectingSocket, F_SETFL, O_NONBLOCK) == -1) {
-                            dmesg ("[ftpServer] fcntl error: ", errno);
+                            dmesg ("[ftpServer] fcntl error: ", errno, strerror (errno));
                             close (connectingSocket);
                           } else {
                                 // create ftpControlConnection instence that will handle the connection, then we can lose reference to it - ftpControlConnection will handle the rest

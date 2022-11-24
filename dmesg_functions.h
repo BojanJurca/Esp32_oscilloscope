@@ -8,7 +8,7 @@
 
       - Use dmesg telnet command to display messages in message queue.
 
-    December, 8, 2021, Bojan Jurca
+    November, 26, 2022, Bojan Jurca
     
 */
 
@@ -34,6 +34,7 @@
     void dmesg (String message1); // backward compatibility
     void dmesg (char *message1, int i);
     void dmesg (const char *message1, int i);
+    void dmesg (const char *message1, int i, char *message2);
     String resetReasonAsString (RESET_REASON reason);
     String wakeupReasonAsString ();
     
@@ -133,5 +134,10 @@
     void dmesg (String message1) { dmesg ((char *) message1.c_str (), ""); } // backward compatibilit
     void dmesg (char *message1, int i) { char s [6]; sprintf (s, "%i", i); dmesg (message1, s); }
     void dmesg (const char *message1, int i) { dmesg ((char *) message1, i); }
+    void dmesg (const char *message1, int i, char *message2) { 
+      char s [DMESG_MAX_MESSAGE_LENGTH + 1]; 
+      sprintf (s, "%.*s %i, ", DMESG_MAX_MESSAGE_LENGTH - 13, message1, i);
+      dmesg (s, message2); 
+    }
 
 #endif
