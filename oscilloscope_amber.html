@@ -7,9 +7,9 @@
 	<meta charset='UTF-8'>
 	<meta http-equiv='X-UA-Compatible' content='IE=edge'>
 	
-	<link rel='shortcut icon' type='image/x-icon' sizes='192x192' href='/android-192-osc.png'>
-	<link rel='icon' type='image/png' sizes='192x192' href='/android-192-osc.png'>
-	<link rel='apple-touch-icon' sizes='180x180' href='/apple-180-osc.png'>
+	<link rel='shortcut icon' type='image/x-icon' sizes='64x64' href='/icon-64-amber.png'>
+	<link rel='icon' type='image/png' sizes='192x192' href='/android-192-osc-amber.png'>
+	<link rel='apple-touch-icon' sizes='180x180' href='/apple-180-osc-amber.png'>
 
   <style>
       hr {border: 0; border-top: 1px solid lightgray; border-bottom: 1px solid lightgray}
@@ -33,7 +33,7 @@
       .container input {position: absolute; opacity: 0; cursor: pointer; height: 0; width: 0}
       .checkmark {position: absolute; top: 0; left: 0; height: 34px; width: 34px; background-color: #ddd; border-radius: 50%}
       .container:hover input ~ .checkmark {background-color: #ccc}
-      .container input:checked ~ .checkmark {background-color: hsl(82, 90%, 20%) }
+      .container input:checked ~ .checkmark {background-color: hsl(34, 90%, 20%) }
       .checkmark:after {content: ''; position: absolute; display: none}
       .container input:checked ~ .checkmark:after {display: block}
       .container .checkmark:after {top: 9px; left: 9px; width: 15px; height: 15px; border-radius: 50%; background: white}
@@ -41,7 +41,7 @@
       .container input:disabled ~ .checkmark {background-color: #aaa}
 
       /* slider control */
-      input[type='range'] {-webkit-appearance: none; -webkit-tap-highlight-color: rgba(255,255,255,0); width: 94%; height: 28px; margin: 0; border: none; padding: 4px 4px; border-radius: 28px; background: hsl(82, 90%, 30%); outline: none}
+      input[type='range'] {-webkit-appearance: none; -webkit-tap-highlight-color: rgba(255,255,255,0); width: 94%; height: 28px; margin: 0; border: none; padding: 4px 4px; border-radius: 28px; background: hsl(34, 90%, 30%); outline: none}
       input[type='range']::-moz-range-track {border: inherit; background: transparent}
       input[type='range']::-ms-track {border: inherit; color: transparent; background: transparent}
       input[type='range']::-ms-fill-lower
@@ -57,8 +57,8 @@
       .switch {position: relative; display: inline-block; width: 60px; height: 34px}
       .slider {position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; -webkit-transition: .4s; transition: .4s}
       .slider:before {position: absolute; content: ''; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; -webkit-transition: .4s; transition: .4s}
-      input:checked+.slider {background-color: hsl(82, 90%, 30%) }
-      input:focus+.slider {box-shadow: 0 0 1px hsl(82, 90%, 30%) }
+      input:checked+.slider {background-color: hsl(34, 90%, 30%) }
+      input:focus+.slider {box-shadow: 0 0 1px hsl(34, 90%, 30%) }
       input:checked+.slider:before {-webkit-transform: translateX(26px); -ms-transform: translateX(26px); transform: translateX(26px)}
       .switch input {display: none}
       .slider.round {border-radius: 34px}
@@ -71,9 +71,9 @@
       button:disabled:hover {background-color: #aaa}
 
       /* blue button */
-      .button1 {background-color: hsl(82, 90%, 40%) }
-      .button1:hover {background-color: hsl(82, 90%, 30%) }
-      .button1:active {background-color: hsl(82, 90%, 30%); transform: translateY(3px)}
+      .button1 {background-color: hsl(207, 90%, 40%) }
+      .button1:hover {background-color: hsl(207, 90%, 30%) }
+      .button1:active {background-color: hsl(207, 90%, 30%); transform: translateY(3px)}
 
       /* green button */
       .button2 {background-color: hsl(82, 90%, 25%) }
@@ -584,7 +584,7 @@
         var ctx = canvas.getContext ('2d');
 
         // colour background
-        ctx.fillStyle = 'hsl(82, 90%, 10%)';
+        ctx.fillStyle = 'hsl(34, 90%, 10%)';
         ctx.beginPath ();
         ctx.moveTo (0, 0);
         ctx.lineTo (canvas.width - 1, 0);
@@ -593,7 +593,7 @@
         ctx.fill ();
 
         // calculate drawing parametes and draw grid and scale
-        ctx.strokeStyle = 'hsl(82, 90%, 35%)';
+        ctx.strokeStyle = 'hsl(34, 90%, 40%)';
         ctx.lineWidth = 3;
         ctx.font = '16px Verdana';
 
