@@ -99,8 +99,8 @@
 
     // ----- CODE -----
 
-      
-    RTC_DATA_ATTR time_t __startupTime__ = 0;
+    bool __timeHasBeenSet__ = false;
+    RTC_DATA_ATTR time_t __startupTime__;
   
     static SemaphoreHandle_t __cronSemaphore__ = xSemaphoreCreateRecursiveMutex (); // controls access to cronDaemon's variables
 
@@ -315,7 +315,7 @@
     // startCronDaemon functions runs __cronDaemon__ as a separate task. It does two things: it synchronizes time with NTP servers once a day and executes cron commands from cron table when the time is right
     void __cronDaemon__ (void *ptrCronHandler) { 
         #ifdef __DMESG__
-            dmesg ("[time][cronDaemon] started");
+            dmesg ("[time][cronDaemon] is running on core ", xPortGetCoreID ());
         #endif
         Serial.printf ("[%10lu] %s\r\n", millis (), "[time][cronDaemon] started");
         do {     // try to set/synchronize the time, retry after 1 minute if unsuccessfull 
@@ -556,19 +556,17 @@
     // returns the number of seconfs ESP32 has been running
     time_t getUptime () {
         time_t t = time (NULL);
-        return t >= 1687461154 ? t - __startupTime__ :  millis () / 1000; // if the time has already been set, 2023/06/22 21:12:34 is the time when I'm writing this code, any valid time should be greater than this
+        return __timeHasBeenSet__ ? t - __startupTime__ :  millis () / 1000; // if the time has already been set, 2023/06/22 21:12:34 is the time when I'm writing this code, any valid time should be greater than this
     }
   
     // sets internal clock, also sets/corrects __startupTime__ internal variable
-    void setTimeOfDay (time_t t) { 
-        __startupTime__ = t - getUptime (); // recalculate
-        
+    void setTimeOfDay (time_t t) {         
         time_t oldTime = time (NULL);
         struct timeval newTime = {t, 0};
         settimeofday (&newTime, NULL); 
 
         char buf [100];
-        if (oldTime >= 1687461154) { // if the time has already been set, 2023/06/22 21:12:34 is the time when I'm writing this code, any valid time should be greater than this
+        if (__timeHasBeenSet__) {
             ascTime (localTime (oldTime), buf);
             strcat (buf, " to ");
             ascTime (localTime (t), buf + strlen (buf));
@@ -577,6 +575,8 @@
             #endif
             Serial.printf ("[%10lu] %s%s\r\n", millis (), "[time] time corrected from ", buf);
         } else {
+            __startupTime__ = t - getUptime (); // recalculate            
+            __timeHasBeenSet__ = true;
             ascTime (localTime (t), buf);
             #ifdef __DMESG__
                 dmesg ("[time] time set to ", buf); 

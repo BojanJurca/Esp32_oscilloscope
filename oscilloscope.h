@@ -7,7 +7,7 @@
     Issues:
             - when WiFi is in WIFI_AP or WIFI_STA_AP mode is oscillospe causes WDT problem when working at higher frequenceses
 
-    June 25, 2023, Bojan Jurca
+    August 12, 2023, Bojan Jurca
              
 */
 
@@ -20,6 +20,14 @@
     #include "driver/adc.h"       // to use adc1_get_raw instead of analogRead
     // fixed size strings    
     #include "fsString.h"
+
+
+    // ----- TUNNING PARAMETERS -----
+
+    // #define OSCILLOSCOPE_READER_CORE 1 // 1 or 0                   // #define OSCILLOSCOPE_READER_CORE if you want oscilloscope reader to run on specific core    
+    #ifndef OSCILLOSCOPE_READER_PRIORITY
+        #define OSCILLOSCOPE_READER_PRIORITY 1                        // normal priority if not define differently
+    #endif
 
 
     // ----- CODE -----
@@ -35,10 +43,10 @@
     }; // = 6 bytes per sample
     
     struct oscSamples {                       // buffer with samples
-       oscSample samples [64];                // sample buffer content will never exceed 41 samples, make it 64 - that will simplify the code and thus making it faster    
+       oscSample samples [128];               // sample buffer content will never exceed 41 samples, make it 128 - that will simplify the code and thus making it faster    
        int sampleCount;                       // number of samples in the buffer
        bool samplesAreReady;                  // is the buffer ready for sending
-    }; // = max 64 samples or 384 bytes
+    }; // = max 128 samples or 768 bytes
 
     enum readerState { INITIAL = 0, START = 1, STARTED  = 2, STOP = 3, STOPPED = 4 };
     /* transitions:
@@ -63,9 +71,6 @@
       char samplingTimeUnit [3];              // ms or us
       int screenWidthTime;                    // oscilloscope screen width in ms or us
       char screenWidthTimeUnit [3];           // ms or us 
-      unsigned long screenRefreshPeriod;      // approximately 20 Hz, in ms
-      int screenRefreshModulus;               // used to reduce refresh frequency down to approximatelly sustainable 20 Hz (samples are passet via websocket to internet browser)
-      bool oneSampleAtATime;                  // if horizontl frequency <= 1 Hz sample by sample, whole screen (all samples that fit on one screen) at a time otherwise
       bool positiveTrigger;                   // true if posotive slope trigger is set
       int positiveTriggerTreshold;            // positive slope trigger treshold value
       bool negativeTrigger;                   // true if negative slope trigger is set  
@@ -78,141 +83,278 @@
     };
 
     // oscilloscope reader read samples to read-buffer of shared memory - it will be copied to send buffer when it is ready to be sent
-    
+
     void oscReader (void *sharedMemory) {
-      bool doAnalogRead =                 !strcmp (((oscSharedMemory *) sharedMemory)->readType, "analog");
-      bool unitIsMicroSeconds =           !strcmp (((oscSharedMemory *) sharedMemory)->samplingTimeUnit, "us");
-      int16_t samplingTime =              ((oscSharedMemory *) sharedMemory)->samplingTime;
-      bool positiveTrigger =              ((oscSharedMemory *) sharedMemory)->positiveTrigger;
-      bool negativeTrigger =              ((oscSharedMemory *) sharedMemory)->negativeTrigger;
-      unsigned char gpio1 =               (unsigned char) ((oscSharedMemory *) sharedMemory)->gpio1; // easier to check validity with unsigned char then with integer 
-      unsigned char gpio2 =               (unsigned char) ((oscSharedMemory *) sharedMemory)->gpio2; // easier to check validity with unsigned char then with integer
-      adc1_channel_t adcchannel1 =        ((oscSharedMemory *) sharedMemory)->adcchannel1;
-      adc1_channel_t adcchannel2 =        ((oscSharedMemory *) sharedMemory)->adcchannel2;
-      int16_t positiveTriggerTreshold =   ((oscSharedMemory *) sharedMemory)->positiveTriggerTreshold;
-      int16_t negativeTriggerTreshold =   ((oscSharedMemory *) sharedMemory)->negativeTriggerTreshold;
-      int screenWidthTime =               ((oscSharedMemory *) sharedMemory)->screenWidthTime; 
-      unsigned long screenRefreshPeriod = ((oscSharedMemory *) sharedMemory)->screenRefreshPeriod; 
-      bool oneSampleAtATime =             ((oscSharedMemory *) sharedMemory)->oneSampleAtATime;
-      int screenRefreshModulus =          ((oscSharedMemory *) sharedMemory)->screenRefreshModulus;  
-      
-      oscSamples *readBuffer =   &((oscSharedMemory *) sharedMemory)->readBuffer;
-      oscSamples *sendBuffer =   &((oscSharedMemory *) sharedMemory)->sendBuffer;
-          
-      int screenTime;                     // how far we have already got from the left of the screen (we'll compare this value with screenWidthTime)
-      int16_t deltaTime;                  // how far last sample is from the previous one
-      int screenRefreshCounter = 0;
+        bool doAnalogRead =                 !strcmp (((oscSharedMemory *) sharedMemory)->readType, "analog");
+        bool unitIsMicroSeconds =           !strcmp (((oscSharedMemory *) sharedMemory)->samplingTimeUnit, "us");
+        int samplingTime =                  ((oscSharedMemory *) sharedMemory)->samplingTime;
+        bool positiveTrigger =              ((oscSharedMemory *) sharedMemory)->positiveTrigger;
+        bool negativeTrigger =              ((oscSharedMemory *) sharedMemory)->negativeTrigger;
+        unsigned char gpio1 =               (unsigned char) ((oscSharedMemory *) sharedMemory)->gpio1; // easier to check validity with unsigned char then with integer 
+        unsigned char gpio2 =               (unsigned char) ((oscSharedMemory *) sharedMemory)->gpio2; // easier to check validity with unsigned char then with integer
+        adc1_channel_t adcchannel1 =        ((oscSharedMemory *) sharedMemory)->adcchannel1;
+        adc1_channel_t adcchannel2 =        ((oscSharedMemory *) sharedMemory)->adcchannel2;
+        int positiveTriggerTreshold =       ((oscSharedMemory *) sharedMemory)->positiveTriggerTreshold;
+        int negativeTriggerTreshold =       ((oscSharedMemory *) sharedMemory)->negativeTriggerTreshold;
+        int screenWidthTime =               ((oscSharedMemory *) sharedMemory)->screenWidthTime; 
+        oscSamples *readBuffer =            &((oscSharedMemory *) sharedMemory)->readBuffer;
+        oscSamples *sendBuffer =            &((oscSharedMemory *) sharedMemory)->sendBuffer;
 
-      // thanks to gin66 (https://github.com/BojanJurca/Esp32_oscilloscope/issues/19 we can also read GPIOs that were configured for OUTPUT or PWM
-      if (gpio1 <= 39) PIN_INPUT_ENABLE (GPIO_PIN_MUX_REG [gpio1]);
-      if (gpio2 <= 39) PIN_INPUT_ENABLE (GPIO_PIN_MUX_REG [gpio2]);
+        // thanks to gin66 (https://github.com/BojanJurca/Esp32_oscilloscope/issues/19 we can also read GPIOs that were configured for OUTPUT or PWM
+        if (gpio1 <= 39) PIN_INPUT_ENABLE (GPIO_PIN_MUX_REG [gpio1]);
+        if (gpio2 <= 39) PIN_INPUT_ENABLE (GPIO_PIN_MUX_REG [gpio2]);
 
-      // wait for START signal
-      while (((oscSharedMemory *) sharedMemory)->oscReaderState != START) delay (1);
-      ((oscSharedMemory *) sharedMemory)->oscReaderState = STARTED; 
+        // wait for the START signal
+        while (((oscSharedMemory *) sharedMemory)->oscReaderState != START) delay (1);
+        ((oscSharedMemory *) sharedMemory)->oscReaderState = STARTED; 
 
-      while (((oscSharedMemory *) sharedMemory)->oscReaderState == STARTED) {
-    
-        // insert first dummy sample to read-buffer this tells javascript client to start drawing from the left of the screen
-        readBuffer->samples [0] = {-1, -1, -1}; // no real data sample can look like this
-        readBuffer->sampleCount = 1;
-    
-        unsigned long lastSampleTime = unitIsMicroSeconds ? micros () : millis ();
-        screenTime = 0; 
+
+        // do the sampling
+
+        // triggered or untriggered mode of operation
         bool triggeredMode = positiveTrigger || negativeTrigger;
-    
-        if (triggeredMode) { // if no trigger is set then skip this (waiting) part and start sampling immediatelly
-    
-          lastSampleTime = unitIsMicroSeconds ? micros () : millis ();
-          oscSample lastSample; 
-          if (doAnalogRead) lastSample = {(int16_t) adc1_get_raw (adcchannel1), gpio2 < 100 ? (int16_t) adc1_get_raw (adcchannel2) : (int16_t) -1, (int16_t) 0}; else lastSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, (int16_t) 0}; // gpio1 should always be valid 
-          
-          if (unitIsMicroSeconds) delayMicroseconds (samplingTime); else delay (samplingTime); 
 
-          while (((oscSharedMemory *) sharedMemory)->oscReaderState == STARTED) { // wait for trigger condition
-            taskYIELD (); // give other tasks a chance to run
-            unsigned long newSampleTime = unitIsMicroSeconds ? micros () : millis ();
-            oscSample newSample; 
-            // if (doAnalogRead) newSample = {(int16_t) analogRead (gpio1), gpio2 < 100 ? (int16_t) analogRead (gpio2) : (int16_t) -1, (int16_t) (screenTime = newSampleTime - lastSampleTime)}; else newSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, (int16_t) (screenTime = newSampleTime - lastSampleTime)}; // gpio1 should always be valid 
-            if (doAnalogRead) newSample = {(int16_t) adc1_get_raw (adcchannel1), gpio2 < 100 ? (int16_t) adc1_get_raw (adcchannel2) : (int16_t) -1, (int16_t) (screenTime = newSampleTime - lastSampleTime)}; else newSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, (int16_t) (screenTime = newSampleTime - lastSampleTime)}; // gpio1 should always be valid 
+        if (unitIsMicroSeconds) {
+            // ----- samplingTime and screenWidthTime are in us -----
 
-            if ((positiveTrigger && lastSample.signal1 < positiveTriggerTreshold && newSample.signal1 >= positiveTriggerTreshold) || (negativeTrigger && lastSample.signal1 > negativeTriggerTreshold && newSample.signal1 <= negativeTriggerTreshold)) { // only gpio1 is used to trigger the sampling 
-              // insert both samples into read buffer
-              lastSample.deltaTime = 0;             // correct timing for last sample - it should alwaye be displayed leftmost
-              readBuffer->samples [1] = lastSample; // timeOffset (from left of the screen) = 0
-              readBuffer->samples [2] = newSample;  // this is the first sample after triggered
-              screenTime = newSample.deltaTime;     // start measuring screen time from new sample on
-              lastSampleTime = newSampleTime;
-              readBuffer->sampleCount = 3;
-              
-              if (unitIsMicroSeconds) delayMicroseconds (samplingTime); else delay (samplingTime);
-              
-              break; // trigger event occured, stop waiting and proceed to sampling
-            }
-            
-            lastSample = newSample;
-            lastSampleTime = newSampleTime;
-            if (unitIsMicroSeconds) delayMicroseconds (samplingTime); else delay (samplingTime);
-    
-          } // while not triggered
-         
-        } // if triggered mode
-    
-        // take (the rest of the) samples that fit on one screen
-        while (((oscSharedMemory *) sharedMemory)->oscReaderState == STARTED) { // while screenTime < screenWidthTime
-         
-          if (oneSampleAtATime && readBuffer->sampleCount) {
-            // copy read buffer to send buffer so that oscilloscope sender can send it to javascript client 
-            while (((oscSharedMemory *) sharedMemory)->oscReaderState == STARTED && sendBuffer->samplesAreReady) if (unitIsMicroSeconds) delayMicroseconds (samplingTime); else delay (samplingTime); // wait until sendBuffer has been send and is free
-            *sendBuffer = *readBuffer;
-            readBuffer->sampleCount = 0; // empty read buffer so we don't send the same data again later
-          }
-    
-          // if we are past screenWidthTime
-          if (screenTime >= screenWidthTime) { 
-            
-            // but only if modulus == 0 to reduce refresh frequency to sustainable 20 Hz
-            if (triggeredMode || !(screenRefreshCounter = (screenRefreshCounter + 1) % screenRefreshModulus)) {
-              // copy read buffer to send buffer
-              if (!sendBuffer->samplesAreReady) *sendBuffer = *readBuffer; // this also copies 'ready' flag from read buffer which is 'true'
-            }
-            if (unitIsMicroSeconds) delayMicroseconds (samplingTime); else delay (samplingTime);
-            break; // get out of while loop to start sampling from the left of the screen
-          } 
-          // else continue sampling
-    
-          unsigned long newSampleTime = unitIsMicroSeconds ? micros () : millis ();
-          screenTime += (deltaTime = newSampleTime - lastSampleTime);      
-          lastSampleTime = newSampleTime;        
-          oscSample newSample; 
-          // if (doAnalogRead) newSample = {(int16_t) analogRead (gpio1), gpio2 < 100 ? (int16_t) analogRead (gpio2) : (int16_t) -1, deltaTime}; else newSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, deltaTime}; // gpio1 should always be valid 
-          if (doAnalogRead) newSample = {(int16_t) adc1_get_raw (adcchannel1), gpio2 < 100 ? (int16_t) adc1_get_raw (adcchannel2) : (int16_t) -1, deltaTime}; else newSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, deltaTime}; // gpio1 should always be valid 
+            // Calculate screen refresh period. It sholud be arround 50 ms (sustainable screen refresh rate is arround 20 Hz) but it is better if it is a multiple value of screenWidthTime.
+            unsigned long screenRefreshMilliseconds; // screen refresh period
+            int noOfSamplesPerScreen = screenWidthTime / samplingTime; if (noOfSamplesPerScreen * samplingTime < screenWidthTime) noOfSamplesPerScreen ++;
+            int correctedScreenWidthTime = noOfSamplesPerScreen * samplingTime;                         
+            // DEBUG: Serial.printf ("[oscilloscope][oscReader] screenWidthTime = %i   noOfSamplesPerScreen = %lu   correctedScreenWidthTime = %i\n", screenWidthTime, noOfSamplesPerScreen, correctedScreenWidthTime);
+            screenRefreshMilliseconds = correctedScreenWidthTime >= 50000 ? correctedScreenWidthTime / 1000 : ((50500 / correctedScreenWidthTime) * correctedScreenWidthTime) / 1000;
+            // DEBUG: Serial.printf ("[oscilloscope][oscReader] screenRefreshMilliseconds = %lu ms (should be close to 50 ms) => screen refresh frequency = %f Hz (should be close to 20 Hz)\n", screenRefreshMilliseconds, 1000.0 / screenRefreshMilliseconds);
 
-          readBuffer->samples [readBuffer->sampleCount] = newSample;
-          readBuffer->sampleCount = (readBuffer->sampleCount + 1) & 0b00111111; // 0 .. 63 max (which is inside buffer size) - just in case, the number of samples will never exceed 41  
-    
-          if (unitIsMicroSeconds) delayMicroseconds (samplingTime); else delay (samplingTime);
-        
-        } // while screenTime < screenWidthTime
-    
-        // in triggered mode we have to wait for refresh time to pass before trying again
-        // one screen frame has already been sent, we have to wait yet screenRefreshModulus - 1 screen frames
-        // for the whole screen refresh time to pass
-        if (triggeredMode) {
-          if (unitIsMicroSeconds) delay (screenRefreshPeriod - screenWidthTime / 1000); // screenRefreshPeriod is always in ms, never in us
-          else if (screenRefreshPeriod > screenWidthTime) delay (screenRefreshPeriod - screenWidthTime);
-               else                                       delay (screenRefreshPeriod);
+            TickType_t lastScreenRefreshTicks = xTaskGetTickCount ();               // for timing screen refresh intervals
+
+            while (((oscSharedMemory *) sharedMemory)->oscReaderState == STARTED) { // sampling from the left of the screen - while not getting STOP signal
+
+
+                int screenTime = 0;                                                 // in us - how far we have already got from the left of the screen (we'll compare this value with screenWidthTime)
+                unsigned long deltaTime = 0;                                        // in us - delta from previous sample
+                unsigned long lastSampleMicroseconds = micros ();                   // for sample timing                
+                unsigned long newSampleMicroseconds = lastSampleMicroseconds;
+
+                // insert first dummy sample to read-buffer this tells javascript client to start drawing from the left of the screen
+                readBuffer->samples [0] = {-1, -1, -1}; // no real data sample can look like this
+                readBuffer->sampleCount = 1;
+                // DEBUG: Serial.printf ("[oscilloscope][oscReader] first (dummy) sample inserted\n");
+
+                if (triggeredMode) { // if no trigger is set then skip this (waiting) part and start sampling immediatelly
+
+                    // take the first sample
+                    oscSample lastSample; 
+                    if (doAnalogRead) lastSample = {(int16_t) adc1_get_raw (adcchannel1), gpio2 < 100 ? (int16_t) adc1_get_raw (adcchannel2) : (int16_t) -1, (int16_t) 0}; else lastSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, (int16_t) 0}; // gpio1 should always be valid PIN
+
+                    // wait for trigger condition
+                    while (((oscSharedMemory *) sharedMemory)->oscReaderState == STARTED) { 
+                        // DEBUG: Serial.printf ("[oscilloscope][oscReader] waiting for a trigger event, state = %i\n", ((oscSharedMemory *) sharedMemory)->oscReaderState);
+
+                        // wait befor continuing to next sample and calculate delta offset for it
+                        unsigned long passedMicroseconds = micros () - lastSampleMicroseconds;
+                        if (passedMicroseconds < samplingTime) delayMicroseconds (samplingTime - passedMicroseconds);
+                        newSampleMicroseconds = micros ();
+                        deltaTime = newSampleMicroseconds - lastSampleMicroseconds;
+                        lastSampleMicroseconds = newSampleMicroseconds;
+                        
+                        // take the second sample
+                        oscSample newSample; 
+                        if (doAnalogRead) newSample = {(int16_t) adc1_get_raw (adcchannel1), gpio2 < 100 ? (int16_t) adc1_get_raw (adcchannel2) : (int16_t) -1, (int16_t) deltaTime}; else newSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, (int16_t) deltaTime}; // gpio1 should always be valid 
+
+                        // compare both samples to check if the trigger condition has occured, only gpio1 is used to trigger the sampling 
+                        if ((positiveTrigger && lastSample.signal1 < positiveTriggerTreshold && newSample.signal1 >= positiveTriggerTreshold) || (negativeTrigger && lastSample.signal1 > negativeTriggerTreshold && newSample.signal1 <= negativeTriggerTreshold)) { 
+                            // trigger condition has occured, insert both samples into read buffer
+                            readBuffer->samples [1] = lastSample; // timeOffset (from left of the screen) = 0
+                            readBuffer->samples [2] = newSample;  // this is the first sample after triggered
+                            screenTime = deltaTime;     // start measuring screen time from new sample on
+                            readBuffer->sampleCount = 3;
+                    
+                            // correct screenTime
+                            screenTime = deltaTime;
+
+                            // wait befor continuing to next sample and calculate delta offset for it
+                            unsigned long passedMicroseconds = micros () - lastSampleMicroseconds;
+                            if (passedMicroseconds < samplingTime) delayMicroseconds (samplingTime - passedMicroseconds);
+                            newSampleMicroseconds = micros ();
+                            deltaTime = newSampleMicroseconds - lastSampleMicroseconds;
+                            lastSampleMicroseconds = newSampleMicroseconds;
+                                
+                            break; // trigger event occured, stop waiting and proceed to sampling
+                        } else {
+                            // just forget the first sample and continue waiting for trigger condition - copy just signal values and let the timing start from 0
+                            lastSample.signal1 = newSample.signal1;
+                            lastSample.signal2 = newSample.signal2;
+                        }
+                    } // while not triggered
+                } // if in trigger mode
+
+                // take (the rest of the) samples that fit on one screen
+                while (((oscSharedMemory *) sharedMemory)->oscReaderState == STARTED) { // while screenTime < screenWidthTime
+
+                    // if we already passed screenWidthMilliseconds then copy read buffer to send buffer so it can be sent to the javascript client
+                    if (screenTime >= screenWidthTime) { 
+                        // DEBUG: Serial.printf ("[oscilloscope] end of packet sampling - full screen: %i >=? %i   samplingTime = %i    samples = %i\n", screenTime, screenWidthTime, samplingTime, readBuffer->sampleCount);
+                        // copy read buffer to send buffer so that oscilloscope sender can send it to javascript client 
+                        if (!sendBuffer->samplesAreReady) 
+                            *sendBuffer = *readBuffer; // this also copies 'ready' flag from read buffer which is 'true' - tell oscSender to send the packet, this would refresh client screen
+                        // else send buffer with previous frame is still waiting to be sent, do nothing now, skip this frame
+
+                        // break out of the loop and than start taking new samples
+                        break; // get out of while loop to start sampling from the left of the screen again
+                    }
+
+                    // take the next sample
+                    oscSample newSample; 
+                    if (doAnalogRead) newSample = {(int16_t) adc1_get_raw (adcchannel1), gpio2 < 100 ? (int16_t) adc1_get_raw (adcchannel2) : (int16_t) -1, (int16_t) deltaTime}; else newSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, (int16_t) deltaTime}; // gpio1 should always be valid 
+                    if (readBuffer->sampleCount < 128 - 1) // should always be true, but check anyway
+                        readBuffer->samples [readBuffer->sampleCount ++] = newSample;
+                    // DEBUG: else Serial.printf ("[oscilloscope][oscReader] full buffer: %i    sampling time: %i    screen width: %i >=? %i\n", readBuffer->sampleCount, samplingTime, screenTime, screenWidthTime);
+                    screenTime += deltaTime;
+
+                    // wait befor continuing to next sample and calculate delta offset for it
+                    unsigned long passedMicroseconds = micros () - lastSampleMicroseconds;
+                    if (passedMicroseconds < samplingTime) delayMicroseconds (samplingTime - passedMicroseconds);
+                    newSampleMicroseconds = micros ();
+                    deltaTime = newSampleMicroseconds - lastSampleMicroseconds;
+                    lastSampleMicroseconds = newSampleMicroseconds;
+
+                } // while screenTime < screenWidthTime
+
+                // wait before next screen refresh
+                vTaskDelayUntil (&lastScreenRefreshTicks, pdMS_TO_TICKS (screenRefreshMilliseconds));
+
+            } // while sampling
+
         } else {
-          taskYIELD (); // give other tasks a chance to run
-        }
+            // ----- samplingTime and screenWidthTime are in ms -----
+
+            // determine mode of operation sample at a time or screen at a time - this only makes sense when screenWidthTime is measured in ms
+            bool oneSampleAtATime = !unitIsMicroSeconds && screenWidthTime > 1000;
+            // DEBUG: Serial.printf ("[oscilloscope][oscReader] oneSampleAtATime mode = %i   unit = %s   screenWidthTime = %i\n", oneSampleAtATime, unitIsMicroSeconds ? "us" : "ms", screenWidthTime);
+
+            // Calculate screen refresh period. It sholud be arround 50 ms (sustainable screen refresh rate is arround 20 Hz) but it is better if it is a multiple value of screenWidthTime.
+            unsigned long screenRefreshMilliseconds; // screen refresh period
+            int noOfSamplesPerScreen = screenWidthTime / samplingTime; if (noOfSamplesPerScreen * samplingTime < screenWidthTime) noOfSamplesPerScreen ++;
+            int correctedScreenWidthTime = noOfSamplesPerScreen * samplingTime;                         
+            // DEBUG: Serial.printf ("[oscilloscope][oscReader] screenWidthTime = %i   noOfSamplesPerScreen = %lu   correctedScreenWidthTime = %i\n", screenWidthTime, noOfSamplesPerScreen, correctedScreenWidthTime);
+            screenRefreshMilliseconds = correctedScreenWidthTime >= 50 ? correctedScreenWidthTime : ((505 / (correctedScreenWidthTime * 10)) * correctedScreenWidthTime);
+            // DEBUG: Serial.printf ("[oscilloscope][oscReader] screenRefreshMilliseconds = %lu ms (should be close to 50 ms) => screen refresh frequency = %f Hz (should be close to 20 Hz)\n", screenRefreshMilliseconds, 1000.0 / screenRefreshMilliseconds);
+
+            TickType_t lastScreenRefreshTicks = xTaskGetTickCount ();               // for timing screen refresh intervals            
+
+            while (((oscSharedMemory *) sharedMemory)->oscReaderState == STARTED) { // sampling from the left of the screen - while not getting STOP signal
+
+                int screenTime = 0;                                                 // in ms - how far we have already got from the left of the screen (we'll compare this value with screenWidthTime)
+                unsigned long deltaTime = 0;                                        // in ms - delta from previous sample
+                TickType_t lastSampleTicks = xTaskGetTickCount ();                  // for sample timing                
+                TickType_t newSampleTicks = lastSampleTicks;
+
+                // insert first dummy sample to read-buffer this tells javascript client to start drawing from the left of the screen
+                readBuffer->samples [0] = {-1, -1, -1}; // no real data sample can look like this
+                readBuffer->sampleCount = 1;
+                // DEBUG: Serial.printf ("[oscilloscope][oscReader] first (dummy) sample inserted\n");
+
+                if (triggeredMode) { // if no trigger is set then skip this (waiting) part and start sampling immediatelly
+
+                    // take the first sample
+                    oscSample lastSample; 
+                    if (doAnalogRead) lastSample = {(int16_t) adc1_get_raw (adcchannel1), gpio2 < 100 ? (int16_t) adc1_get_raw (adcchannel2) : (int16_t) -1, (int16_t) 0}; else lastSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, (int16_t) 0}; // gpio1 should always be valid PIN
+
+                    // wait for trigger condition
+                    while (((oscSharedMemory *) sharedMemory)->oscReaderState == STARTED) { 
+                        // DEBUG: Serial.printf ("[oscilloscope][oscReader] waiting for a trigger event, state = %i\n", ((oscSharedMemory *) sharedMemory)->oscReaderState);
+
+                        // wait befor continuing to next sample and calculate delta offset for it
+                        vTaskDelayUntil (&newSampleTicks, pdMS_TO_TICKS (samplingTime));
+                        deltaTime = pdTICKS_TO_MS (newSampleTicks - lastSampleTicks); // in ms - this value will be used for the next sample offset
+                        lastSampleTicks = newSampleTicks;
+
+                        // take the second sample
+                        oscSample newSample; 
+                        if (doAnalogRead) newSample = {(int16_t) adc1_get_raw (adcchannel1), gpio2 < 100 ? (int16_t) adc1_get_raw (adcchannel2) : (int16_t) -1, (int16_t) deltaTime}; else newSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, (int16_t) deltaTime}; // gpio1 should always be valid 
+
+                        // compare both samples to check if the trigger condition has occured, only gpio1 is used to trigger the sampling 
+                        if ((positiveTrigger && lastSample.signal1 < positiveTriggerTreshold && newSample.signal1 >= positiveTriggerTreshold) || (negativeTrigger && lastSample.signal1 > negativeTriggerTreshold && newSample.signal1 <= negativeTriggerTreshold)) { 
+                            // trigger condition has occured, insert both samples into read buffer
+                            readBuffer->samples [1] = lastSample; // timeOffset (from left of the screen) = 0
+                            readBuffer->samples [2] = newSample;  // this is the first sample after triggered
+                            screenTime = deltaTime;     // start measuring screen time from new sample on
+                            readBuffer->sampleCount = 3;
+                    
+                            // correct screenTime
+                            screenTime = deltaTime;
+
+                            // wait befor continuing to next sample and calculate delta offset for it
+                            vTaskDelayUntil (&newSampleTicks, pdMS_TO_TICKS (samplingTime));
+                            deltaTime = pdTICKS_TO_MS (newSampleTicks - lastSampleTicks); // in ms - this value will be used for the next sample offset
+                            lastSampleTicks = newSampleTicks;
+                                
+                            break; // trigger event occured, stop waiting and proceed to sampling
+                        } else {
+                            // just forget the first sample and continue waiting for trigger condition - copy just signal values and let the timing start from 0
+                            lastSample.signal1 = newSample.signal1;
+                            lastSample.signal2 = newSample.signal2;
+                        }
+                    } // while not triggered
+                } // if in trigger mode
+ 
+                // take (the rest of the) samples that fit on one screen
+                while (((oscSharedMemory *) sharedMemory)->oscReaderState == STARTED) { // while screenTime < screenWidthTime
+
+                    // if we already passed screenWidthMilliseconds then copy read buffer to send buffer so it can be sent to the javascript client
+                    if (screenTime >= screenWidthTime) { 
+                        // DEBUG: Serial.printf ("[oscilloscope] end of packet sampling - full screen: %i >=? %i   samplingTime = %i    samples = %i\n", screenTime, screenWidthTime, samplingTime, readBuffer->sampleCount);
+                        // copy read buffer to send buffer so that oscilloscope sender can send it to javascript client 
+                        if (!sendBuffer->samplesAreReady) 
+                            *sendBuffer = *readBuffer; // this also copies 'ready' flag from read buffer which is 'true' - tell oscSender to send the packet, this would refresh client screen
+                        // else send buffer with previous frame is still waiting to be sent, do nothing now, skip this frame
+
+                        // break out of the loop and than start taking new samples
+                        break; // get out of while loop to start sampling from the left of the screen again
+                    }
+
+                    // one sample at a time mode requires sending (copying) the readBuffer to the sendBuffer so it can be sent to the javascript client even before it gets full (of samples that fit to one screen)
+                    if (oneSampleAtATime && readBuffer->sampleCount) {
+                        // DEBUG: Serial.printf ("[oscilloscope][oscReader] oneSampleAtATime mode, sampleCount = %i (ready to be sent)\n", readBuffer->sampleCount);
+                        // copy read buffer to send buffer so that oscilloscope sender can send it to javascript client 
+                        if (!sendBuffer->samplesAreReady) {
+                            *sendBuffer = *readBuffer; // this also copies 'ready' flag from read buffer which is 'true' - tell oscSender to send the packet, this would refresh client screen
+                            *sendBuffer = *readBuffer;
+                            readBuffer->sampleCount = 0; // empty read buffer so we don't send the same data again later
+                        }
+                        // else send buffer with previous frame is still waiting to be sent, but the buffer is not full yet, so just continue sampling into the same frame
+                    }
         
-      } // while
+                    // take the next sample
+                    oscSample newSample; 
+                    if (doAnalogRead) newSample = {(int16_t) adc1_get_raw (adcchannel1), gpio2 < 100 ? (int16_t) adc1_get_raw (adcchannel2) : (int16_t) -1, (int16_t) deltaTime}; else newSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, (int16_t) deltaTime}; // gpio1 should always be valid 
+                    if (readBuffer->sampleCount < 128 - 1) // should always be true, but check anyway
+                        readBuffer->samples [readBuffer->sampleCount ++] = newSample;
+                    // DEBUG: else Serial.printf ("[oscilloscope][oscReader] full buffer: %i    sampling time: %i    screen width: %i >=? %i\n", readBuffer->sampleCount, samplingTime, screenTime, screenWidthTime);
+                    screenTime += deltaTime;
 
-      // wait for stop signal 
-      while (((oscSharedMemory *) sharedMemory)->oscReaderState != STOP) delay (1);
-      ((oscSharedMemory *) sharedMemory)->oscReaderState = STOPPED; 
+                    // wait befor continuing to next sample and calculate delta offset for it
+                    vTaskDelayUntil (&newSampleTicks, pdMS_TO_TICKS (samplingTime));
+                    deltaTime = pdTICKS_TO_MS (newSampleTicks - lastSampleTicks); // in ms - this value will be used for the next sample offset
+                    // DEBUG: Serial.printf ("[oscilloscope][oscReader] seamples int readBuffer: %i   deltaTime = %lu\n", readBuffer->sampleCount, deltaTime);
+                    lastSampleTicks = newSampleTicks;
 
-      vTaskDelete (NULL);
+                } // while screenTime < screenWidthTime
+
+                // wait before next screen refresh
+                vTaskDelayUntil (&lastScreenRefreshTicks, pdMS_TO_TICKS (screenRefreshMilliseconds));
+
+            } // while sampling
+
+        }
+
+        // DEBUG: Serial.printf ("[oscilloscope][oscReader] stopping, state = %i\n", ((oscSharedMemory *) sharedMemory)->oscReaderState);
+
+        // wait for the STOP signal
+        while (((oscSharedMemory *) sharedMemory)->oscReaderState != STOP) delay (1);
+        ((oscSharedMemory *) sharedMemory)->oscReaderState = STOPPED; 
+
+        vTaskDelete (NULL);
     }
 
     // oscilloscope sender is always sending both streams (both GPIO samples) regardless if only one is in use - let javascript client pick out only those that it rquested
@@ -238,6 +380,7 @@
             for (size_t i = 0; i < sendWords; i ++) w [i] = htons (w [i]);
           }
           if (!webSocket->sendBinary ((byte *) &sendSamples,  sendBytes)) return;
+          // DEBUG: Serial.printf ("[oscilloscope] sent   samples: %i   bytes: %i\n", sendSamples.sampleCount, sendBytes);
         }
     
         // read (text) stop command form javscrip client if it arrives - according to oscilloscope protocol the string could only be 'stop' - so there is no need checking it
@@ -270,6 +413,7 @@
       // start digital sampling on GPIO 36 every 250 ms screen width = 10000 ms
       // start analog sampling on GPIO 22, 23 every 100 ms screen width = 400 ms set positive slope trigger to 512 set negative slope trigger to 0
       string s = webSocket->readString (); 
+      // DEBUG: Serial.printf ("[oscilloscope] command: %s\n", s);
 
       if (s == "") {
         #ifdef __DMESG__
@@ -353,7 +497,6 @@
         webSocket->sendString ("[oscilloscope] oscilloscope protocol syntax error."); // send error also to javascript client
         return;    
       }
-      // Serial.printf ("[oscilloscope] parsing command: samplingTime = %i %s, screenWidth = %i %s\n", sharedMemory.samplingTime, sharedMemory.samplingTimeUnit, sharedMemory.screenWidthTime, sharedMemory.screenWidthTimeUnit);
           
       // parse 3rd part
       if (cmdPart3) { 
@@ -388,7 +531,9 @@
                   return;    
         }
       }
-    
+
+      // DEBUG: Serial.printf ("[oscilloscope] parsing command: samplingTime = %i %s, screenWidth = %i %s\n", sharedMemory.samplingTime, sharedMemory.samplingTimeUnit, sharedMemory.screenWidthTime, sharedMemory.screenWidthTimeUnit);
+
       // check the values and calculate derived values
       if (!(!strcmp (sharedMemory.readType, "analog") || !strcmp (sharedMemory.readType, "digital"))) {
         #ifdef __DMESG__
@@ -420,26 +565,12 @@
       }
       if (!(sharedMemory.screenWidthTime >= 4 * sharedMemory.samplingTime && sharedMemory.screenWidthTime <= 1250000)) {
         #ifdef __DMESG__
-            dmesg ("[oscilloscope] invalid screen width time. Screen width time must be between 4 * sampling time and 125000.");
+            dmesg ("[oscilloscope] the settings exceed oscilloscope capabilities.");
         #endif
-        webSocket->sendString ("[oscilloscope] invalid screen width time. Screen width time must be between 4 * sampling time and 125000."); // send error also to javascript client
+        webSocket->sendString ("[oscilloscope] the settings exceed oscilloscope capabilities."); // send error also to javascript client
         return;      
       }
-    
-    
-      if (!strcmp (sharedMemory.samplingTimeUnit, "us")) {
-        // calculate delayMicroseconds correction for more accurrate timing
-        //  80 MHz CPU analogRead takes 100 us, digitalRead takes  6 us
-        // 160 MHz CPU analogRead takes  80 us, digitalRead takes  3 us
-        // 240 MHz CPU analogRead takes  60 us, digitalRead takes  2 us
-        int correction;
-        if (!strcmp (sharedMemory.readType, "analog")) correction = ESP.getCpuFreqMHz () < 240 ? ( ESP.getCpuFreqMHz () < 160 ? 100 : 90 ) : 60; 
-        else                                           correction = ESP.getCpuFreqMHz () < 240 ? ( ESP.getCpuFreqMHz () < 160 ?   6 :  3 ) :  2; 
-        sharedMemory.samplingTime -= correction;
-        if (sharedMemory.samplingTime < 0) sharedMemory.samplingTime = 0;
-      }
 
-    
       if (strcmp (sharedMemory.screenWidthTimeUnit, sharedMemory.samplingTimeUnit)) {
         #ifdef __DMESG__
             dmesg ("[oscilloscope] screenWidthTimeUnit must be the same as samplingTimeUnit.");
@@ -447,28 +578,8 @@
         webSocket->sendString ("[oscilloscope] screenWidthTimeUnit must be the same as samplingTimeUnit."); // send error also to javascript client
         return;    
       }
-      // calculate modulus so screen refresh frequency would be somewhere near 20 Hz which can still be trensfered via websocket and displayed on browser window 
-      if (!strcmp (sharedMemory.screenWidthTimeUnit, "ms")) {
-        sharedMemory.screenRefreshModulus = 50 / sharedMemory.screenWidthTime; // 50 ms corresponds to 20 Hz
-        if (!sharedMemory.screenRefreshModulus) { // screen refresh frequency is <= 20 Hz which can be displayed without problems
-          sharedMemory.screenRefreshModulus = 1;
-          sharedMemory.screenRefreshPeriod = 50;
-        } else {
-          sharedMemory.screenRefreshPeriod = sharedMemory.screenWidthTime * sharedMemory.screenRefreshModulus;
-        }
-        sharedMemory.oneSampleAtATime = (sharedMemory.screenWidthTime > 1000); // if horizontal freequency < 1 then display samples one at a time
-      } else { // screen width time is in us
-        sharedMemory.screenRefreshModulus = 50000 / sharedMemory.screenWidthTime; // 50000 us corresponds to 20 Hz
-        if (!sharedMemory.screenRefreshModulus) { // screen refresh frequency is <= 20 Hz which can be displayed without problems
-          sharedMemory.screenRefreshModulus = 1;
-          sharedMemory.screenRefreshPeriod = 50;
-        } else {
-          sharedMemory.screenRefreshPeriod = sharedMemory.screenWidthTime * sharedMemory.screenRefreshModulus / 1000;
-        }
-      }
-      // Serial.printf ("[oscilloscope] screenWidthTime = %i %s, screenRefreshModulus = %i, screenRefreshPeriod = %lu ms, oneSampleAtATime = %i\n", sharedMemory.screenWidthTime, sharedMemory.screenWidthTimeUnit, sharedMemory.screenRefreshModulus, sharedMemory.screenRefreshPeriod, sharedMemory.oneSampleAtATime);
-      
-      // TO DO: calculate correction for short timing to produce beter results
+
+      // DEBUG: Serial.printf ("[oscilloscope] parsing4 command: samplingTime = %i %s, screenWidth = %i %s\n", sharedMemory.samplingTime, sharedMemory.samplingTimeUnit, sharedMemory.screenWidthTime, sharedMemory.screenWidthTimeUnit);
       
       if (sharedMemory.positiveTrigger) {
         if (sharedMemory.positiveTriggerTreshold > 0 && sharedMemory.positiveTriggerTreshold <= (strcmp (sharedMemory.readType, "analog") ? 1 : 4095)) {
@@ -492,16 +603,17 @@
           return;      
         }
       }
-    
+  
+      // DEBUG: Serial.printf ("[oscilloscope] parsing5 command: samplingTime = %i %s, screenWidth = %i %s\n", sharedMemory.samplingTime, sharedMemory.samplingTimeUnit, sharedMemory.screenWidthTime, sharedMemory.screenWidthTimeUnit);
+
       sharedMemory.oscReaderState = INITIAL;
-      TaskHandle_t oscReaderHandle = NULL;
-      #define tskNORMAL_PRIORITY 1
-      if (pdPASS != xTaskCreate ( oscReader, 
-                                  "oscReader", 
-                                  1024 * 4, 
-                                  (void *) &sharedMemory, // pass shared memmory address as parameter to oscReader
-                                  tskNORMAL_PRIORITY,
-                                  &oscReaderHandle)) {
+
+      #ifdef OSCILLOSCOPE_READER_CORE
+          BaseType_t taskCreated = xTaskCreatePinnedToCore (oscReader, "oscReader", 4 * 1024, (void *) &sharedMemory, OSCILLOSCOPE_READER_PRIORITY, NULL, OSCILLOSCOPE_READER_CORE);
+      #else
+          BaseType_t taskCreated = xTaskCreate (oscReader, "oscReader", 4 * 1024, (void *) &sharedMemory, OSCILLOSCOPE_READER_PRIORITY, NULL);
+      #endif
+      if (pdPASS != taskCreated) {
             #ifdef __DMESG__
                 dmesg ("[oscilloscope] could not start oscReader");
             #endif

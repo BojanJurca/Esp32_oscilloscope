@@ -31,7 +31,11 @@ Set inputFile = fso.OpenTextFile (inputFileName, ForReading) ' the script will e
 		End If	
 	End If
 
-	Set outputFile = fso.OpenTextFile (outputFileName, ForWriting) ' the script will end with an error if the file can not be created/opened
+ 	If Not fso.FileExists (outputFileName) Then
+		Set outputFile = fso.CreateTextFile (outputFileName, True) 
+	Else
+		Set outputFile = fso.OpenTextFile (outputFileName, ForWriting) ' the script will end with an error if the file can not be created/opened
+	End If
 
 	outputFile.Write "// this file has been automatically generated from " & inputFileName & " with html2h.vbs" & vbCrLf & vbCrLf
 

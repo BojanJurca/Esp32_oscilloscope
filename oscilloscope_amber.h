@@ -443,82 +443,121 @@
     "          webSocket = ws;\n" \
     "\n" \
     "          ws.onopen = function () {\n" \
-    "            // first send endian identification Uint16 so ESP32 server will know the client architecture\n" \
-    "            endianArray = new Uint16Array (1); endianArray [0] = 0xAABB;\n" \
-    "            ws.send (endianArray);\n" \
+    "                        // first send endian identification Uint16 so ESP32 server will know the client architecture\n" \
+    "                        endianArray = new Uint16Array (1); endianArray [0] = 0xAABB;\n" \
+    "                        ws.send (endianArray);\n" \
     "\n" \
-    "            // then send start command with sampling parameters\n" \
-    "            var startCommand = 'start ' + (document.getElementById ('analog').checked ? 'analog' : 'digital') + ' sampling on GPIO ' + document.getElementById ('gpio1').value + (document.getElementById ('gpio2').value == 40 ? '' : ', ' + document.getElementById ('gpio2').value) + ' every ';\n" \
-    "            switch (document.getElementById ('frequency').value) {\n" \
+    "                        // then send start command with sampling parameters\n" \
+    "                        var startCommand = \"start \" + (document.getElementById (\"analog\").checked ? \"analog\" : \"digital\") + \" sampling on GPIO \" + document.getElementById (\"gpio1\").value + (document.getElementById (\"gpio2\").value == 40 ? \"\" : \", \" + document.getElementById (\"gpio2\").value) + \" every \";\n" \
+    "                        switch (document.getElementById ('frequency').value) {\n" \
     "\n" \
-    "              // real sampling times will be passed back to browser in 16 bit integers -\n" \
-    "              // take care that values are <= 32767 !\n" \
+    "                            // real sampling times will be passed back to browser in 16 bit integers - \n" \
+    "                            // take care that values are <= 32767 !\n" \
     "\n" \
-    "              // 1 sample at a time mode, measurements in ms\n" \
+    "                            // please note that oscilloscope reader can read max 128 samples per screen - this is how much samples fit in it buffer\n" \
+    "                            // but this number may be significantly lower if ESP32 can not keep up to required sampling speed any more\n" \
     "\n" \
-    "              case '1': // horizontal frequency = 0,1 Hz, screen width = 10 s, 40 samples per screen, 250 ms per sample, server refreshes every sample\n" \
-    "                  startCommand += '250 ms screen width = 10000 ms'; // sampling: 4 Hz, horizontal frequency: 0,1 Hz, max 40 samples per screen\n" \
-    "                  break;\n" \
-    "              case '2': // horizontal frequency = 0,2 Hz, whole width = 5 s, 40 samples per screen, 125 ms per sample, server refreshes every sample\n" \
-    "                  startCommand += '125 ms screen width = 5000 ms'; // sampling: 8 Hz, horizontal frequency:0,2 Hz, max 40 samples per screen\n" \
-    "                  break;\n" \
-    "              case '3': // horizontal frequency = 0,5 Hz, whole width = 2 s, 40 samples per screen, 50 ms per sample, server refreshes every sample\n" \
-    "                  startCommand += '50 ms screen width = 2000 ms'; // sampling: 20 Hz, horizontal frequency:0,5 Hz, max 40 samples per screen\n" \
-    "                  break;\n" \
+    "                            // 1 sample at a time mode, measurements in ms\n" \
     "\n" \
-    "              // screen at a time mode from now on: 40 samples per packet, measurements in ms\n" \
+    "                            case '1':    // screen width = 10 s => horizontal frequency = 0,1 Hz, 120 samples per screen => sampling interval = 83 ms, sampling frequency (single signal) = 12 Hz\n" \
+    "                                    startCommand += \"83 ms screen width = 10000 ms\";\n" \
+    "                                    break;\n" \
+    "                            case '2':    // screen width = 5 s => horizontal frequency = 0,2 Hz, 120 samples per screen => sampling interval = 42 ms, sampling frequency (single signal) = 24 Hz\n" \
+    "                                    startCommand += \"42 ms screen width = 5000 ms\";\n" \
+    "                                    break; \n" \
+    "                            case '3':    // screen width = 2 s => horizontal frequency = 0,5 Hz, 120 samples per screen => sampling interval = 17 ms, sampling frequency (single signal) = 60 Hz\n" \
+    "                                    startCommand += \"17 ms screen width = 2000 ms\"; \n" \
+    "                                    break;\n" \
     "\n" \
-    "              case '4': // horizontal frequency = 1 Hz, whole width = 1 s, 40 samples per screen, 25 ms per sample, server refreshes every 1 s, all 40 samples will be displyed at once\n" \
-    "                  startCommand += '25 ms screen width = 1000 ms'; // sampling: 40 Hz, horizontal frequency: 1 Hz, max 40 samples per screen\n" \
-    "                  break;\n" \
+    "                            // screen at a time mode from now on\n" \
     "\n" \
-    "              // switch to measurements in us for better accuracy with shorter time intervals\n" \
+    "                            case '4':    // screen width = 1 s => horizontal frequency = 1 Hz, 120 samples per screen => sampling interval = 8 ms, sampling frequency (single signal) = 125 Hz\n" \
+    "                                    startCommand += \"8 ms screen width = 1000 ms\"; \n" \
+    "                                    break;\n" \
+    "                            case '5':    // screen width = 500 ms => horizontal frequency = 2 Hz, 120 samples per screen => sampling interval = 4 ms, sampling frequency (single signal) = 250 Hz\n" \
+    "                                    startCommand += \"4 ms screen width = 500 ms\";\n" \
+    "                                    break;\n" \
+    "                            case '6':    // screen width = 200 ms => horizontal frequency = 5 Hz, 100 samples per screen => sampling interval = 2 ms, sampling frequency (single signal) = 500 Hz\n" \
+    "                                    startCommand += \"2 ms screen width = 200 ms\"; \n" \
+    "                                    break;\n" \
+    "                            case '7':    // screen width = 100 ms => horizontal frequency = 10 Hz, 100 samples per screen => sampling interval = 1 ms, sampling frequency (single signal) = 1000 Hz\n" \
+    "                                    startCommand += \"1 ms screen width = 100 ms\"; \n" \
+    "                                    break;\n" \
     "\n" \
-    "              case '5': // horizontal frequency = 2 Hz, whole width = 0,5 s, 40 samples per screen, 12.500 us per sample, server refreshes every 0,5 s, all 40 samples will be displyed at once\n" \
-    "                  startCommand += '12500 us screen width = 500000 us'; // sampling: 80 Hz, horizontal frequency: 2 Hz, max 40 samples per screen\n" \
-    "                  break;\n" \
-    "              case '6': // horizontal frequency = 5 Hz, whole width = 0,2 s, 40 samples per screen, 5.000 us per sample, server refreshes every 0,2 s, all 40 samples will be displyed at once\n" \
-    "                  startCommand += '5000 us screen width = 200000 us'; // sampling: 200 Hz, horizontal frequency: 5 Hz, max 40 samples per screen\n" \
-    "                  break;\n" \
-    "              case '7': // horizontal frequency = 10 Hz, whole width = 0,1 s, 40 samples per screen, 2.500 us per sample, server refreshes every 0,1 s, all 40 samples will be displyed at once\n" \
-    "                  startCommand += '2500 us screen width = 100000 us'; // sampling: 400 Hz, horizontal frequency: 10 Hz, max 40 samples per screen\n" \
-    "                  break;\n" \
-    "              case '8': // horizontal frequency = 20 Hz, whole width = 0,05 s, 40 samples per screen, 1.250 us per sample, server refreshes every 0,05 s, all 40 samples will be displyed at once\n" \
-    "                  startCommand += '1250 us screen width = 50000 us'; // sampling: 800 Hz, horizontal frequency: 20 Hz, max 40 samples per screen\n" \
-    "                  break;\n" \
-    "              case '9': // horizontal frequency = 50 Hz, whole width = 20 ms, 40 samples per screen, 500 us per sample, server refreshes every 40 ms (20 would be too fast), all 40 samples will be displyed at once\n" \
-    "                  startCommand += '500 us screen width = 20000 us';  // sampling: 2 KHz, horizontal frequency: 50 Hz, max 40 samples per screen\n" \
-    "                  break;\n" \
-    "              case '10':  // horizontal frequency = 60 Hz, whole width = 16,667 ms, 40 samples per screen, 417 us per sample, server refreshes every 34 ms (16,667 would be too fast), all 40 samples will be displyed at once\n" \
-    "                  startCommand += '425 us screen width = 17000 us'; // sampling: 2,4 KHz, horizontal frequency: 60 Hz, max 40 samples per screen\n" \
-    "                  break;\n" \
-    "              case '11':  // horizontal frequency = 100 Hz, whole width = 10 ms, 40 samples per screen, 250 us per sample, server refreshes every 50 ms (10 would be too fast), all 40 samples will be displyed at once\n" \
-    "                  startCommand += '250 us screen width = 10000 us'; // sampling: 4 KHz, horizontal frequency: 100 Hz, max 40 samples per screen\n" \
-    "                  break;\n" \
-    "              case '12':  // horizontal frequency = 200 Hz, whole width = 5 ms, 40 samples per screen, 125 us per sample, server refreshes every 50 ms (5 would be too fast), all 40 samples will be displyed at once\n" \
-    "                  startCommand += '125 us screen width = 5000 us'; // sampling: 8 KHz, horizontal frequency: 200 Hz, max 40 samples per screen\n" \
-    "                  break;\n" \
-    "              case '13':  // horizontal frequency = 500 Hz, whole width = 2 ms, 40 samples per screen, 50 us per sample, server refreshes every 50 ms (2 would be too fast), all 40 samples will be displyed at once\n" \
-    "                  startCommand += '50 us screen width = 2000 us'; // sampling: 20 KHz, horizontal frequency: 500 Hz, max 40 samples per screen\n" \
-    "                  break;\n" \
-    "              case '14':  // horizontal frequency = 1000 Hz, whole width = 1 ms, 40 samples per screen, 25 us per sample, server refreshes every 50 ms (1 would be too fast), all 40 samples will be displyed at once\n" \
-    "                  startCommand += '25 us screen width = 1000 us'; // sampling: 40 KHz, horizontal frequency: 1 KHz, max 40 samples per screen\n" \
-    "                  break;\n" \
-    "              case '15':  // horizontal frequency = 2000 Hz, whole width = 500 us, 40 samples per screen, 12 us per sample, server refreshes every 50 ms (500 us would be too fast), all (less then, server can not keep up) 40) samples will be displyed at once\n" \
-    "                  startCommand += '12 us screen width = 500 us every 50 ms'; // sampling: 80 KHz, horizontal frequency: 50 Hz, max 40 samples per screen\n" \
-    "                  break;\n" \
-    "              case '16':  // horizontal frequency = 5000 Hz, whole width = 200 us, 40 samples per screen, 5 us per sample, server refreshes every 50 ms (200 us would be too fast), all (less then, server can not keep up) 40) samples will be displyed at once\n" \
-    "                  startCommand += '5 us screen width = 200 us'; // sampling: 200 KHz, horizontal frequency: 50 Hz, max 40 samples per screen\n" \
-    "                  break;\n" \
-    "              case '17':  // horizontal frequency = 10000 Hz, whole width = 100 us, 33 samples per screen, 3 us per sample, server refreshes every 50 ms (100 us would be too fast), all (less then, server can not keep up) 40) samples will be displyed at once\n" \
-    "                  startCommand += '3 us screen width = 100 us'; // sampling: 300 KHz, horizontal frequency: 50 Hz, max 33 samples per screen\n" \
-    "                  break;\n" \
+    "                            // switch to measurements in us from now on                            \n" \
     "\n" \
-    "            }\n" \
-    "            if (document.getElementById ('posTrigger').checked) startCommand += ' set positive slope trigger to ' + (document.getElementById ('analog').checked ? document.getElementById ('posTreshold').value : 1);\n" \
-    "            if (document.getElementById ('negTrigger').checked) startCommand += ' set negative slope trigger to ' + (document.getElementById ('analog').checked ? document.getElementById ('negTreshold').value : 0);\n" \
+    "                            case '8':    // screen width = 50 ms => horizontal frequency = 20 Hz, 100 samples per screen => sampling interval = 500 us, sampling frequency (single signal) = 2000 Hz\n" \
+    "                                    startCommand += \"500 us screen width = 50000 us\";\n" \
+    "                                    break;\n" \
+    "                            case '9':    // screen width = 20 ms => horizontal frequency = 50 Hz, 100 samples per screen => sampling interval = 200 us, sampling frequency (single signal) = 5000 Hz\n" \
+    "                                    startCommand += \"200 us screen width = 20000 us\";  \n" \
+    "                                    break;\n" \
+    "                            case '10':    // screen width = 16 ms => horizontal frequency = 60 Hz, 100 samples per screen => sampling interval = 166 us, sampling frequency (single signal) = 5988 Hz\n" \
+    "                                    startCommand += \"166 us screen width = 16667 us\"; \n" \
+    "                                    break; \n" \
+    "                            case '11':    // screen width = 10 ms => horizontal frequency = 100 Hz, 100 samples per screen => sampling interval = 100 us, sampling frequency (single signal) = 10000 Hz\n" \
+    "                                    startCommand += \"100 us screen width = 10000 us\";\n" \
+    "                                    break;\n" \
     "\n" \
-    "            ws.send (startCommand);\n" \
+    "                            // ESP32 is having problems keeping up to increasing sampling speed, 50 us per (single) analog sample (100 us per dual analog sample or 20000 Hz), which is worst case scenario, is maximum it can handle\n" \
+    "                            // reduce the number of samples per screen from now on\n" \
+    "\n" \
+    "                            case '12':    // screen width = 5 ms => horizontal frequency = 200 Hz, 100 samples per screen => sampling interval = 50 us, sampling frequency = 20000 Hz\n" \
+    "                                    if (document.getElementById ('analog').checked && document.getElementById (\"gpio2\").value != 40)\n" \
+    "                                        startCommand += \"100 us screen width = 5000 us\"; // reduce the sampling rate for dual analog reading\n" \
+    "                                    else\n" \
+    "                                        startCommand += \"50 us screen width = 5000 us\"; \n" \
+    "                                    break;\n" \
+    "                            case '13':    // screen width = 2 ms => horizontal frequency = 500 Hz, 80 samples per screen => sampling interval = 25 us, sampling frequency = 40000 Hz\n" \
+    "                                    if (document.getElementById ('analog').checked)\n" \
+    "                                        if (document.getElementById (\"gpio2\").value != 40)\n" \
+    "                                            startCommand += \"100 us screen width = 2000 us\"; // reduce the sampling rate for dual analog reading\n" \
+    "                                        else\n" \
+    "                                            startCommand += \"50 us screen width = 2000 us\"; // reduce the sampling rate for dual analog reading\n" \
+    "                                    else\n" \
+    "                                        startCommand += \"25 us screen width = 2000 us\"; \n" \
+    "                                    break;\n" \
+    "                            case '14':    // screen width = 1 ms => horizontal frequency = 1 kHz, 60 samples per screen => sampling interval = 16 us, sampling frequency = 58823 Hz\n" \
+    "                                    if (document.getElementById ('analog').checked)\n" \
+    "                                        if (document.getElementById (\"gpio2\").value != 40)\n" \
+    "                                            startCommand += \"100 us screen width = 1000 us\"; // reduce the sampling rate for dual analog reading\n" \
+    "                                        else\n" \
+    "                                            startCommand += \"50 us screen width = 1000 us\"; // reduce the sampling rate for dual analog reading\n" \
+    "                                    else\n" \
+    "                                        startCommand += \"16 us screen width = 1000 us\";\n" \
+    "                                    break;\n" \
+    "                            case '15':    // screen width = 500 us => horizontal frequency = 2 kHz, 25 samples per screen => sampling interval = 20 us, sampling frequency = 50000 Hz\n" \
+    "                                    if (document.getElementById ('analog').checked)\n" \
+    "                                        if (document.getElementById (\"gpio2\").value != 40)\n" \
+    "                                            startCommand += \"100 us screen width = 500 us\"; // reduce the sampling rate for dual analog reading\n" \
+    "                                        else\n" \
+    "                                            startCommand += \"50 us screen width = 500 us\"; // reduce the sampling rate for dual analog reading\n" \
+    "                                    else\n" \
+    "                                        startCommand += \"8 us screen width = 500 us\";\n" \
+    "                                    break;\n" \
+    "                            case '16':    // screen width = 200 us => horizontal frequency = 5 kHz, 30 samples per screen => sampling interval = 6 us, sampling frequency = 142000 Hz\n" \
+    "                                    if (document.getElementById ('analog').checked)\n" \
+    "                                        if (document.getElementById (\"gpio2\").value != 40)\n" \
+    "                                            startCommand += \"100 us screen width = 200 us\"; // let ESP32 do the best it can but this is far over its capabilities \n" \
+    "                                        else\n" \
+    "                                            startCommand += \"50 us screen width = 200 us\"; // let ESP32 do the best it can but this is far over its capabilities \n" \
+    "                                    else\n" \
+    "                                        startCommand += \"6 us screen width = 200 us\";\n" \
+    "                                    break;\n" \
+    "                            case '17':    // screen width = 100 us => horizontal frequency = 10 kHz, 20 samples per screen => sampling interval = 5 us, sampling frequency = 200000 Hz\n" \
+    "                                    if (document.getElementById ('analog').checked)\n" \
+    "                                        if (document.getElementById (\"gpio2\").value != 40)\n" \
+    "                                            startCommand += \"100 us screen width = 100 us\"; // let ESP32 do the best it can but this is far over its capabilities \n" \
+    "                                        else\n" \
+    "                                            startCommand += \"50 us screen width = 100 us\"; // let ESP32 do the best it can but this is far over its capabilities \n" \
+    "                                    else\n" \
+    "                                            startCommand += \"5 us screen width = 100 us\"; \n" \
+    "                                    break;\n" \
+    "                        }\n" \
+    "                        if (document.getElementById (\"posTrigger\").checked) startCommand += \" set positive slope trigger to \" + (document.getElementById (\"analog\").checked ? document.getElementById (\"posTreshold\").value : 1);\n" \
+    "                        if (document.getElementById (\"negTrigger\").checked) startCommand += \" set negative slope trigger to \" + (document.getElementById (\"analog\").checked ? document.getElementById (\"negTreshold\").value : 0);\n" \
+    "\n" \
+    "                        ws.send (startCommand);\n" \
     "          };\n" \
     "\n" \
     "          ws.onmessage = function (evt) {\n" \
@@ -548,9 +587,11 @@
     "          };\n" \
     "\n" \
     "          ws.onerror = function (event) {\n" \
-    "            ws.close ();\n" \
-    "            alert ('WebSocket error: ' + event);\n" \
-    "            enableDisableControls (false);\n" \
+    "                        ws.close (); \n" \
+    "                        // DEBUG: \n" \
+    "                            console.log(\"WebSocket error: \", event);\n" \
+    "                        alert ('WebSocket error.');\n" \
+    "                        enableDisableControls (false); \n" \
     "          };\n" \
     "\n" \
     "        } else {\n" \

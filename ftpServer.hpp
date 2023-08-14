@@ -6,7 +6,7 @@
   
     FTP server reads and executes FTP commands. The transfer of files in active in passive mode is supported but some of the commands may 
 
-    June 25, 2023, Bojan Jurca
+    August 12, 2023, Bojan Jurca
 
     Nomenclature used here for easier understaning of the code:
 
@@ -45,6 +45,12 @@
 #ifndef __FTP_SERVER__
     #define __FTP_SERVER__
 
+    #ifdef FTP_SERVER_CORE
+        #ifdef SHOW_COMPILE_TIME_INFORMATION
+            #pragma message "ftpServer will run only on #defined core"
+        #endif
+    #endif
+
     #ifndef __FILE_SYSTEM__
         #error "You can't use ftpServer.h without file_system.h. Either #include file_system.h prior to including ftpServer.h or exclude ftpServer.h"
     #endif
@@ -54,6 +60,7 @@
 
     #define FTP_SERVER_STACK_SIZE 2 * 1024                      // TCP listener
     #define FTP_SESSION_STACK_SIZE 8 * 1024                     // TCP connection
+    // #define FTP_SERVER_CORE 1 // 1 or 0                     // #define FTP_SERVER_CORE if you want ftpServer to run on specific core
     #define FTP_CMDLINE_BUFFER_SIZE 300                         // reading and temporary keeping FTP command lines
     #define FTP_CONTROL_CONNECTION_TIME_OUT 300000              // 300000 ms = 5 min 
     #define FTP_DATA_CONNECTION_TIME_OUT 3000                   // 3000 ms = 3 sec 
@@ -118,13 +125,15 @@
                             strncpy (__serverIP__, serverIP, sizeof (__serverIP__)); __serverIP__ [sizeof (__serverIP__) - 1] = 0; // copy server's IP since connection may live longer than the server that created it
                             // handle connection in its own thread (task)       
                             #define tskNORMAL_PRIORITY 1
-                            xTaskHandle taskHandle;
-                            socketTrafficInformation [connectionSocket - LWIP_SOCKET_OFFSET] = {};
-                            if (pdPASS != xTaskCreate (__controlConnectionTask__, "ftpControlConnection", FTP_SESSION_STACK_SIZE, this, tskNORMAL_PRIORITY, &taskHandle)) {
+                            #ifdef FTP_SERVER_CORE
+                                BaseType_t taskCreated = xTaskCreatePinnedToCore (__controlConnectionTask__, "ftpControlConnection", FTP_SESSION_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL, FTP_SERVER_CORE);
+                            #else
+                                BaseType_t taskCreated = xTaskCreate (__controlConnectionTask__, "ftpControlConnection", FTP_SESSION_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL);
+                            #endif
+                            if (pdPASS != taskCreated) {
                               dmesg ("[ftpControlConnection] xTaskCreate error");
                             } else {
                               __state__ = RUNNING;           
-                              socketTrafficInformation [connectionSocket - LWIP_SOCKET_OFFSET].startMillis = millis ();
                             }
 
                           }
@@ -719,7 +728,12 @@
                         // start listener in its own thread (task)
                         __state__ = STARTING;                        
                         #define tskNORMAL_PRIORITY 1
-                        if (pdPASS != xTaskCreate (__listenerTask__, "ftpServer", FTP_SERVER_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL)) {
+                        #ifdef FTP_SERVER_CORE
+                            BaseType_t taskCreated = xTaskCreatePinnedToCore (__listenerTask__, "ftpServer", FTP_SERVER_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL, FTP_SERVER_CORE);
+                        #else
+                            BaseType_t taskCreated = xTaskCreate (__listenerTask__, "ftpServer", FTP_SERVER_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL);
+                        #endif
+                        if (pdPASS != taskCreated) {
                           dmesg ("[ftpServer] xTaskCreate error");
                         } else {
                           // wait until listener starts accepting connections
@@ -782,7 +796,7 @@
           
                   // listener is ready for accepting connections
                   ths->__state__ = RUNNING;
-                  dmesg ("[ftpServer] started");
+                  dmesg ("[ftpServer] listener is running on core ", xPortGetCoreID ());
                   while (ths->__listeningSocket__ > -1) { // while listening socket is opened
           
                       int connectingSocket;
@@ -794,7 +808,7 @@
                       } else {
                         socketTrafficInformation [ths->__listeningSocket__ - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
                         // prepare network Traffic measurement information
-                        socketTrafficInformation [connectingSocket - LWIP_SOCKET_OFFSET] = {0, 0};
+                        socketTrafficInformation [connectingSocket - LWIP_SOCKET_OFFSET] = {0, 0, millis (), millis ()};
                         
                         // get client's IP address
                         char clientIP [46]; inet_ntoa_r (connectingAddress.sin_addr, clientIP, sizeof (clientIP)); 

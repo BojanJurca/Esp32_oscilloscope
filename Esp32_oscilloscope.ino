@@ -12,7 +12,7 @@
 
    Copy all files in the package into Esp32_oscilloscope directory, compile them with Arduino (with FAT partition scheme) and run on ESP32.
    
-   July, 13, 2023, Bojan Jurca
+   August 12, 2023, Bojan Jurca
  
 */
 
@@ -49,7 +49,9 @@
 // 2. FILE SYSTEM:     #define which file system you want to use 
     // the file system must correspond to Tools | Partition scheme setting: FAT for FAT partition scheme, LittleFS for SPIFFS partition scheme)
 
-    #define FILE_SYSTEM    FILE_SYSTEM_FAT // or FILE_SYSTEM_LITTLEFS or COMMENT THIS DEFINITION OUT IF YOUR ESP32 DOES NOT HAVE A FLASH DISK
+    // COMMENT THIS DEFINITION OUT IF YOUR ESP32 DOES NOT HAVE A FLASH DISK
+    #define FILE_SYSTEM    FILE_SYSTEM_FAT // FILE_SYSTEM_FAT  // the file system must correspond to Tools | Partition scheme setting: FILE_SYSTEM_FAT (for FAT partition scheme), FILE_SYSTEM_LITTLEFS (for SPIFFS partition scheme) or FILE_SYSTEM_SD_CARD (if SC card is attached)
+                                            // FAT file system can be bitwise combined with FILE_SYSTEM_SD_CARD, like #define FILE_SYSTEM (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
 
     // When file system is used a disc will be created and formatted. You can later FTP .html and other files to /var/www/html directory, 
     // which is the root directory of a HTTP server.
@@ -141,20 +143,17 @@ void setup () {
   Serial.begin (115200);
   Serial.println (string (MACHINETYPE " (") + string ((int) ESP.getCpuFreqMHz ()) + (char *) " MHz) " HOSTNAME " SDK: " + ESP.getSdkVersion () + (char *) " " VERSION_OF_SERVERS " compiled at: " __DATE__ " " __TIME__); 
 
-  // test
-  // ledcSetup (0, 1000, 10);
-  // ledcAttachPin (22, 0); // built-in LED
-  // ledcWrite (0, 307); // 1/3 duty cycle
-  // PIN_INPUT_ENABLE (GPIO_PIN_MUX_REG [22]);
-
-  
   #ifdef __FILE_SYSTEM__
-  
-    // fileSystem.formatFAT (); Serial.printf ("\nFormatting FAT file system ...\n\n"); // format flash disk to reset everithing and start from the scratch
-    fileSystem.mountFAT (true);                                                 // this is the first thing to do - all configuration files reside on the file system
-
+      #if (FILE_SYSTEM & FILE_SYSTEM_LITTLEFS) == FILE_SYSTEM_LITTLEFS
+          // fileSystem.formatLittleFs (); Serial.printf ("\nFormatting FAT file system ...\n\n"); // format flash disk to reset everithing and start from the scratch
+          fileSystem.mountLittleFs (true);                                      // this is the first thing to do - all configuration files reside on the file system
+      #endif
+      #if (FILE_SYSTEM & FILE_SYSTEM_FAT) == FILE_SYSTEM_FAT
+          // fileSystem.formatFAT (); Serial.printf ("\nFormatting FAT file system ...\n\n"); // format flash disk to reset everithing and start from the scratch
+          fileSystem.mountFAT (true);                                                 // this is the first thing to do - all configuration files reside on the file system
+      #endif  
   #endif
-
+  
   // userManagement.initialize ();                                          // creates user management files with root and webadmin users, if they don't exist yet, not needed for NO_USER_MANAGEMENT 
 
   // fileSystem.deleteFile ("/network/interfaces");                         // contation STA(tion) configuration       - deleting this file would cause creating default one
@@ -184,14 +183,15 @@ void setup () {
   // initialize GPIOs you are going to use here:
   // ...
 
-              // test
-              // #undef LED_BUILTIN
-              // #define LED_BUILTIN 2
-              // Serial.printf ("\nGenerating 1 KHz PWM signal on built-in LED pin %i, just for demonstration purposes.\n"
-              //                "Please, delete this code when if it is no longer needed.\n\n", LED_BUILTIN);
-              // ledcSetup (0, 1000, 10);        // channel, freqency, resolution_bits
-              // ledcAttachPin (LED_BUILTIN, 0); // GPIO, channel
-              // ledcWrite (0, 307);             // channel, 1/3 duty cycle (307 out of 1024 (10 bit resolution))
+              /* test - generate the signal that can be viewed with oscilloscope
+              #undef BUILTIN_LED
+              #define BUILTIN_LED 2
+              Serial.printf ("\nGenerating 1 KHz PWM signal on built-in LED pin %i, just for demonstration purposes.\n"
+                              "Please, delete this code when if it is no longer needed.\n\n", BUILTIN_LED);
+              ledcSetup (0, 1000, 10);        // channel, freqency, resolution_bits
+              ledcAttachPin (BUILTIN_LED, 0); // GPIO, channel
+              ledcWrite (0, 307);             // channel, 1/3 duty cycle (307 out of 1024 (10 bit resolution))
+              */
                        
 }
 

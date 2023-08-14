@@ -9,7 +9,7 @@
     a small "database" to keep valid web session tokens in order to support web login. Text and binary WebSocket straming is
     also supported.
   
-    June 25, 2023, Bojan Jurca
+    August 12, 2023, Bojan Jurca
 
     Nomenclature used here for easier understaning of the code:
 
@@ -78,16 +78,24 @@
 #ifndef __HTTP_SERVER__
   #define __HTTP_SERVER__
 
-  #ifndef __FILE_SYSTEM__
-    #ifdef SHOW_COMPILE_TIME_INFORMATION
-        #pragma message "Compiling httpServer.h without file system (fileSystem.hpp), httpServer will not be able to serve files"
+    #ifdef HTTP_SERVER_CORE
+        #ifdef SHOW_COMPILE_TIME_INFORMATION
+            #pragma message "httpServer will run only on #defined core"
+        #endif
     #endif
-  #endif
+
+    #ifndef __FILE_SYSTEM__
+      #ifdef SHOW_COMPILE_TIME_INFORMATION
+          #pragma message "Compiling httpServer.h without file system (fileSystem.hpp), httpServer will not be able to serve files"
+      #endif
+    #endif
+  
 
     // ----- TUNNING PARAMETERS -----
 
     #define HTTP_SERVER_STACK_SIZE 2 * 1024                     // TCP listener
-    #define HTTP_CONNECTION_STACK_SIZE 10 * 1024                // TCP connection
+    #define HTTP_CONNECTION_STACK_SIZE 12 * 1024                // TCP connection
+    // #define HTTP_SERVER_CORE 1 // 1 or 0                     // #define HTTP_SERVER_CORE if you want httpServer to run on specific core
     #define HTTP_BUFFER_SIZE 1500                               // reading and temporary keeping HTTP requests, buffer for constructing HTTP reply, MTU = 1500
     #define HTTP_CONNECTION_TIME_OUT 1500                       // 1500 ms = 1,5 sec for HTTP requests
     #define HTTP_REPLY_STATUS_MAX_LENGTH 32                     // only first 3 characters are important
@@ -520,7 +528,9 @@
                          int connectionSocket,
                          String (*httpRequestHandlerCallback) (char *httpRequest, httpConnection *hcn), // httpRequestHandler callback function provided by calling program
                          void (*wsRequestHandler) (char *wsRequest, WebSocket *webSocket),              // httpRequestHandler callback function provided by calling program      
-                         char *clientIP, char *serverIP
+                         char *clientIP, 
+                         char *serverIP,
+                         char *httpServerHomeDirectory = (char *) "/var/www/html"
                        )  {
                               // create a local copy of parameters for later use
                               __connectionSocket__ = connectionSocket;
@@ -528,15 +538,28 @@
                               __wsRequestHandler__ = wsRequestHandler;
                               strncpy (__clientIP__, clientIP, sizeof (__clientIP__)); __clientIP__ [sizeof (__clientIP__) - 1] = 0; // copy client's IP since connection may live longer than the server that created it
                               strncpy (__serverIP__, serverIP, sizeof (__serverIP__)); __serverIP__ [sizeof (__serverIP__) - 1] = 0; // copy server's IP since connection may live longer than the server that created it
+                              #ifdef __FILE_SYSTEM__
+                                  // we have done the checking in httpServer constructor, there is no need to repeat the checking in httpCOnnection constructor agin
+                                  // if (!httpServerHomeDirectory || !*httpServerHomeDirectory || strlen (httpServerHomeDirectory) >= sizeof (__httpServerHomeDirectory__) - 2) {
+                                  //     dmesg ("[httpConnection] invalid httpServerHomeDirectory");
+                                  //     return;
+                                  // }
+                                  // but we have to keep a local copy of httpServerHomeDirectory since the server can stop before the connection it created gets closed
+                                  strcpy (__httpServerHomeDirectory__, httpServerHomeDirectory);
+                                  if (__httpServerHomeDirectory__ [strlen (__httpServerHomeDirectory__) - 1] != '/') strcat (__httpServerHomeDirectory__, "/"); // __httpServerHomeDirectory__ always ends with /
+                              #endif
+
                               // handle connection in its own thread (task)       
                               #define tskNORMAL_PRIORITY 1
-                              xTaskHandle taskHandle;
-                              socketTrafficInformation [connectionSocket - LWIP_SOCKET_OFFSET] = {};
-                              if (pdPASS != xTaskCreate (__connectionTask__, "httpConnection", HTTP_CONNECTION_STACK_SIZE, this, tskNORMAL_PRIORITY, &taskHandle)) {
+                              #ifdef HTTP_SERVER_CORE
+                                  BaseType_t taskCreated = xTaskCreatePinnedToCore (__connectionTask__, "httpConnection", HTTP_CONNECTION_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL, HTTP_SERVER_CORE);
+                              #else
+                                  BaseType_t taskCreated = xTaskCreate (__connectionTask__, "httpConnection", HTTP_CONNECTION_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL);
+                              #endif
+                              if (pdPASS != taskCreated) {
                                   dmesg ("[httpConnection] xTaskCreate error");
                               } else {
                                   __state__ = RUNNING;
-                                  socketTrafficInformation [connectionSocket - LWIP_SOCKET_OFFSET].startMillis = millis ();
                               }
                           }
 
@@ -621,6 +644,12 @@
         void (* __wsRequestHandler__) (char *wsRequest, WebSocket *webSocket) = NULL;        
         char __clientIP__ [46] = "";
         char __serverIP__ [46] = "";
+
+        #ifdef __FILE_SYSTEM__
+            char __httpServerHomeDirectory__ [FILE_PATH_MAX_LENGTH] = "/var/www/html";
+        #else
+            char *__httpServerHomeDirectory__; // not used
+        #endif
 
         fsString<HTTP_BUFFER_SIZE> __httpRequestAndReplyBuffer__;
 
@@ -744,7 +773,7 @@
                         // get file name from HTTP request
                         string fileName (ths->__httpRequestAndReplyBuffer__.c_str () + 4);
                         if (fileName == "" || fileName == "/") fileName = "/index.html";
-                        fileName = string ("/var/www/html") + fileName;
+                        fileName = string (ths->__httpServerHomeDirectory__) + fileName; // __httpServerHomeDirectory__ always ends with /
 
                         // if Content-type was not provided during __httpRequestHandlerCallback__ try guessing what it is
                         if (!stristr ((char *) ths->__httpReplyHeader__.c_str (), (char *) "CONTENT-TYPE")) { 
@@ -840,6 +869,18 @@
                 }
   
         nextHttpRequest:
+              // if we are running out of ESP32's resources we won't try to keep the connection alive, this would slow down the server a bit but it would let still it handle requests from different clients
+              if (ths->__connectionSocket__ >= LWIP_SOCKET_OFFSET + MEMP_NUM_NETCONN - 2) { // running out of sockets
+                  // DEBUG: Serial.printf ("[httpServer] running out of sockets\n");
+                  dmesg ("[httpServer] running out of sockets");
+                  goto endOfConnection; // running out of sockets
+              }
+              if (heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT) < HTTP_CONNECTION_STACK_SIZE) { // there is not a memory block large enough evailable to start a new task that would handle the connection
+                  // DEBUG: Serial.printf ("[httpServer] running out of (large enough) memory blocks\n");              
+                  dmesg ("[httpServer] running out of (large enough) memory blocks");
+                  goto endOfConnection; 
+              }
+
               // search for Keep-alive directive if the client wants to keep the connection alive for subsequent requests
               char *p = stristr (ths->__httpRequestAndReplyBuffer__, (char *) "CONNECTION: KEEP-ALIVE");
               if (p && p < endOfHttpRequest) {
@@ -886,7 +927,8 @@
                      // the following parameters will be handeled by httpServer instance
                      char *serverIP,                                                                // HTTP server IP address, 0.0.0.0 for all available IP addresses
                      int serverPort,                                                                // HTTP server port
-                     bool (*firewallCallback) (char *connectingIP)                                  // a reference to callback function that will be celled when new connection arrives 
+                     bool (*firewallCallback) (char *connectingIP),                                 // a reference to callback function that will be celled when new connection arrives 
+                     char *httpServerHomeDirectory = (char *) "/var/www/html"
                    )  { 
                         // create directory structure
                         #ifdef __FILE_SYSTEM__
@@ -900,11 +942,24 @@
                         strncpy (__serverIP__, serverIP, sizeof (__serverIP__)); __serverIP__ [sizeof (__serverIP__) - 1] = 0;
                         __serverPort__ = serverPort;
                         __firewallCallback__ = firewallCallback;
+                        #ifdef __FILE_SYSTEM__
+                            if (!httpServerHomeDirectory || !*httpServerHomeDirectory || strlen (httpServerHomeDirectory) >= sizeof (__httpServerHomeDirectory__) - 2) {
+                                dmesg ("[httpServer] invalid httpServerHomeDirectory");
+                                return;
+                            }
+                            strcpy (__httpServerHomeDirectory__, httpServerHomeDirectory);
+                            if (__httpServerHomeDirectory__ [strlen (__httpServerHomeDirectory__) - 1] != '/') strcat (__httpServerHomeDirectory__, "/"); // __httpServerHomeDirectory__ always ends with /
+                        #endif                        
 
                         // start listener in its own thread (task)
                         __state__ = STARTING;                        
                         #define tskNORMAL_PRIORITY 1
-                        if (pdPASS != xTaskCreate (__listenerTask__, "httpServer", HTTP_SERVER_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL)) {
+                        #ifdef HTTP_SERVER_CORE
+                            BaseType_t taskCreated = xTaskCreatePinnedToCore (__listenerTask__, "httpServer", HTTP_SERVER_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL, HTTP_SERVER_CORE);
+                        #else
+                            BaseType_t taskCreated = xTaskCreate (__listenerTask__, "httpServer", HTTP_SERVER_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL);
+                        #endif
+                        if (pdPASS != taskCreated) {
                           dmesg ("[httpServer] xTaskCreate error");
                         } else {
                           // wait until listener starts accepting connections
@@ -935,6 +990,12 @@
         char __serverIP__ [46] = "0.0.0.0";
         int __serverPort__ = 80;
         bool (* __firewallCallback__) (char *connectingIP) = NULL;
+
+        #ifdef __FILE_SYSTEM__
+            char __httpServerHomeDirectory__ [FILE_PATH_MAX_LENGTH] = "/var/www/html";
+        #else
+            char *__httpServerHomeDirectory__; // not used
+        #endif        
 
         int __listeningSocket__ = -1;
 
@@ -969,7 +1030,8 @@
           
                   // listener is ready for accepting connections
                   ths->__state__ = RUNNING;
-                  dmesg ("[httpServer] started");
+                  dmesg ("[httpServer] listener is running on core ", xPortGetCoreID ());
+                  dmesg ("[httpServer] home (root) directory is ", ths->__httpServerHomeDirectory__); 
                   while (ths->__listeningSocket__ > -1) { // while listening socket is opened
           
                       int connectingSocket;
@@ -983,7 +1045,7 @@
                         socketTrafficInformation [ths->__listeningSocket__ - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
 
                         // prepare network Traffic measurement information
-                        socketTrafficInformation [connectingSocket - LWIP_SOCKET_OFFSET] = {0, 0};
+                        socketTrafficInformation [connectingSocket - LWIP_SOCKET_OFFSET] = {0, 0, millis (), millis ()};
                         // get client's IP address
                         char clientIP [46]; inet_ntoa_r (connectingAddress.sin_addr, clientIP, sizeof (clientIP)); 
                         // get server's IP address
@@ -1000,7 +1062,7 @@
                             close (connectingSocket);
                           } else {
                                 // create httpConnection instence that will handle the connection, then we can lose reference to it - httpConnection will handle the rest
-                                httpConnection *hcp = new (std::nothrow) httpConnection (connectingSocket, ths->__httpRequestHandlerCallback__, ths->__wsRequestHandler__, clientIP, serverIP);
+                                httpConnection *hcp = new (std::nothrow) httpConnection (connectingSocket, ths->__httpRequestHandlerCallback__, ths->__wsRequestHandler__, clientIP, serverIP, ths->__httpServerHomeDirectory__);
                                 if (!hcp) {
                                   // dmesg ("[httpServer] new httpConnection error");
                                   sendAll (connectingSocket, (char *) reply503, strlen (reply503), HTTP_CONNECTION_TIME_OUT);

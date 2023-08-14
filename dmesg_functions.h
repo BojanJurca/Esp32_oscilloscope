@@ -28,7 +28,7 @@
     // ----- TUNNING PARAMETERS -----
 
     #define DMESG_CIRCULAR_QUEUE_LENGTH 128 // how may massages we keep on circular queue
-    #define DMESG_MAX_MESSAGE_LENGTH 80
+    #define DMESG_MAX_MESSAGE_LENGTH 88
 
 
     // ----- functions and variables in this modul -----
@@ -92,9 +92,9 @@
         fsString<DMESG_MAX_MESSAGE_LENGTH> message;
     };
   
-    RTC_DATA_ATTR unsigned int bootCount = 0;
-  
     __dmesgType__ __dmesgCircularQueue__ [DMESG_CIRCULAR_QUEUE_LENGTH];
+
+    RTC_DATA_ATTR unsigned int bootCount = 0;
 
     bool __initializeDmesgCircularQueue__ () {
         __dmesgCircularQueue__ [0].message = fsString<DMESG_MAX_MESSAGE_LENGTH> ("[ESP32] CPU0 reset reason: ") + resetReason (rtc_get_reset_reason (0));
