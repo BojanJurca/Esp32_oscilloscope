@@ -56,21 +56,31 @@
           STOPPED - set by oscReader
     */
 
+    enum ReadType {
+      RT_DIGITAL,
+      RT_ANALOG,
+    };
+
+    enum TimeUnit {
+      TU_US,
+      TU_MS,
+    };
+
     struct oscSharedMemory {         // data structure to be shared among oscilloscope tasks
       // basic data
       WebSocket *webSocket;                   // open webSocket for communication with javascript client
       bool clientIsBigEndian;                 // true if javascript client is big endian machine
       // sampling sharedMemory
-      char readType [8];                      // analog or digital  
+      ReadType readType;                      // analog or digital
       bool analog;                            // true if readType is analog, false if digital (digitalRead)
       int gpio1;                              // gpio where ESP32 is taking samples from (digitalRead)
       adc1_channel_t adcchannel1;             // channel mapped from gpio ESP32 is taking samples from (adc1_get_raw instead of analogRead)
       adc1_channel_t adcchannel2;             // channel mapped from gpio ESP32 is taking samples from (adc1_get_raw instead of analogRead)
       int gpio2;                              // 2nd gpio if requested
       int samplingTime;                       // time between samples in ms or us
-      char samplingTimeUnit [3];              // ms or us
+      TimeUnit samplingTimeUnit;              // ms or us
       int screenWidthTime;                    // oscilloscope screen width in ms or us
-      char screenWidthTimeUnit [3];           // ms or us 
+      TimeUnit screenWidthTimeUnit;           // ms or us
       bool positiveTrigger;                   // true if posotive slope trigger is set
       int positiveTriggerTreshold;            // positive slope trigger treshold value
       bool negativeTrigger;                   // true if negative slope trigger is set  
@@ -85,8 +95,8 @@
     // oscilloscope reader read samples to read-buffer of shared memory - it will be copied to send buffer when it is ready to be sent
 
     void oscReader (void *sharedMemory) {
-        bool doAnalogRead =                 !strcmp (((oscSharedMemory *) sharedMemory)->readType, "analog");
-        bool unitIsMicroSeconds =           !strcmp (((oscSharedMemory *) sharedMemory)->samplingTimeUnit, "us");
+        bool doAnalogRead =                 ((oscSharedMemory *) sharedMemory)->readType == RT_ANALOG;
+        bool unitIsMicroSeconds =           ((oscSharedMemory *) sharedMemory)->samplingTimeUnit == TU_US;
         int samplingTime =                  ((oscSharedMemory *) sharedMemory)->samplingTime;
         bool positiveTrigger =              ((oscSharedMemory *) sharedMemory)->positiveTrigger;
         bool negativeTrigger =              ((oscSharedMemory *) sharedMemory)->negativeTrigger;
@@ -439,15 +449,28 @@
       }
       // parse 1st part
       sharedMemory.gpio1 = sharedMemory.gpio2 = 255; // invalid GPIO
-      if (sscanf (cmdPart1, "start %7s sampling on GPIO %2i, %2i", sharedMemory.readType, &sharedMemory.gpio1, &sharedMemory.gpio2) < 2) {
+      char tmpReadTypeString[8];
+      if (sscanf (cmdPart1, "start %7s sampling on GPIO %2i, %2i", tmpReadTypeString, &sharedMemory.gpio1, &sharedMemory.gpio2) < 2) {
         #ifdef __DMESG__
             dmesg ("[oscilloscope] oscilloscope protocol syntax error.");
         #endif
         webSocket->sendString ("[oscilloscope] oscilloscope protocol syntax error."); // send error also to javascript client
         return;
       }
+
+      // Parse the read type string
+      if (!strncmp(tmpReadTypeString, "analog", sizeof(tmpReadTypeString))) {
+        sharedMemory.readType = RT_ANALOG;
+      } else if (!strncmp(tmpReadTypeString, "digital", sizeof(tmpReadTypeString))) {
+        sharedMemory.readType = RT_DIGITAL;
+      } else {
+        #ifdef __DMESG__
+          dmesg ("[oscilloscope] oscilloscope protocol syntax error. Received `%s`, but only `analog` and `digital` are valid inputs for the read type.", tmpReadTypeString);
+        #endif
+      }
+
       // use adc1_get_raw instead of analogRead
-      if (!strcmp (sharedMemory.readType, "analog")) {
+      if (sharedMemory.readType == RT_ANALOG) {
         switch (sharedMemory.gpio1) {
           // ADC1
           case 36: sharedMemory.adcchannel1 = ADC1_CHANNEL_0; break;
@@ -490,13 +513,55 @@
         webSocket->sendString ("[oscilloscope] oscilloscope protocol syntax error."); // send error also to javascript client
         return;        
       }
-      if (sscanf (cmdPart2, "every %i %2s screen width = %i %2s", &sharedMemory.samplingTime, sharedMemory.samplingTimeUnit, &sharedMemory.screenWidthTime, sharedMemory.screenWidthTimeUnit) != 4) {
+
+      char tmpSamplingTimeUnitString[3];
+      char tmpScreenWidthTimeUnitString[3];
+      if (sscanf (cmdPart2, "every %i %2s screen width = %i %2s", &sharedMemory.samplingTime, tmpSamplingTimeUnitString, &sharedMemory.screenWidthTime, tmpScreenWidthTimeUnitString) != 4) {
         #ifdef __DMESG__
             dmesg ("[oscilloscope] oscilloscope protocol syntax error.");
         #endif
         webSocket->sendString ("[oscilloscope] oscilloscope protocol syntax error."); // send error also to javascript client
         return;    
       }
+
+      if (!strncmp(tmpSamplingTimeUnitString, "us", 2)) {
+        sharedMemory.samplingTimeUnit = TU_US;
+      } else if (!strncmp(tmpSamplingTimeUnitString, "ms", 2)) {
+        sharedMemory.samplingTimeUnit = TU_MS;
+      } else {
+        char errorMsg_sampleTimeUnit[200];
+        snprintf(errorMsg_sampleTimeUnit, sizeof(errorMsg_sampleTimeUnit), "[oscilloscope] wrong samplingTimeUnit: %s. Sampling time unit can only be ms or us.", tmpSamplingTimeUnitString);
+        #ifdef __DMESG__
+            dmesg (errorMsg_sampleTimeUnit);
+        #endif
+        webSocket->sendString (errorMsg_sampleTimeUnit); // send error also to javascript client
+        return;
+      }
+
+      if (!strncmp(tmpScreenWidthTimeUnitString, "us", 2)) {
+        sharedMemory.screenWidthTimeUnit = TU_US;
+      } else if (!strncmp(tmpScreenWidthTimeUnitString, "ms", 2)) {
+        sharedMemory.screenWidthTimeUnit = TU_MS;
+      } else {
+        char errorMsg_screenWidthTimeUnit[200];
+        snprintf(errorMsg_screenWidthTimeUnit, sizeof(errorMsg_screenWidthTimeUnit), "[oscilloscope] wrong samplingTimeUnit: %s. Sampling time unit can only be ms or us.", tmpSamplingTimeUnitString);
+        #ifdef __DMESG__
+            dmesg (errorMsg_screenWidthTimeUnit);
+        #endif
+        webSocket->sendString (errorMsg_screenWidthTimeUnit); // send error also to javascript client
+        return;
+      }
+
+      if (sharedMemory.screenWidthTimeUnit != sharedMemory.samplingTimeUnit) {
+        char errMsg[200];
+        snprintf(errMsg, sizeof(errMsg), "[oscilloscope] screenWidthTimeUnit must be the same as samplingTimeUnit. The former is %s and the latter is %s", tmpScreenWidthTimeUnitString, tmpSamplingTimeUnitString);
+        #ifdef __DMESG__
+            dmesg (errMsg);
+        #endif
+        webSocket->sendString(errMsg); // send error also to javascript client
+        return;
+      }
+
           
       // parse 3rd part
       if (cmdPart3) { 
@@ -532,10 +597,10 @@
         }
       }
 
-      // DEBUG: Serial.printf ("[oscilloscope] parsing command: samplingTime = %i %s, screenWidth = %i %s\n", sharedMemory.samplingTime, sharedMemory.samplingTimeUnit, sharedMemory.screenWidthTime, sharedMemory.screenWidthTimeUnit);
+      // DEBUG: Serial.printf ("[oscilloscope] parsing command: samplingTime = %i %s, screenWidth = %i %s\n", sharedMemory.samplingTime, (sharedMemory.samplingTimeUnit == TU_US ? "us" : "ms"), sharedMemory.screenWidthTime, (sharedMemory.screenWidthTimeUnit == TU_US ? "us" : "ms"));
 
       // check the values and calculate derived values
-      if (!(!strcmp (sharedMemory.readType, "analog") || !strcmp (sharedMemory.readType, "digital"))) {
+      if (sharedMemory.readType != RT_ANALOG && sharedMemory.readType != RT_DIGITAL) {
         #ifdef __DMESG__
             dmesg ("[oscilloscope] wrong readType. Read type can only be analog or digital.");
         #endif
@@ -556,7 +621,7 @@
         webSocket->sendString ("[oscilloscope] invalid sampling time. Sampling time must be between 1 and 25000."); // send error also to javascript client
         return;      
       }
-      if (strcmp (sharedMemory.samplingTimeUnit, "ms") && strcmp (sharedMemory.samplingTimeUnit, "us")) {
+      if (sharedMemory.samplingTimeUnit != TU_US && sharedMemory.samplingTimeUnit != TU_MS) {
         #ifdef __DMESG__
             dmesg ("[oscilloscope] wrong samplingTimeUnit. Sampling time unit can only be ms or us.");
         #endif
@@ -571,18 +636,10 @@
         return;      
       }
 
-      if (strcmp (sharedMemory.screenWidthTimeUnit, sharedMemory.samplingTimeUnit)) {
-        #ifdef __DMESG__
-            dmesg ("[oscilloscope] screenWidthTimeUnit must be the same as samplingTimeUnit.");
-        #endif        
-        webSocket->sendString ("[oscilloscope] screenWidthTimeUnit must be the same as samplingTimeUnit."); // send error also to javascript client
-        return;    
-      }
-
-      // DEBUG: Serial.printf ("[oscilloscope] parsing4 command: samplingTime = %i %s, screenWidth = %i %s\n", sharedMemory.samplingTime, sharedMemory.samplingTimeUnit, sharedMemory.screenWidthTime, sharedMemory.screenWidthTimeUnit);
+      // DEBUG: Serial.printf ("[oscilloscope] parsing4 command: samplingTime = %i %s, screenWidth = %i %s\n", sharedMemory.samplingTime, (sharedMemory.samplingTimeUnit == TU_US ? "us" : "ms"), sharedMemory.screenWidthTime, (sharedMemory.screenWidthTimeUnit == TU_US ? "us" : "ms"));
       
       if (sharedMemory.positiveTrigger) {
-        if (sharedMemory.positiveTriggerTreshold > 0 && sharedMemory.positiveTriggerTreshold <= (strcmp (sharedMemory.readType, "analog") ? 1 : 4095)) {
+        if (sharedMemory.positiveTriggerTreshold > 0 && sharedMemory.positiveTriggerTreshold <= (sharedMemory.readType == RT_ANALOG ? 4095 : 1)) {
           ;// Serial.printf ("[oscilloscope] positive slope trigger treshold = %i\n", sharedMemory.positiveTriggerTreshold);
         } else {
           #ifdef __DMESG__
@@ -593,7 +650,7 @@
         }
       }
       if (sharedMemory.negativeTrigger) {
-        if (sharedMemory.negativeTriggerTreshold >= 0 && sharedMemory.negativeTriggerTreshold < (strcmp (sharedMemory.readType, "analog") ? 1 : 4095)) {
+        if (sharedMemory.negativeTriggerTreshold >= 0 && sharedMemory.negativeTriggerTreshold < (sharedMemory.readType == RT_ANALOG ? 4095 : 1)) {
           ;//Serial.printf ("[oscilloscope] negative slope trigger treshold = %i\n", sharedMemory.negativeTriggerTreshold);
         } else {
           #ifdef __DMESG__
@@ -604,7 +661,7 @@
         }
       }
   
-      // DEBUG: Serial.printf ("[oscilloscope] parsing5 command: samplingTime = %i %s, screenWidth = %i %s\n", sharedMemory.samplingTime, sharedMemory.samplingTimeUnit, sharedMemory.screenWidthTime, sharedMemory.screenWidthTimeUnit);
+      // DEBUG: Serial.printf ("[oscilloscope] parsing5 command: samplingTime = %i %s, screenWidth = %i %s\n", sharedMemory.samplingTime, (sharedMemory.samplingTimeUnit == TU_US ? "us" : "ms"), sharedMemory.screenWidthTime, (sharedMemory.screenWidthTimeUnit == TU_US ? "us" : "ms"));
 
       sharedMemory.oscReaderState = INITIAL;
 
