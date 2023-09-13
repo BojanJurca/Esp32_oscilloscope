@@ -3,7 +3,7 @@
 
 ## The latest changes
 
-The latest changes are mainly about improvements of the displayed signal (a higher sampling frequency).
+The latest changes are about even higher number of samples per screen and the use of i2s interface for sampling of single analog signal for ESP32 boards that support it.
 
 
 **Demo ESP32 oscilloscope is available at [http://jurca.dyn.ts.si/oscilloscope.html](http://jurca.dyn.ts.si/oscilloscope.html).**
@@ -65,7 +65,9 @@ ftp> put oscilloscope.html /var/www/html/oscilloscope.html
 ftp>
 ```
 
-6. Open http://YOUR-ESP32-IP/oscilloscope.html with your browser.
+7. Open http://YOUR-ESP32-IP/oscilloscope.html with your browser.
+
+8. If you're getting inverse analog signals, as it happens on some of ESP32 boards, comment or uncomment compiler directives INVERT_ADC1_GET_RAW and/or INVERT_I2S_READ in oscilloscope.h respectively. If your ESP32 board supports i2s interface (like ESP32 DevKitC, NodeMCU-32S, ...) you can also decide if you want to use it (or not). The benefit of using i2s interface is higher sampling frequency and quality of a single analog signal. The drawback, on the other hand, is that you can not use more than one analog oscilloscope at a time.
 
 
 ## Things to consider when analogReading GPIOs
