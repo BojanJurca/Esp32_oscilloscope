@@ -444,114 +444,84 @@
 						ws.send (endianArray);
 
 						// then send start command with sampling parameters
-						var startCommand = "start " + (document.getElementById ("analog").checked ? "analog" : "digital") + " sampling on GPIO " + document.getElementById ("gpio1").value + (document.getElementById ("gpio2").value == 40 ? "" : ", " + document.getElementById ("gpio2").value) + " every ";
+						var startCommand = 'start ' + (document.getElementById ('analog').checked ? 'analog' : 'digital') + ' sampling on GPIO ' + document.getElementById ('gpio1').value + (document.getElementById ('gpio2').value == 40 ? '' : ', ' + document.getElementById ('gpio2').value) + ' every ';
 						switch (document.getElementById ('frequency').value) {
 
-							// real sampling times will be passed back to browser in 16 bit integers - 
-							// take care that values are <= 32767 !
+							// real sampling times will be passed back to browser in 16 bit integers - take care that values are <= 2^15 ( = 32767) but it is better to keep it below 5000 to be on the safe side !
 
-							// please note that oscilloscope reader can read max 128 samples per screen - this is how much samples fit in it buffer
-							// but this number may be significantly lower if ESP32 can not keep up to required sampling speed any more
+							// please note that oscilloscope reader can put in the output buffer  max 746 - 1 (continuous analog signal) samples per screen,
+              //                                                                    max 373 - 1 (1 signal) samples per screen,
+              //                                                                    max 248 - 1 (2 signals) samples per screen
+							// but the number may be significantly lower if ESP32 can not keep up to required sampling rate
+              // for orientation, oscilloscope can make 1 (1 signal) digital sample roughly every 1.6 us,
+              //                                        1 (2 signals) digital sample roughly every 2.5 us,
+              //                                        1 (1 signal) analog sample roughly every 70 us,
+              //                                        1 (2 signals) analog sample roughly every 150 us,
+              //                                        max continuous analog sampling (1 signal only) frequency = 150 kHz (1 signal every 6,6 us)
 
-							// 1 sample at a time mode, measurements in ms
+							// 1 sample at a time mode, measurements in ms, actual sampling rate may be lower than specified
 
-							case '1':	// screen width = 10 s => horizontal frequency = 0,1 Hz, 120 samples per screen => sampling interval = 83 ms, sampling frequency (single signal) = 12 Hz
-									startCommand += "83 ms screen width = 10000 ms";
+							case '1':	// screen width = 10 s => horizontal frequency = 0,1 Hz, max 370 (2 signals) samples per screen => sampling interval = 27 ms, sampling frequency (2 signals) = 74 Hz
+									startCommand += '27 ms screen width = 10000 ms';
 									break;
-							case '2':	// screen width = 5 s => horizontal frequency = 0,2 Hz, 120 samples per screen => sampling interval = 42 ms, sampling frequency (single signal) = 24 Hz
-									startCommand += "42 ms screen width = 5000 ms";
+							case '2':	// screen width = 5 s => horizontal frequency = 0,2 Hz, max 357 (2 signals) samples per screen => sampling interval = 14 ms, sampling frequency (2 signals) = 142 Hz
+									startCommand += '21 ms screen width = 5000 ms';
 									break; 
-							case '3':	// screen width = 2 s => horizontal frequency = 0,5 Hz, 120 samples per screen => sampling interval = 17 ms, sampling frequency (single signal) = 60 Hz
-									startCommand += "17 ms screen width = 2000 ms"; 
+							case '3':	// screen width = 2 s => horizontal frequency = 0,5 Hz, max 333 (2 signals) samples per screen => sampling interval = 6 ms, sampling frequency (2 signals) = 322 Hz
+									startCommand += '6 ms screen width = 2000 ms'; 
 									break;
 
 							// screen at a time mode from now on
+              // switch to measurements in us from now on, actual sampling rate may be lower than specified
 
-							case '4':	// screen width = 1 s => horizontal frequency = 1 Hz, 120 samples per screen => sampling interval = 8 ms, sampling frequency (single signal) = 125 Hz
-									startCommand += "8 ms screen width = 1000 ms"; 
+							case '4':	// screen width = 1 s => horizontal frequency = 1 Hz, 400 samples per screen => sampling interval = 2500 us, sampling frequency (1 signal) = 400 Hz
+									startCommand += '2500 us screen width = 1000000 us'; 
 									break;
-							case '5':	// screen width = 500 ms => horizontal frequency = 2 Hz, 120 samples per screen => sampling interval = 4 ms, sampling frequency (single signal) = 250 Hz
-									startCommand += "4 ms screen width = 500 ms";
+							case '5':	// screen width = 500 ms => horizontal frequency = 2 Hz, 400 samples per screen => sampling interval = 1250 us, sampling frequency (1 signal) = 800 Hz
+									startCommand += '1250 us screen width = 500000 us';
 									break;
-							case '6':	// screen width = 200 ms => horizontal frequency = 5 Hz, 100 samples per screen => sampling interval = 2 ms, sampling frequency (single signal) = 500 Hz
-									startCommand += "2 ms screen width = 200 ms"; 
+              case '6':	// screen width = 200 ms => horizontal frequency = 5 Hz, 400 samples per screen => sampling interval = 500 us, sampling frequency (1 signal) = 2 kHz
+									startCommand += '500 us screen width = 200000 us';
 									break;
-							case '7':	// screen width = 100 ms => horizontal frequency = 10 Hz, 100 samples per screen => sampling interval = 1 ms, sampling frequency (single signal) = 1000 Hz
-									startCommand += "1 ms screen width = 100 ms"; 
+              case '7':	// screen width = 100 ms => horizontal frequency = 10 Hz, 400 samples per screen => sampling interval = 250 us, sampling frequency (1 signal) = 4 kHz
+									startCommand += '250 us screen width = 100000 us';
+									break;
+							case '8':	// screen width = 50 ms => horizontal frequency = 20 Hz, 400 samples per screen => sampling interval = 125 us, sampling frequency (1 signal) = 8 kHz
+									startCommand += '125 us screen width = 50000 us';
+									break;
+              case '9':	// screen width = 20 ms => horizontal frequency = 50 Hz, 400 samples per screen => sampling interval = 50 us, sampling frequency (1 signal) = 20 kHz
+									startCommand += '50 us screen width = 20000 us';
+									break;
+							case '10':	// screen width = 16 ms => horizontal frequency = 60 Hz, 388 samples per screen => sampling interval = 43 us, sampling frequency (1 signal) = 23,2 kHz
+  								startCommand += '43 us screen width = 16667 us'; 
+									break;
+              case '11':	// screen width = 10 ms => horizontal frequency = 100 Hz, 400 samples per screen => sampling interval = 25 us, sampling frequency (single signal) = 40 kHz
+                  startCommand += '25 us screen width = 10000 us';
+									break;
+							case '12':	// screen width = 5 ms => horizontal frequency = 200 Hz, 385 samples per screen => sampling interval = 13 us, sampling frequency = 76,9 kHz
+                  startCommand += '13 us screen width = 5000 us'; 
 									break;
 
-							// switch to measurements in us from now on							
-
-							case '8':	// screen width = 50 ms => horizontal frequency = 20 Hz, 100 samples per screen => sampling interval = 500 us, sampling frequency (single signal) = 2000 Hz
-									startCommand += "500 us screen width = 50000 us";
+              // ESP32 can not sample faster than 150 kHz, we can only reduce the number of samples per screen
+          
+              case '13':	// screen width = 2 ms => horizontal frequency = 500 Hz, 372 samples per screen => sampling interval = 6 us, sampling frequency = 166,6 kHz
+                  startCommand += '7 us screen width = 2000 us'; 
 									break;
-							case '9':	// screen width = 20 ms => horizontal frequency = 50 Hz, 100 samples per screen => sampling interval = 200 us, sampling frequency (single signal) = 5000 Hz
-									startCommand += "200 us screen width = 20000 us";  
+              case '14':	// screen width = 1 ms => horizontal frequency = 1 kHz, 334 samples per screen => sampling interval = 3 us, sampling frequency = 333,3 kHz
+                  startCommand += '3 us screen width = 1000 us'; 
 									break;
-							case '10':	// screen width = 16 ms => horizontal frequency = 60 Hz, 100 samples per screen => sampling interval = 166 us, sampling frequency (single signal) = 5988 Hz
-									startCommand += "166 us screen width = 16667 us"; 
-									break; 
-							case '11':	// screen width = 10 ms => horizontal frequency = 100 Hz, 100 samples per screen => sampling interval = 100 us, sampling frequency (single signal) = 10000 Hz
-									startCommand += "100 us screen width = 10000 us";
+							case '15':	// screen width = 500 us => horizontal frequency = 2 kHz, 250 samples per screen => sampling interval = 2 us, sampling frequency = 500 kHz
+                  startCommand += '2 us screen width = 500 us'; 
 									break;
-
-							// ESP32 is having problems keeping up to increasing sampling speed, 50 us per (single) analog sample (100 us per dual analog sample or 20000 Hz), which is worst case scenario, is maximum it can handle
-							// reduce the number of samples per screen from now on
-
-							case '12':	// screen width = 5 ms => horizontal frequency = 200 Hz, 100 samples per screen => sampling interval = 50 us, sampling frequency = 20000 Hz
-									if (document.getElementById ('analog').checked && document.getElementById ("gpio2").value != 40)
-										startCommand += "100 us screen width = 5000 us"; // reduce the sampling rate for dual analog reading
-									else
-										startCommand += "50 us screen width = 5000 us"; 
+							case '16':	// screen width = 200 us => horizontal frequency = 5 kHz, 200 samples per screen => sampling interval = 1 us, sampling frequency = 1 MHz
+                  startCommand += '1 us screen width = 200 us'; 
 									break;
-							case '13':	// screen width = 2 ms => horizontal frequency = 500 Hz, 80 samples per screen => sampling interval = 25 us, sampling frequency = 40000 Hz
-									if (document.getElementById ('analog').checked)
-										if (document.getElementById ("gpio2").value != 40)
-											startCommand += "100 us screen width = 2000 us"; // reduce the sampling rate for dual analog reading
-										else
-											startCommand += "50 us screen width = 2000 us"; // reduce the sampling rate for dual analog reading
-									else
-										startCommand += "25 us screen width = 2000 us"; 
-									break;
-							case '14':	// screen width = 1 ms => horizontal frequency = 1 kHz, 60 samples per screen => sampling interval = 16 us, sampling frequency = 58823 Hz
-									if (document.getElementById ('analog').checked)
-										if (document.getElementById ("gpio2").value != 40)
-											startCommand += "100 us screen width = 1000 us"; // reduce the sampling rate for dual analog reading
-										else
-											startCommand += "50 us screen width = 1000 us"; // reduce the sampling rate for dual analog reading
-									else
-										startCommand += "16 us screen width = 1000 us";
-									break;
-							case '15':	// screen width = 500 us => horizontal frequency = 2 kHz, 25 samples per screen => sampling interval = 20 us, sampling frequency = 50000 Hz
-									if (document.getElementById ('analog').checked)
-										if (document.getElementById ("gpio2").value != 40)
-											startCommand += "100 us screen width = 500 us"; // reduce the sampling rate for dual analog reading
-										else
-											startCommand += "50 us screen width = 500 us"; // reduce the sampling rate for dual analog reading
-									else
-										startCommand += "8 us screen width = 500 us";
-									break;
-							case '16':	// screen width = 200 us => horizontal frequency = 5 kHz, 30 samples per screen => sampling interval = 6 us, sampling frequency = 142000 Hz
-									if (document.getElementById ('analog').checked)
-										if (document.getElementById ("gpio2").value != 40)
-											startCommand += "100 us screen width = 200 us"; // let ESP32 do the best it can but this is far over its capabilities 
-										else
-											startCommand += "50 us screen width = 200 us"; // let ESP32 do the best it can but this is far over its capabilities 
-									else
-										startCommand += "6 us screen width = 200 us";
-									break;
-							case '17':	// screen width = 100 us => horizontal frequency = 10 kHz, 20 samples per screen => sampling interval = 5 us, sampling frequency = 200000 Hz
-									if (document.getElementById ('analog').checked)
-										if (document.getElementById ("gpio2").value != 40)
-											startCommand += "100 us screen width = 100 us"; // let ESP32 do the best it can but this is far over its capabilities 
-										else
-											startCommand += "50 us screen width = 100 us"; // let ESP32 do the best it can but this is far over its capabilities 
-									else
-											startCommand += "5 us screen width = 100 us"; 
+              case '17':	// screen width = 100 us => horizontal frequency = 10 kHz, 100 samples per screen => sampling interval = 1 us, sampling frequency = 1 MHz
+                  startCommand += '1 us screen width = 100 us'; 
 									break;
 						}
-						if (document.getElementById ("posTrigger").checked) startCommand += " set positive slope trigger to " + (document.getElementById ("analog").checked ? document.getElementById ("posTreshold").value : 1);
-						if (document.getElementById ("negTrigger").checked) startCommand += " set negative slope trigger to " + (document.getElementById ("analog").checked ? document.getElementById ("negTreshold").value : 0);
+						if (document.getElementById ('posTrigger').checked) startCommand += ' set positive slope trigger to ' + (document.getElementById ('analog').checked ? document.getElementById ('posTreshold').value : 1);
+						if (document.getElementById ('negTrigger').checked) startCommand += ' set negative slope trigger to ' + (document.getElementById ('analog').checked ? document.getElementById ('negTreshold').value : 0);
 
 						ws.send (startCommand);
           };
@@ -569,25 +539,24 @@
               myFileReader.onload = function (event) {
                 myArrayBuffer = event.target.result;
                 myInt16Array = new Int16Array (myArrayBuffer);
+                // console.log (myInt16Array.length); // the number of 16-bit words received
                 // console.log (myInt16Array);
-                drawSignal (myInt16Array, 0, myInt16Array.length - 1);
+                drawSignal (myInt16Array, 0, myInt16Array.length - 1); 
               };
               myFileReader.readAsArrayBuffer (evt.data);
             }
           };
 
           ws.onclose = function () {
-            // websocket is closed.
+            // websocket is closed
             console.log ('WebSocket closed.');
-            enableDisableControls (false);
+            // enableDisableControls (false); // TO DO: figure out why some onclose events (at lower frequencies) are false, than uncomment this line
           };
 
           ws.onerror = function (event) {
-						ws.close (); 
-						// DEBUG: 
-							console.log("WebSocket error: ", event);
-						alert ('WebSocket error.');
-						enableDisableControls (false); 
+            ws.close ();
+            alert ('WebSocket error: ' + event);
+            enableDisableControls (false);
           };
 
         } else {
@@ -597,9 +566,10 @@
 
       // drawing parameters
 
-      var screenWidthTime;    // oscilloscope screen width in time units
-      var restartDrawingSignal; // used for drawing the signal
-      var screenTimeOffset;   // used for drawing the signal
+      var screenWidthTime;        // oscilloscope screen width in time units
+      var continuousSamplingTime; // only when continuous sampliong takes place
+      var restartDrawingSignal;   // used for drawing the signal
+      var screenTimeOffset;       // used for drawing the signal
 
       var xOffset;
       var xScale;
@@ -619,7 +589,11 @@
         var gridTop;  // y value at the top of the grid
 
         restartDrawingSignal = true;  // drawing parameter - for later use
-        screenTimeOffset = 0;   // drawing parameter - for later use
+        if (continuousSamplingTime == 0) {
+            screenTimeOffset = 0;   // drawing parameter - for later use
+        } else {
+            screenTimeOffset = -continuousSamplingTime; // so that the first real continuous sample will start at 0
+        }
 
         var canvas = document.getElementById ('oscilloscope');
         var ctx = canvas.getContext ('2d');
@@ -635,7 +609,7 @@
 
         // calculate drawing parametes and draw grid and scale
         ctx.strokeStyle = 'hsl(34, 90%, 40%)';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 1;
         ctx.font = '16px Verdana';
 
         xOffset = 50;
@@ -708,7 +682,7 @@
               xScale = (canvas.width - xOffset) / screenWidthTime;
               xLabel = '200 ms';
               break;
-          case '4': screenWidthTime = 1000; // (ms) horizontal frequency = 1 Hz, whole width = 1 s, grid tick width = 0,1 s
+          case '4': screenWidthTime = 1000000; // (us) horizontal frequency = 1 Hz, whole width = 1 s, grid tick width = 0,1 s
               xGridTick = screenWidthTime / 10;
               xScale = (canvas.width - xOffset) / screenWidthTime;
               xLabel = '100 ms';
@@ -738,7 +712,7 @@
               xScale = (canvas.width - xOffset) / screenWidthTime;
               xLabel = '2 ms';
               break;
-          case '10':  screenWidthTime = 17000; // horizontal frequency = 60 Hz, whole width = 0,017 s, grid tick width = 0,002 s
+          case '10':  screenWidthTime = 16667; // horizontal frequency = 60 Hz, whole width = 0,017 s, grid tick width = 0,002 s
               xGridTick = 2000;
               xScale = (canvas.width - xOffset) / screenWidthTime;
               xLabel = '2 ms';
@@ -796,15 +770,31 @@
       var lastJ1; // signal 1
       var lastJ2; // signal 2
 
-      function drawSignal (myInt16Array, startInd, endInd) {
-        if (startInd > endInd) return;
+      var wordsPerSample = 1; // will be correctly initialized when dummy sample arrives: 2 for 1 signal, 3 for 2 signals
 
-        // find dummy sample (the one with value of -1) which will tells javascript cliento to start drawing from beginning of the screen
-        for (var ind = startInd; ind <= endInd; ind += 3) {
-          if (myInt16Array [ind] == -1) { // if signal value = -1 (dummy value)
-            drawSignal (myInt16Array, startInd, ind - 3); // upt to peviuos sample, there are 3 16 bit words in each sample
+      function drawSignal (myInt16Array, startInd, endInd) { 
+        if (startInd > endInd) return;
+        // console.log ('drawSignal (' + startInd.toString () + ', ' + endInd.toString () + ')');
+
+        // find dummy sample (the one with value < 0) which will tells javascript client to start drawing from beginning of the screen
+        for (var ind = startInd; ind <= endInd; ind += wordsPerSample) {
+          if (myInt16Array [ind] < 0) { // if signal value < 0 this is a dummy value which also holds the information about how numbers are stored in the buffer
+            switch (myInt16Array [ind]) {
+              case -2:  wordsPerSample = 2; // 1 signal (analog or digital) with deltaTime
+                        continuousSamplingTime = 0; // actual sambling wil be provided in the buffer
+                        break;
+              case -3:  wordsPerSample = 3; // 2 signals (analog or digital) with deltaTime
+                        continuousSamplingTime = 0; // actual sambling wil be provided in the buffer
+                        break;
+              default:  // < 0              // continuous (analog) sampling
+                        wordsPerSample = 1;
+                        continuousSamplingTime = -myInt16Array [ind]; // sampling time is provided in the dummy sample
+                        screenTimeOffset = -continuousSamplingTime; // so that the first real continuous sample will start at 0
+            }
+            // console.log ('Got dummy sample at ' + ind.toString () + ' value: ' + myInt16Array [ind].toString ());
+            drawSignal (myInt16Array, startInd, ind - wordsPerSample); // to previuos sample
             drawBackgroundAndCalculateParameters ();
-            drawSignal (myInt16Array, ind + 3, endInd); // from next sample on, there are 3 16 bit words in each sample
+            drawSignal (myInt16Array, ind + wordsPerSample, endInd); // from next sample on
             return;
           }
         }
@@ -816,16 +806,21 @@
         var lines = document.getElementById ('lines').checked;
         var markers = document.getElementById ('markers').checked;
 
-        ctx.lineWidth = 5;
+        ctx.lineWidth = 3;
 
-        for (var ind = startInd; ind < endInd; ind += 3) { // there are 3 16 bit words in each sample
+        // console.log ('arayBufferType = ' + arayBufferType.toString ());
+        for (var ind = startInd; ind <= endInd; ind += wordsPerSample) { 
 
           // calculate sample position
+          if (continuousSamplingTime == 0) {
+              screenTimeOffset += myInt16Array [ind + wordsPerSample - 1]; // deltaTime is provided in the buffer
+          } else {
+              screenTimeOffset += continuousSamplingTime; // continouus sampling
+          }
 
-          screenTimeOffset += myInt16Array [ind + 2];
           i = xOffset + xScale * screenTimeOffset;   // time
           j1 = yOffset + yScale * myInt16Array [ind]; // signal 1
-          j2 = myInt16Array [ind + 1] >=0 ? yOffset + yScale * myInt16Array [ind + 1] : -1; // signal 2
+          j2 = wordsPerSample >= 3 ? yOffset + yScale * myInt16Array [ind + 1] : -1; // signal 2, -1 if missing
 
           // lines
           if (lines) {
@@ -875,13 +870,13 @@
             if (j2 >= 0) {
               ctx.strokeStyle = '#ff8000';
               ctx.beginPath ();
-              ctx.arc (i, j2, 5, 0, 2 * Math.PI, false);
+              ctx.arc (i, j2, 2, 0, 2 * Math.PI, false);
               ctx.stroke ();
             }
             // signal 1
             ctx.strokeStyle = '#ffbf80';
             ctx.beginPath ();
-            ctx.arc (i, j1, 5, 0, 2 * Math.PI, false);
+            ctx.arc (i, j1, 2, 0, 2 * Math.PI, false);
             ctx.stroke ();
           }
 
