@@ -12,7 +12,7 @@ The latest changes are about even higher number of samples per screen and the us
 ![Screenshot](oscilloscope.png)
 
 
-Esp32 oscilloscope takes up to 128 samples per screen but the sampling rate may not be completely constant all the time since there are other processes, (beside the sampling process itself, especially if you are using Esp32 oscilloscope as a part of other projects) running at the same time. ESP32 may also not always be able to keep up with the desired sampling frequency.
+Esp32 oscilloscope takes up to 736 samples per screen but the sampling rate may not be completely constant all the time since there are other processes, (beside the sampling process itself, especially if you are using Esp32 oscilloscope as a part of other projects) running at the same time. ESP32 may also not always be able to keep up with the desired sampling frequency.
 
 Esp32 oscilloscope displays the samples as they are taken which may not be exatly the signal as it is on its input GPIO. The samples are represented by digital values 0 and 1 or analog values from 0 to 4095 which corresponds to 0 V to 3.3 V.
 
