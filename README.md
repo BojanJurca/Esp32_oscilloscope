@@ -3,7 +3,7 @@
 
 ## The latest changes
 
-The latest changes are about even higher number of samples per screen and the use of i2s interface for sampling of single analog signal for ESP32 boards that support it.
+The latest change is only a bug fix (in some cases oscilloscope tasks kept running without releasing the memory).
 
 
 **Demo ESP32 oscilloscope is available at [http://jurca.dyn.ts.si/oscilloscope.html](http://jurca.dyn.ts.si/oscilloscope.html).**

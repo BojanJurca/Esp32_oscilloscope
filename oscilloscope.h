@@ -74,7 +74,7 @@
         bool samplesAreReady;                          // is the buffer ready for sending
     };
 
-    enum readerState { INITIAL = 0, START = 1, STARTED  = 2, STOP = 3, STOPPED = 4 };
+    enum readerState { INITIAL = 0, START = 1, STARTED = 2, STOP = 3, STOPPED = 4 };
     /* transitions:
           START   - set by osc main thread
           STARTED - set by oscReader
@@ -573,17 +573,6 @@
                 // DEBUG: Serial.printf ("[oscilloscope][oscReader_analog] samplingTime was too long (to fit in 15 bits in (almost?) all cases) and is corrected to %i\n", samplingTime);
         }  
 
-        // DEBUG: Serial.printf ("[oscilloscope][oscReader_analog] samplingTime = %i, screenWidthTime = %i\n", samplingTime, screenWidthTime);
-        if (noOfSignals == 2 && screenWidthTime <= 200 || noOfSignals == 1 && screenWidthTime <= 100) {
-            #ifdef __DMESG__
-                dmesg ("[oscilloscope] the settings exceed oscilloscope capabilities.");
-            #endif
-            ((oscSharedMemory *) sharedMemory)->webSocket->sendString ("[oscilloscope] the settings exceed oscilloscope capabilities."); // send error to javascript client
-            while (((oscSharedMemory *) sharedMemory)->oscReaderState != STOP) delay (1);
-            ((oscSharedMemory *) sharedMemory)->oscReaderState = STOPPED; 
-            vTaskDelete (NULL);
-        }
-
         // Calculate screen refresh period. It sholud be arround 50 ms (sustainable screen refresh rate is arround 20 Hz) but it is better if it is a multiple value of screenWidthTime.
         unsigned long screenRefreshMilliseconds; // screen refresh period
         int noOfSamplesPerScreen = screenWidthTime / samplingTime; if (noOfSamplesPerScreen * samplingTime < screenWidthTime) noOfSamplesPerScreen ++;
@@ -604,6 +593,19 @@
         // wait for the START signal
         while (((oscSharedMemory *) sharedMemory)->oscReaderState != START) delay (1);
         ((oscSharedMemory *) sharedMemory)->oscReaderState = STARTED; 
+
+
+        // DEBUG: Serial.printf ("[oscilloscope][oscReader_analog] samplingTime = %i, screenWidthTime = %i\n", samplingTime, screenWidthTime);
+        if (noOfSignals == 2 && screenWidthTime <= 200 || noOfSignals == 1 && screenWidthTime <= 100) {
+            #ifdef __DMESG__
+                dmesg ("[oscilloscope] the settings exceed oscilloscope capabilities.");
+            #endif
+            ((oscSharedMemory *) sharedMemory)->webSocket->sendString ("[oscilloscope] the settings exceed oscilloscope capabilities."); // send error to javascript client
+            ((oscSharedMemory *) sharedMemory)->webSocket->closeWebSocket ();
+            while (((oscSharedMemory *) sharedMemory)->oscReaderState != STOP) delay (1);
+            ((oscSharedMemory *) sharedMemory)->oscReaderState = STOPPED;
+            vTaskDelete (NULL);
+        }
 
         // --- do the sampling, samplingTime and screenWidthTime are in us ---
 
@@ -860,9 +862,10 @@
                 #endif
 
                 ((oscSharedMemory *) sharedMemory)->webSocket->sendString ("[oscilloscope] failed to install the i2s driver."); // send error to javascript client
+                ((oscSharedMemory *) sharedMemory)->webSocket->closeWebSocket ();
                 // wait for the STOP signal
                 while (((oscSharedMemory *) sharedMemory)->oscReaderState != STOP) delay (1);
-                ((oscSharedMemory *) sharedMemory)->oscReaderState = STOPPED; 
+                ((oscSharedMemory *) sharedMemory)->oscReaderState = STOPPED;
                 vTaskDelete (NULL);
             }
 
@@ -879,9 +882,10 @@
                 i2s_driver_uninstall (I2S_NUM_0);
 
                 ((oscSharedMemory *) sharedMemory)->webSocket->sendString ("[oscilloscope] failed setting up i2s adc mode."); // send error to javascript client
+                ((oscSharedMemory *) sharedMemory)->webSocket->closeWebSocket ();
                 // wait for the STOP signal
                 while (((oscSharedMemory *) sharedMemory)->oscReaderState != STOP) delay (1);
-                ((oscSharedMemory *) sharedMemory)->oscReaderState = STOPPED; 
+                ((oscSharedMemory *) sharedMemory)->oscReaderState = STOPPED;                
                 vTaskDelete (NULL);
             }
 
@@ -903,9 +907,10 @@
                     i2s_driver_uninstall (I2S_NUM_0);
 
                     ((oscSharedMemory *) sharedMemory)->webSocket->sendString ("[oscilloscope] failed reading the samples."); // send error to javascript client
+                    ((oscSharedMemory *) sharedMemory)->webSocket->closeWebSocket ();
                     // wait for the STOP signal
                     while (((oscSharedMemory *) sharedMemory)->oscReaderState != STOP) delay (1);
-                    ((oscSharedMemory *) sharedMemory)->oscReaderState = STOPPED; 
+                    ((oscSharedMemory *) sharedMemory)->oscReaderState = STOPPED;                    
                     vTaskDelete (NULL);
                 }
 
@@ -945,7 +950,7 @@
                                             noOfSamplesToTakeSecondTime << 1, // in bytes
                                             &bytesRead,
                                             pdMS_TO_TICKS (1000)); // portMAX_DELAY); // no timeout
-                            if (err != ESP_OK) {
+                            if (err != ESP_OK || noOfSamplesTaken == 0) {
                                 Serial.printf ("Failed reading the samples: %d\n", err);
                                 #ifdef __DMESG__
                                     dmesg ("[oscilloscope][oscReader_oscReader_analog_1_signal_continuous] failed reading the samples: ", err);
@@ -953,9 +958,10 @@
                                 i2s_driver_uninstall (I2S_NUM_0);
 
                                 ((oscSharedMemory *) sharedMemory)->webSocket->sendString ("[oscilloscope] failed reading the samples."); // send error to javascript client
+                                ((oscSharedMemory *) sharedMemory)->webSocket->closeWebSocket ();
                                 // wait for the STOP signal
                                 while (((oscSharedMemory *) sharedMemory)->oscReaderState != STOP) delay (1);
-                                ((oscSharedMemory *) sharedMemory)->oscReaderState = STOPPED; 
+                                ((oscSharedMemory *) sharedMemory)->oscReaderState = STOPPED;                                
                                 vTaskDelete (NULL);
                             }
                             noOfSamplesTaken = noOfSamplesTaken - (i - 1) + (bytesRead >> 1); // - deleted samples + newly read samples (normally we would end up with the same number)
@@ -1053,6 +1059,7 @@
     
         // read (text) stop command form javscrip client if it arrives - according to oscilloscope protocol the string could only be 'stop' - so there is no need checking it
         if (webSocket->available () != WebSocket::NOT_AVAILABLE) return; // this also covers ERROR and TIME_OUT
+        if (webSocket->getSocket () == -1) return; // if the socket has been closed by oscReader
       }
     }
 
@@ -1308,7 +1315,7 @@
                 // send oscReader STOP signal
                 sharedMemory.oscReaderState = STOP; 
 
-                // wait until oscReader STOPPED
+                // wait until oscReader STOPPED or error
                 while (sharedMemory.oscReaderState != STOPPED) delay (1); 
       }
       
