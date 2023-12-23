@@ -2,7 +2,7 @@
 
     time_functions.h
  
-    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
 
     Real_time_clock synchronizes its time with NTP server accessible from internet once a day. Internet connection is 
     necessary for real_time_clock to get initialized.
@@ -59,9 +59,9 @@
     time_t getUptime ();
     char *ntpDate (char *);
     char *ntpDate ();
-    bool cronTabAdd (uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, char *, bool);
-    bool cronTabAdd (char *, bool);
-    int cronTabDel (char *);
+    bool cronTabAdd (uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, const char *, bool);
+    bool cronTabAdd (const char *, bool);
+    int cronTabDel (const char *);
     void startCronDaemon (void (* cronHandler) (char *), size_t);
 
 
@@ -206,7 +206,7 @@
     } __cronEntry__ [CRONTAB_MAX_ENTRIES];
   
     // adds new entry into crontab table
-    bool cronTabAdd (uint8_t second, uint8_t minute, uint8_t hour, uint8_t day, uint8_t month, uint8_t day_of_week, char *cronCommand, bool readFromFile = false) {
+    bool cronTabAdd (uint8_t second, uint8_t minute, uint8_t hour, uint8_t day, uint8_t month, uint8_t day_of_week, const char *cronCommand, bool readFromFile = false) {
         bool b = false;    
         xSemaphoreTakeRecursive (__cronSemaphore__, portMAX_DELAY);
             if (__cronTabEntries__ < CRONTAB_MAX_ENTRIES - 1) {
@@ -226,7 +226,7 @@
     }
     
     // adds new entry into crontab table
-    bool cronTabAdd (char *cronTabLine, bool readFromFile = false) { // parse cronTabLine and then call the function above
+    bool cronTabAdd (const char *cronTabLine, bool readFromFile = false) { // parse cronTabLine and then call the function above
         char second [3]; char minute [3]; char hour [3]; char day [3]; char month [3]; char day_of_week [3]; char cronCommand [65];
         if (sscanf (cronTabLine, "%2s %2s %2s %2s %2s %2s %64s", second, minute, hour, day, month, day_of_week, cronCommand) == 7) {
             int8_t se = strcmp (second, "*")      ? atoi (second)      : ANY; if ((!se && *second != '0')      || se > 59)  { 
@@ -289,7 +289,7 @@
     }
     
     // deletes entry(es) from crontam table
-    int cronTabDel (char *cronCommand) { // returns the number of cron commands being deleted
+    int cronTabDel (const char *cronCommand) { // returns the number of cron commands being deleted
         int cnt = 0;
         xSemaphoreTakeRecursive (__cronSemaphore__, portMAX_DELAY);
             int i = 0;

@@ -2,14 +2,14 @@
 
     httpServer.hpp 
   
-    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
   
     HTTP server can serve some HTTP requests itself (for example content of .html and other files) but the calling program
     can also provide its own httpRequestHandlerCallback function. Cookies and page redirection are supported. There is also
     a small "database" to keep valid web session tokens in order to support web login. Text and binary WebSocket straming is
     also supported.
   
-    August 12, 2023, Bojan Jurca
+    December 25, 2023, Bojan Jurca
 
     Nomenclature used here for easier understaning of the code:
 
@@ -93,17 +93,31 @@
 
     // ----- TUNNING PARAMETERS -----
 
-    #define HTTP_SERVER_STACK_SIZE 2 * 1024                     // TCP listener
-    #define HTTP_CONNECTION_STACK_SIZE 12 * 1024                // TCP connection
+    #ifndef HTTP_CONNECTION_STACK_SIZE
+        #define HTTP_CONNECTION_STACK_SIZE 8 * 1024             // TCP connections' stack size
+    #endif
     // #define HTTP_SERVER_CORE 1 // 1 or 0                     // #define HTTP_SERVER_CORE if you want httpServer to run on specific core
     #define HTTP_BUFFER_SIZE 1500                               // reading and temporary keeping HTTP requests, buffer for constructing HTTP reply, MTU = 1500
-    #define HTTP_CONNECTION_TIME_OUT 1500                       // 1500 ms = 1,5 sec for HTTP requests
+    #define HTTP_CONNECTION_TIME_OUT 3000                       // 3000 ms for HTTP requests, 0 for infinite
     #define HTTP_REPLY_STATUS_MAX_LENGTH 32                     // only first 3 characters are important
     #define HTTP_WS_FRAME_MAX_SIZE 1500                         // WebSocket send frame size and also read frame size (there are 2 buffers), MTU = 1500
-    #define HTTP_CONNECTION_WS_TIME_OUT 300000                  // 300000 ms = 5 min for WebSocket connections
-    #define WEB_SESSION_TIME_OUT 300000                         // 300000 ms = 5 min for web sessions
-    #define MAX_WEB_SESSION_TOKENS 5                            // maximum number of simultaneously valid web sessin tokens
-    #define WEB_SESSION_TOKENS_ADDITIONAL_INFORMATION_SIZE 128  // maximum number of simultaneously valid web sessin tokens
+    #define HTTP_CONNECTION_WS_TIME_OUT 300000                  // 300000 ms = 5 min for WebSocket connections, 0 for infinite
+    // #define WEB_SESSIONS                                        // comment this line out if you won't use web sessions
+    #ifdef WEB_SESSIONS
+        #define WEB_SESSION_TIME_OUT 300                        // 300 s = 5 min, 0 for infinite
+
+        #include "persistentKeyValuePairs.h"
+
+        typedef fsString<64> webSessionToken_t;
+        struct webSessionTokenInformation_t {
+            time_t expires; // web session toke expiration time in GMT
+            fsString<64> userName; // USER_PASSWORD_MAX_LENGTH = 64
+        };
+
+        persistentKeyValuePairs<webSessionToken_t, webSessionTokenInformation_t> webSessionTokenDatabase; // a database containing valid web session tokens
+
+    #endif
+
     // please note that the limit for getHttpRequestHeaderField and getHttpRequestCookie return values are defined by string #definition in fsString.h
 
     #define reply400 "HTTP/1.0 400 Bad request\r\nConnection: close\r\nContent-Length:34\r\n\r\nFormat of HTTP request is invalid."
@@ -167,6 +181,9 @@
     // control httpServer critical sections
     static SemaphoreHandle_t __httpServerSemaphore__ = xSemaphoreCreateMutex (); 
 
+    // log what is going on within httpServer
+    byte httpServerConcurentTasks = 0;
+    byte httpServerConcurentTasksHighWatermark = 0;
 
     // ----- WebSocket class -----
   
@@ -212,7 +229,7 @@
                             // compose websocket accept response and send it back to the client
                             char buffer  [255]; // 255 will do
                             sprintf (buffer, "HTTP/1.1 101 Switching Protocols \r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: %s\r\n\r\n", s3);
-                            if (sendAll (connectionSocket, buffer, strlen (buffer), HTTP_CONNECTION_WS_TIME_OUT) == strlen (buffer)) {
+                            if (sendAll (connectionSocket, buffer, HTTP_CONNECTION_WS_TIME_OUT) == strlen (buffer)) {
                               __state__ = RUNNING;
                             }
                           } else { // |key| > 24
@@ -527,15 +544,15 @@
         httpConnection ( // the following parameters will be handeled by httpConnection instance
                          int connectionSocket,
                          String (*httpRequestHandlerCallback) (char *httpRequest, httpConnection *hcn), // httpRequestHandler callback function provided by calling program
-                         void (*wsRequestHandler) (char *wsRequest, WebSocket *webSocket),              // httpRequestHandler callback function provided by calling program      
-                         char *clientIP, 
+                         void (*wsRequestHandlerCallback) (char *wsRequest, WebSocket *webSocket),      // wsRequestHandler callback function provided by calling program      
+                         const char *clientIP, 
                          char *serverIP,
-                         char *httpServerHomeDirectory = (char *) "/var/www/html"
+                         const char *httpServerHomeDirectory = (char *) "/var/www/html"
                        )  {
                               // create a local copy of parameters for later use
                               __connectionSocket__ = connectionSocket;
                               __httpRequestHandlerCallback__ = httpRequestHandlerCallback;
-                              __wsRequestHandler__ = wsRequestHandler;
+                              __wsRequestHandlerCallback__ = wsRequestHandlerCallback;
                               strncpy (__clientIP__, clientIP, sizeof (__clientIP__)); __clientIP__ [sizeof (__clientIP__) - 1] = 0; // copy client's IP since connection may live longer than the server that created it
                               strncpy (__serverIP__, serverIP, sizeof (__serverIP__)); __serverIP__ [sizeof (__serverIP__) - 1] = 0; // copy server's IP since connection may live longer than the server that created it
                               #ifdef __FILE_SYSTEM__
@@ -549,26 +566,40 @@
                                   if (__httpServerHomeDirectory__ [strlen (__httpServerHomeDirectory__) - 1] != '/') strcat (__httpServerHomeDirectory__, "/"); // __httpServerHomeDirectory__ always ends with /
                               #endif
 
-                              // handle connection in its own thread (task)       
+                              // handle connection in its own thread (task)
+                              // if running out of memory, creation of the new task would fail, so try multiple times before reporting an error
                               #define tskNORMAL_PRIORITY 1
-                              #ifdef HTTP_SERVER_CORE
-                                  BaseType_t taskCreated = xTaskCreatePinnedToCore (__connectionTask__, "httpConnection", HTTP_CONNECTION_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL, HTTP_SERVER_CORE);
-                              #else
-                                  BaseType_t taskCreated = xTaskCreate (__connectionTask__, "httpConnection", HTTP_CONNECTION_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL);
-                              #endif
-                              if (pdPASS != taskCreated) {
-                                  dmesg ("[httpConnection] xTaskCreate error");
-                              } else {
-                                  __state__ = RUNNING;
+                              for (int i = 0; i < 30; i++) { // try 3 s
+                                  #ifdef HTTP_SERVER_CORE
+                                      BaseType_t taskCreated = xTaskCreatePinnedToCore (__connectionTask__, "httpConnection", HTTP_CONNECTION_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL, HTTP_SERVER_CORE);
+                                  #else
+                                      BaseType_t taskCreated = xTaskCreate (__connectionTask__, "httpConnection", HTTP_CONNECTION_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL);
+                                  #endif
+                                  if (pdPASS != taskCreated) {
+                                      delay (100);
+                                  } else {
+                                      __state__ = RUNNING;
+
+                                      xSemaphoreTake (__httpServerSemaphore__, portMAX_DELAY);
+                                          httpServerConcurentTasks++;
+                                          if (httpServerConcurentTasks > httpServerConcurentTasksHighWatermark)
+                                              httpServerConcurentTasksHighWatermark = httpServerConcurentTasks;
+                                      xSemaphoreGive (__httpServerSemaphore__);
+
+                                      return; // success
+                                  }
                               }
+                              dmesg ("[httpConnection] xTaskCreate error"); // failure
                           }
 
         ~httpConnection ()  {
                               // close connection socket
                               int connectionSocket;
                               xSemaphoreTake (__httpServerSemaphore__, portMAX_DELAY);
-                                connectionSocket = __connectionSocket__;
-                                __connectionSocket__ = -1;
+                                  connectionSocket = __connectionSocket__;
+                                  __connectionSocket__ = -1;
+                                
+                                  httpServerConcurentTasks--;
                               xSemaphoreGive (__httpServerSemaphore__);
                               if (connectionSocket > -1) close (connectionSocket);
                             }
@@ -591,7 +622,7 @@
           return "";
         }
 
-        string getHttpRequestCookie (char *cookieName) { // cookies are passed from browser to http server in "cookie" HTTP header field
+        string getHttpRequestCookie (const char *cookieName) { // cookies are passed from browser to http server in "cookie" HTTP header field
           char *p = stristr (__httpRequestAndReplyBuffer__, (char *) "\nCookie:"); // find cookie field name in HTTP header          
           if (p) {
             p = strstr (p, cookieName); // find cookie name in HTTP header
@@ -604,7 +635,7 @@
           return "";
         }
 
-        void setHttpReplyStatus (char *status) { strncpy (__httpReplyStatus__, status, HTTP_REPLY_STATUS_MAX_LENGTH); __httpReplyStatus__ [HTTP_REPLY_STATUS_MAX_LENGTH - 1] = 0; }
+        void setHttpReplyStatus (const char *status) { strncpy (__httpReplyStatus__, status, HTTP_REPLY_STATUS_MAX_LENGTH); __httpReplyStatus__ [HTTP_REPLY_STATUS_MAX_LENGTH - 1] = 0; }
         
         void setHttpReplyHeaderField (string fieldName, string fieldValue) { 
             __httpReplyHeader__ += fieldName;
@@ -634,14 +665,63 @@
 
         // combination of clientIP and User-Agent HTTP header field - used for calculation of web session token
         String getClientSpecificInformation () { return String (__clientIP__) + getHttpRequestHeaderField ((char *) "User-Agent"); }
-                                                                                                                
+
+
+        // support for web sessions
+        #ifdef WEB_SESSIONS
+
+            // calculates new token from random number and client specific information
+            webSessionToken_t newWebSessionToken (char *userName, time_t expires) { 
+                // generate new token
+                static int tokenCounter = 0;
+                webSessionToken_t webSessionToken;
+                sha256 (webSessionToken.c_str (), 64 + 1, (char *) (String (tokenCounter ++) + String (esp_random ()) + String (__clientIP__) + getHttpRequestHeaderField ((char *) "User-Agent")).c_str ());
+                
+                // insert the new token into token database together with information associated with it
+                persistentKeyValuePairs<webSessionToken_t, webSessionTokenInformation_t>::errorCode e;
+                webSessionTokenDatabase.Insert (webSessionToken, {expires, userName}); // if Insert fails, the token will just not work
+                if (e != webSessionTokenDatabase.OK) dmesg ("[httpConnection] webSessionTokenDatabase.Insert error: ", e); 
+                              
+                return webSessionToken;
+            }
+
+            // check validity of a token in webSessionTokenDatabase
+            fsString<64> getUserNameFromToken (webSessionToken_t& webSessionToken) {
+                // find token in the webSessionTokenDatabase
+                webSessionTokenInformation_t webSessionTokenInformation;
+                persistentKeyValuePairs<webSessionToken_t, webSessionTokenInformation_t>::errorCode e;
+                e = webSessionTokenDatabase.FindValue (webSessionToken, &webSessionTokenInformation);
+                switch (e) {
+                    case webSessionTokenDatabase.OK:        if ((time () && webSessionTokenInformation.expires <= time ()) || webSessionTokenInformation.expires == 0)  
+                                                                return "";
+                                                            else
+                                                                return webSessionTokenInformation.userName;
+                    case webSessionTokenDatabase.NOT_FOUND: return "";
+                    default:                                dmesg ("[httpConnection] webSessionTokenDatabase.FindValue error: ", e); 
+                                                            return "";
+                }
+            }
+
+            // updates the token in webSessionTokenDatabase
+            bool updateWebSessionToken (webSessionToken_t& webSessionToken, fsString<64>& userName, time_t expires) {
+                return (webSessionTokenDatabase.Update (webSessionToken, {expires, userName}) == webSessionTokenDatabase.OK);
+            }
+
+            // deletes the token from webSessionTokenDatabase
+            bool deleteWebSessionToken (webSessionToken_t& webSessionToken) {
+                return (webSessionTokenDatabase.Delete (webSessionToken) == webSessionTokenDatabase.OK);
+            }
+
+        #endif
+
+                                                                                                  
       private:
 
         STATE_TYPE __state__ = NOT_RUNNING;
     
         int __connectionSocket__ = -1;
         String (* __httpRequestHandlerCallback__) (char *httpRequest, httpConnection *hcn) = NULL;
-        void (* __wsRequestHandler__) (char *wsRequest, WebSocket *webSocket) = NULL;        
+        void (* __wsRequestHandlerCallback__) (char *wsRequest, WebSocket *webSocket) = NULL;        
         char __clientIP__ [46] = "";
         char __serverIP__ [46] = "";
 
@@ -660,7 +740,6 @@
           // get "this" pointer
           httpConnection *ths = (httpConnection *) pvParameters;           
           { // code block
-                        
             // READ HTTP REQUEST READ HTTP REQUEST READ HTTP REQUEST READ HTTP REQUEST READ HTTP REQUEST READ HTTP REQUEST READ HTTP REQUEST READ HTTP REQUEST 
             
             int receivedTotal = 0;
@@ -677,7 +756,7 @@
               endOfHttpRequest = strstr (ths->__httpRequestAndReplyBuffer__, "\r\n\r\n"); 
               if (!endOfHttpRequest) {
                   dmesg ("[httpConnection] __httpRequestAndReplyBuffer__ too small for HTTP request");
-                  sendAll (ths->__connectionSocket__, (char *) reply507, HTTP_CONNECTION_TIME_OUT);
+                  sendAll (ths->__connectionSocket__, reply507, HTTP_CONNECTION_TIME_OUT);
                   goto endOfConnection;
               }
 
@@ -687,8 +766,8 @@
                 if (stristr (ths->__httpRequestAndReplyBuffer__, (char *) "UPGRADE: WEBSOCKET")) {
                   WebSocket webSocket (ths->__connectionSocket__, ths->__httpRequestAndReplyBuffer__, ths->__clientIP__, ths->__serverIP__); 
                   if (webSocket.state () == WebSocket::RUNNING) {
-                    if (ths->__wsRequestHandler__) ths->__wsRequestHandler__ (ths->__httpRequestAndReplyBuffer__, &webSocket);
-                    else dmesg ("[httpConnection]", " wsRequestHandler was not provided to handle WebSocket");
+                    if (ths->__wsRequestHandlerCallback__) ths->__wsRequestHandlerCallback__ (ths->__httpRequestAndReplyBuffer__, &webSocket);
+                    else dmesg ("[httpConnection]", " wsRequestHandlerCallback was not provided to handle WebSocket");
                   }
                   goto endOfConnection;
                 }
@@ -699,7 +778,7 @@
                 if (ths->__httpRequestHandlerCallback__) {
                     httpReplyContent = ths->__httpRequestHandlerCallback__ (ths->__httpRequestAndReplyBuffer__, ths);
                     if (!httpReplyContent) { // out of memory
-                        sendAll (ths->__connectionSocket__, (char *) reply503, strlen (reply503), HTTP_CONNECTION_TIME_OUT);
+                        sendAll (ths->__connectionSocket__, reply503, HTTP_CONNECTION_TIME_OUT);
                         goto endOfConnection;
                     }
                 }
@@ -715,7 +794,7 @@
                   }
                   if (ths->__httpReplyHeader__.error ()) {
                       dmesg ("[httpConnection] __httpReplyHeader__ too small for HTTP reply header");
-                      sendAll (ths->__connectionSocket__, (char *) reply507, HTTP_CONNECTION_TIME_OUT);
+                      sendAll (ths->__connectionSocket__, reply507, HTTP_CONNECTION_TIME_OUT);
                       goto endOfConnection;
                   }
                   // construct the whole HTTP reply from differrent pieces and send it to client (browser)
@@ -751,7 +830,7 @@
                   int bytesSent = bytesToCopyThisTime; // already sent
                   while (bytesSent < httpReplyContentLen) {
                     bytesToCopyThisTime = min (httpReplyContentLen - bytesSent, (unsigned long) 1500); // MTU = 1500, TCP_SND_BUF = 5744 (a maximum block size that ESP32 can send)
-                    if (sendAll (ths->__connectionSocket__, (char *) httpReplyContent.c_str () + bytesSent, bytesToCopyThisTime, HTTP_CONNECTION_TIME_OUT) <= 0) {
+                    if (sendAll (ths->__connectionSocket__, httpReplyContent.c_str () + bytesSent, bytesToCopyThisTime, HTTP_CONNECTION_TIME_OUT) <= 0) {
                       dmesg ("[httpConnection] send error: ", errno, strerror (errno));
                       goto endOfConnection;
                     }                    
@@ -773,7 +852,7 @@
                         // get file name from HTTP request
                         string fileName (ths->__httpRequestAndReplyBuffer__.c_str () + 4);
                         if (fileName == "" || fileName == "/") fileName = "/index.html";
-                        fileName = string (ths->__httpServerHomeDirectory__) + fileName; // __httpServerHomeDirectory__ always ends with /
+                        fileName = string (ths->__httpServerHomeDirectory__) + (fileName.c_str () + 1); // __httpServerHomeDirectory__ always ends with /
 
                         // if Content-type was not provided during __httpRequestHandlerCallback__ try guessing what it is
                         if (!stristr ((char *) ths->__httpReplyHeader__.c_str (), (char *) "CONTENT-TYPE")) { 
@@ -792,7 +871,16 @@
                           else if (fileName.endsWith ((char *) ".txt"))                                         ths->setHttpReplyHeaderField ("Content-Type", "text/plain");
                           // ... add more if needed but Contet-Type can often be omitted without problems ...
                         }
-                  
+
+                        // seving files works better if served one at a time
+                        if (HTTP_CONNECTION_TIME_OUT == 0) {
+                            xSemaphoreTake (__httpServerSemaphore__, portMAX_DELAY);
+                        } else {
+                            if (xSemaphoreTake (__httpServerSemaphore__, pdMS_TO_TICKS (HTTP_CONNECTION_TIME_OUT)) != pdTRUE) {
+                                sendAll (ths->__connectionSocket__, reply503, HTTP_CONNECTION_TIME_OUT);
+                                goto endOfConnection;
+                            }
+                        }
                         File f = fileSystem.open (fileName, "r", false);           
                         if (f) {
                           if (!f.isDirectory ()) {
@@ -801,11 +889,12 @@
 
                             if (ths->__httpReplyHeader__.error ()) {
                                 dmesg ("[httpConnection] __httpReplyHeader__ too small for HTTP reply header");
-                                sendAll (ths->__connectionSocket__, (char *) reply507, HTTP_CONNECTION_TIME_OUT);
+                                sendAll (ths->__connectionSocket__, reply507, HTTP_CONNECTION_TIME_OUT);
+                                xSemaphoreGive (__httpServerSemaphore__);
                                 goto endOfConnection;
                             }
                             // construct the whole HTTP reply from differrent pieces and send it to client (browser)
-                            // if the reply is short enough send it in one block, 
+                            // if the reply is short enough send it in one block,   
                             // if not send header first and then the content, so we won't have to move hughe blocks of data
                             unsigned long httpReplyContentLen = f.size ();
 
@@ -830,10 +919,12 @@
 
                             int bytesToReadThisTime = min (httpReplyContentLen, (unsigned long) HTTP_BUFFER_SIZE - httpReplyHeaderLen); 
                             int bytesReadThisTime = f.read ((uint8_t *) &ths->__httpRequestAndReplyBuffer__ [httpReplyHeaderLen], (unsigned long) bytesToReadThisTime);
+                            // delay (1); // yield ();
                             ths->__httpRequestAndReplyBuffer__ [HTTP_BUFFER_SIZE] = 0;
                             if (!bytesToReadThisTime || sendAll (ths->__connectionSocket__, ths->__httpRequestAndReplyBuffer__, httpReplyHeaderLen + bytesReadThisTime, HTTP_CONNECTION_TIME_OUT) <= 0) {
-                              dmesg ("[httpConnection] read-send error: ", errno, strerror (errno));
+                              dmesg ("[httpConnection] read-send error (1): ", errno, strerror (errno));
                               f.close ();
+                              xSemaphoreGive (__httpServerSemaphore__);
                               goto endOfConnection;
                             }
                             // DEBUG: Serial.printf ("first packet from the file: %i bytes\n|%s|\n\n", httpReplyHeaderLen + bytesReadThisTime, ths->__httpRequestAndReplyBuffer__);
@@ -841,9 +932,11 @@
                             while (bytesSent < httpReplyContentLen) {
                               bytesToReadThisTime = min (httpReplyContentLen - bytesSent, (unsigned long) HTTP_BUFFER_SIZE);
                               bytesReadThisTime = f.read ((uint8_t *) &ths->__httpRequestAndReplyBuffer__ [0], (unsigned long) bytesToReadThisTime);
+                              delay (20); // yield (); // WiFi STAtion sometimes disconnects at heavy load - maybe giving it some time would make things better? 
                               if (!bytesToReadThisTime || sendAll (ths->__connectionSocket__, ths->__httpRequestAndReplyBuffer__, bytesReadThisTime, HTTP_CONNECTION_TIME_OUT) <= 0) {
-                                dmesg ("[httpConnection] read-send error: ", errno, strerror (errno));
+                                dmesg ("[httpConnection] read-send error (2): ", errno, strerror (errno));
                                 f.close ();
+                                xSemaphoreGive (__httpServerSemaphore__);
                                 goto endOfConnection;
                               }                    
                               // DEBUG: Serial.printf ("next packet from the file: %i bytes\n", bytesReadThisTime);
@@ -852,10 +945,12 @@
                             // DEBUG: Serial.printf ("[httpConnection] reply length: %i\n", bytesSent);
                             // HTTP reply sent
                             f.close ();
+                            xSemaphoreGive (__httpServerSemaphore__);
                             goto nextHttpRequest;
                           } // if file is a file, not a directory
                           f.close ();
                         } // if file is open
+                        xSemaphoreGive (__httpServerSemaphore__);
                       }   
                     }          
                   }
@@ -863,7 +958,7 @@
   
                 // SEND 404 HTTP REPLY SEND 404 HTTP REPLY SEND 404 HTTP REPLY SEND 404 HTTP REPLY SEND 404 HTTP REPLY SEND 404 HTTP REPLY
   
-                if (sendAll (ths->__connectionSocket__, (char *) reply404, strlen (reply404), HTTP_CONNECTION_TIME_OUT) <= 0) {
+                if (sendAll (ths->__connectionSocket__, reply404, HTTP_CONNECTION_TIME_OUT) <= 0) {
                   dmesg ("[httpConnection] send error: ", errno, strerror (errno));
                   goto endOfConnection;
                 }
@@ -872,12 +967,12 @@
               // if we are running out of ESP32's resources we won't try to keep the connection alive, this would slow down the server a bit but it would let still it handle requests from different clients
               if (ths->__connectionSocket__ >= LWIP_SOCKET_OFFSET + MEMP_NUM_NETCONN - 2) { // running out of sockets
                   // DEBUG: Serial.printf ("[httpServer] running out of sockets\n");
-                  dmesg ("[httpServer] running out of sockets");
+                  // dmesg ("[httpServer] warning: running out of sockets");
                   goto endOfConnection; // running out of sockets
               }
               if (heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT) < HTTP_CONNECTION_STACK_SIZE) { // there is not a memory block large enough evailable to start a new task that would handle the connection
                   // DEBUG: Serial.printf ("[httpServer] running out of (large enough) memory blocks\n");              
-                  dmesg ("[httpServer] running out of (large enough) memory blocks");
+                  // dmesg ("[httpServer] warning: running out of (large enough) memory blocks");
                   goto endOfConnection; 
               }
 
@@ -898,6 +993,8 @@
           } // code block
 
         endOfConnection:  
+          // DEBUG: Serial.printf ("[httpConnection] stack high-water mark: %lu\n", uxTaskGetStackHighWaterMark (NULL));
+
           // all variables are freed now, unload the instance and stop the task (in this order)
           delete ths;
           vTaskDelete (NULL); // it is connection's responsibility to close itself
@@ -922,13 +1019,13 @@
         STATE_TYPE state () { return __state__; }
     
         httpServer ( // the following parameters will be pased to each httpConnection instance
-                     String (*httpRequestHandlerCallback) (char *httpRequest, httpConnection *hcn), // httpRequestHandler callback function provided by calling program
-                     void (*wsRequestHandler) (char *wsRequest, WebSocket *webSocket),              // httpRequestHandler callback function provided by calling program      
+                     String (*httpRequestHandlerCallback) (char *httpRequest, httpConnection *hcn) = NULL,  // httpRequestHandler callback function provided by calling program
+                     void (*wsRequestHandlerCallback) (char *wsRequest, WebSocket *webSocket) = NULL,       // wsRequestHandler callback function provided by calling program      
                      // the following parameters will be handeled by httpServer instance
-                     char *serverIP,                                                                // HTTP server IP address, 0.0.0.0 for all available IP addresses
-                     int serverPort,                                                                // HTTP server port
-                     bool (*firewallCallback) (char *connectingIP),                                 // a reference to callback function that will be celled when new connection arrives 
-                     char *httpServerHomeDirectory = (char *) "/var/www/html"
+                     const char *serverIP = "0.0.0.0",                                                      // HTTP server IP address, 0.0.0.0 for all available IP addresses
+                     int serverPort = 80,                                                                   // HTTP server port
+                     bool (*firewallCallback) (char *connectingIP) = NULL,                                  // a reference to callback function that will be celled when new connection arrives 
+                     const char *httpServerHomeDirectory = "/var/www/html"
                    )  { 
                         // create directory structure
                         #ifdef __FILE_SYSTEM__
@@ -938,7 +1035,7 @@
                         #endif
                         // create a local copy of parameters for later use
                         __httpRequestHandlerCallback__ = httpRequestHandlerCallback;
-                        __wsRequestHandler__ = wsRequestHandler;
+                        __wsRequestHandlerCallback__ = wsRequestHandlerCallback;
                         strncpy (__serverIP__, serverIP, sizeof (__serverIP__)); __serverIP__ [sizeof (__serverIP__) - 1] = 0;
                         __serverPort__ = serverPort;
                         __firewallCallback__ = firewallCallback;
@@ -955,9 +1052,9 @@
                         __state__ = STARTING;                        
                         #define tskNORMAL_PRIORITY 1
                         #ifdef HTTP_SERVER_CORE
-                            BaseType_t taskCreated = xTaskCreatePinnedToCore (__listenerTask__, "httpServer", HTTP_SERVER_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL, HTTP_SERVER_CORE);
+                            BaseType_t taskCreated = xTaskCreatePinnedToCore (__listenerTask__, "httpServer", 2 * 1024, this, tskNORMAL_PRIORITY, NULL, HTTP_SERVER_CORE);
                         #else
-                            BaseType_t taskCreated = xTaskCreate (__listenerTask__, "httpServer", HTTP_SERVER_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL);
+                            BaseType_t taskCreated = xTaskCreate (__listenerTask__, "httpServer", 2 * 1024, this, tskNORMAL_PRIORITY, NULL);
                         #endif
                         if (pdPASS != taskCreated) {
                           dmesg ("[httpServer] xTaskCreate error");
@@ -986,7 +1083,7 @@
         STATE_TYPE __state__ = NOT_RUNNING;
 
         String (* __httpRequestHandlerCallback__) (char *httpRequest, httpConnection *hcn) = NULL;
-        void (* __wsRequestHandler__) (char *wsRequest, WebSocket *webSocket) = NULL;
+        void (* __wsRequestHandlerCallback__) (char *wsRequest, WebSocket *webSocket) = NULL;
         char __serverIP__ [46] = "0.0.0.0";
         int __serverPort__ = 80;
         bool (* __firewallCallback__) (char *connectingIP) = NULL;
@@ -1003,6 +1100,46 @@
           {
             // get "this" pointer
             httpServer *ths = (httpServer *) pvParameters;  
+
+            #ifdef WEB_SESSIONS
+                // load database and start database cleaning task
+                xTaskCreate ([] (void *param) { 
+                                                  // load existing tokens
+                                                  persistentKeyValuePairs<webSessionToken_t, webSessionTokenInformation_t>::errorCode e;
+                                                  e = webSessionTokenDatabase.loadData ("/var/www/webSessionTokens.kvp");
+                                                  if (e == webSessionTokenDatabase.OK) {
+                                                      // DEBUG: Serial.printf ("[httpServer] webSessionCleaner: %i tokens loaded at startup\n", webSessionTokenDatabase.size ());
+                                                  } else {
+                                                      dmesg ("[httpServer] webSessionCleaner: webSessionTokenDatabase.loadData error: ", e);
+                                                      dmesg ("[httpServer] webSessionCleaner: Truncating webSessionTokenDatabase");
+                                                      webSessionTokenDatabase.Truncate (); // forget all stored data and try to make it work from the start
+                                                  }
+
+                                                  // periodically delete expired tokens
+                                                  while (true) {
+                                                      webSessionToken_t expiredToken;
+                                                      webSessionTokenInformation_t webSessionTokenInformation;
+                                                      persistentKeyValuePairs<webSessionToken_t, webSessionTokenInformation_t>::errorCode e;
+                                                      for (auto p: webSessionTokenDatabase) {
+                                                          e = webSessionTokenDatabase.FindValue (p.key, &webSessionTokenInformation, p.blockOffset);
+                                                          if (e == webSessionTokenDatabase.OK && time () && webSessionTokenInformation.expires && webSessionTokenInformation.expires <= time ()) {
+                                                              expiredToken = p.key;
+                                                              break;
+                                                          }  else {
+                                                              // DEBUG: Serial.printf ("[httpServer] webSessionCleaner: token is stil valid %s for %i s\n", p.key, webSessionTokenInformation.expires - time ());
+                                                          }
+                                                      }
+                                                      if (expiredToken > "") {
+                                                          // DEBUG: Serial.printf ("[httpServer] webSessionCleaner: deleting expired token %s\n", expiredToken.c_str ());
+                                                          webSessionTokenDatabase.Delete (expiredToken);
+                                                      }
+
+                                                      delay (6000); // repeat every 6 sec
+                                                      // DEBUG: Serial.printf ("[httpServer] webSessionCleaner taks: stack high-water mark: %lu\n", uxTaskGetStackHighWaterMark (NULL));
+                                                  }
+                                              }, 
+                                              "webSessionCleaner", 4 * 1024, NULL, 1, NULL);                
+            #endif            
     
             // start listener
             ths->__listeningSocket__ = socket (PF_INET, SOCK_STREAM, 0);
@@ -1024,7 +1161,7 @@
                   dmesg ("[httpServer] bind error: ", errno, strerror (errno));
                } else {
                  // mark socket as listening socket
-                 if (listen (ths->__listeningSocket__, 8) == -1) {
+                 if (listen (ths->__listeningSocket__, 12) == -1) {
                   dmesg ("[httpServer] listen error: ", errno, strerror (errno));
                  } else {
           
@@ -1037,14 +1174,15 @@
                       int connectingSocket;
                       struct sockaddr_in connectingAddress;
                       socklen_t connectingAddressSize = sizeof (connectingAddress);
+                      // DEBUG: Serial.printf ("[httpServer] listener taks: stack high-water mark: %lu\n", uxTaskGetStackHighWaterMark (NULL));
+                      // while (heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT) < HTTP_CONNECTION_STACK_SIZE) delay (10); // there is no memory block large enough evailable to start a new task that would handle the new connection
                       connectingSocket = accept (ths->__listeningSocket__, (struct sockaddr *) &connectingAddress, &connectingAddressSize);
                       if (connectingSocket == -1) {
                         if (ths->__listeningSocket__ > -1) dmesg ("[httpServer] accept error: ", errno, strerror (errno));
                       } else {
-
                         socketTrafficInformation [ths->__listeningSocket__ - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
 
-                        // prepare network Traffic measurement information
+                        // prepare network Traffic measurement information for connecting socket
                         socketTrafficInformation [connectingSocket - LWIP_SOCKET_OFFSET] = {0, 0, millis (), millis ()};
                         // get client's IP address
                         char clientIP [46]; inet_ntoa_r (connectingAddress.sin_addr, clientIP, sizeof (clientIP)); 
@@ -1062,22 +1200,24 @@
                             close (connectingSocket);
                           } else {
                                 // create httpConnection instence that will handle the connection, then we can lose reference to it - httpConnection will handle the rest
-                                httpConnection *hcp = new (std::nothrow) httpConnection (connectingSocket, ths->__httpRequestHandlerCallback__, ths->__wsRequestHandler__, clientIP, serverIP, ths->__httpServerHomeDirectory__);
+                                httpConnection *hcp = new (std::nothrow) httpConnection (connectingSocket, ths->__httpRequestHandlerCallback__, ths->__wsRequestHandlerCallback__, clientIP, serverIP, ths->__httpServerHomeDirectory__);
                                 if (!hcp) {
                                   // dmesg ("[httpServer] new httpConnection error");
-                                  sendAll (connectingSocket, (char *) reply503, strlen (reply503), HTTP_CONNECTION_TIME_OUT);
+                                  sendAll (connectingSocket, reply503, HTTP_CONNECTION_TIME_OUT);
                                   close (connectingSocket); // normally httpConnection would do this but if it is not created we have to do it here
                                 } else {
                                   if (hcp->state () != httpConnection::RUNNING) {
-                                    sendAll (connectingSocket, (char *) reply503, strlen (reply503), HTTP_CONNECTION_TIME_OUT);
+                                    sendAll (connectingSocket, reply503, HTTP_CONNECTION_TIME_OUT);
                                     delete (hcp); // normally httpConnection would do this but if it is not running we have to do it here
+                                  } else {
+                                    ; // httpConnection is running in its own task and will stop by itself 
                                   }
                                 }
                                                                
                           } // fcntl
                         } // firewall
                       } // accept
-                      
+
                   } // while accepting connections
                   dmesg ("[httpServer] stopped");
           
@@ -1098,108 +1238,5 @@
         }
           
     };
-
-
-    /*  
-       Internal "database" od valid web session tokens  
-    */
-
-    class webSessionToken {  
-      public:
-
-        char *generateToken (httpConnection *hcn) { // calculates new token from random number and client specific information
-          sha256 (__token__, sizeof (__token__), (char *) (String (__randomNumber__) + hcn->getClientSpecificInformation ()).c_str ());
-          __lastActive__ = millis ();
-          return getToken ();
-        }
-
-        bool isTokenValid (httpConnection *hcn) { // checks token validity against client specific information and time-out
-          if (millis () - __lastActive__ >= WEB_SESSION_TIME_OUT) return false; // web session token time-out
-          if (!*__token__) return false; // web  session token not set
-          char token [65];
-          sha256 (token, sizeof (token), (char *) (String (__randomNumber__) + hcn->getClientSpecificInformation ()).c_str ());
-          if (strcmp (__token__, token)) return false;
-          __lastActive__ = millis ();
-          return true;
-        }
-
-        char *getToken () {
-          if (millis () - __lastActive__ >= WEB_SESSION_TIME_OUT) return NULL; // web session token time-out
-          if (!*__token__) return NULL; // web  session token not set
-          return __token__; // valid web session token
-        }
-
-        void deleteToken () { *__token__ = 0; }        
-
-        void setAdditionalInformation (char *additionalInformation) { 
-          __lastActive__ = millis ();
-          strncpy (__additionalInformation__, additionalInformation, sizeof (__additionalInformation__)); __additionalInformation__ [sizeof (__additionalInformation__) - 1] = 0;
-        };
-
-        char *getAdditionalInformation () { 
-          __lastActive__ = millis ();
-          return __additionalInformation__; 
-        };
-
-      private:
-
-        unsigned long __lastActive__;
-        char __token__ [65] = {};
-        long __randomNumber__ = random (2147483647);
-
-        // any additional information connected to token like user name, ...
-        char __additionalInformation__ [WEB_SESSION_TOKENS_ADDITIONAL_INFORMATION_SIZE] = {};
-    };  
-    
-    webSessionToken __webSessionTokens__ [MAX_WEB_SESSION_TOKENS];
-
-    String generateWebSessionToken (httpConnection *hcn) {
-      for (int i = 0; i < MAX_WEB_SESSION_TOKENS; i++) { // find free slot
-        if (!__webSessionTokens__ [i].getToken ()) {
-          return __webSessionTokens__ [i].generateToken (hcn); // success
-        }
-      }
-      return ""; // failure
-    }
-
-    bool isWebSessionTokenValid  (String token, httpConnection *hcn) {
-      for (int i = 0; i < MAX_WEB_SESSION_TOKENS; i++) { // find token
-        if (__webSessionTokens__ [i].getToken () && !strcmp (__webSessionTokens__ [i].getToken (), (char *) token.c_str ())) {
-          return __webSessionTokens__ [i].isTokenValid (hcn); // check validity
-        }
-      }
-      return false; // failure
-    }
-
-    bool deleteWebSessionToken  (String token) {
-      for (int i = 0; i < MAX_WEB_SESSION_TOKENS; i++) { // find token
-        if (__webSessionTokens__ [i].getToken () && !strcmp (__webSessionTokens__ [i].getToken (), (char *) token.c_str ())) {
-          __webSessionTokens__ [i].deleteToken (); 
-          return true; // success
-        }
-      }
-      return false; // failure
-    }
-
-    // any additional information connected to token like user name, ...
-    bool setWebSessionTokenAdditionalInformation  (String token, String additionalInformation) {
-      for (int i = 0; i < MAX_WEB_SESSION_TOKENS; i++) { // find token
-        if (__webSessionTokens__ [i].getToken () && !strcmp (__webSessionTokens__ [i].getToken (), (char *) token.c_str ())) {
-          __webSessionTokens__ [i].setAdditionalInformation ((char *) additionalInformation.c_str ());
-          return true;
-        }
-      }
-      return false; // failure
-    }
-
-    // any additional information connected to token like user name, ...
-    String getWebSessionTokenAdditionalInformation  (String token) {
-      for (int i = 0; i < MAX_WEB_SESSION_TOKENS; i++) { // find token
-        if (__webSessionTokens__ [i].getToken () && !strcmp (__webSessionTokens__ [i].getToken (), (char *) token.c_str ())) {
-          return __webSessionTokens__ [i].getAdditionalInformation (); 
-        }
-      }
-      return ""; // failure
-    }
     
 #endif

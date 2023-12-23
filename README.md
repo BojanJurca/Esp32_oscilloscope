@@ -3,7 +3,7 @@
 
 ## The latest changes
 
-The latest change is only a bug fix (in some cases oscilloscope tasks kept running without releasing the memory).
+The latest changes are support for ESP32-S2, ESP32-S3 and ESP32-C3 boards (beside already supported ESP32, but most of ESP32 boards should also just work). The prefered method for analog sampling still remains the I2S interface, if it exists.
 
 
 **Demo ESP32 oscilloscope is available at [http://jurca.dyn.ts.si/oscilloscope.html](http://jurca.dyn.ts.si/oscilloscope.html).**
@@ -24,8 +24,7 @@ Thanks to [gin66](https://github.com/BojanJurca/Esp32_oscilloscope/issues/19) yo
 You are welcome to modify oscilloscope.html to match your needs, meaning, specify which GPIOs are actually used as digital inputs and which as analog inputs, to make some sense of what signals you are about to monitor.
 
 
-ESP32 oscilloscope was first meant to be just a demonstration of the ESP32_web_ftp_telnet_server_template (https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template) capabilities and is still fully included there, but it seems to be
-better off on its own. Only functionalities necessary for an oscilloscope to work are used here.
+ESP32 oscilloscope was first meant to be just a demonstration of the Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino (https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino) capabilities and is still fully included there, but it seems to be better off on its own. Only functionalities necessary for an oscilloscope to work are used here.
 
 
 ## Setup instructions
@@ -72,4 +71,4 @@ ftp>
 
 ## Things to consider when analogReading GPIOs
 
-ESP32 has two SARs (Successive Approximation Registers) built-in among which only ADC1 (GPIOs: 36, 37, 38, 39, 32, 33, 34, 35) can be used for oscilloscope analogReadings. ADC2 (GPIOs: 4, 0, 2, 15, 13, 12, 14, 27, 25, 26) can perform analogReadings only when WiFi is not working. Since oscilloscope uses WiFi, ADC2 GPIOs are not available at this time.
+ESP32 has two SARs (Successive Approximation Registers) built-in among which only ADC1 (GPIOs 36, 37, 38, 39, 32, 33, 34, 35 on ESP32 board but other boards (S2, S3, ...) have different GPIOs connected to ADC1) can be used for oscilloscope analogReadings. ADC2 (GPIOs 4, 0, 2, 15, 13, 12, 14, 27, 25, 26 on ESP32 board but other boards (S2, S3, ...) have different GPIOs connected to ADC2) can perform analogReadings only when WiFi is not working. Since oscilloscope uses WiFi, ADC2 GPIOs are not available at this time.

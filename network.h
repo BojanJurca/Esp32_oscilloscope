@@ -2,7 +2,7 @@
 
     network.h
 
-    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
 
     network.h reads network configuration from file system and sets both ESP32 network interfaces accordingly
  
@@ -13,7 +13,7 @@
       /etc/dhcpcd.conf                          - modify the code below with your access point IP addresses
       /etc/hostapd/hostapd.conf                 - modify the code below with your access point SSID and password
 
-    June 25, 2023, Bojan Jurca
+    December 25, 2023, Bojan Jurca
 
 */
 
@@ -173,7 +173,7 @@
       }
 
       // returns len which is the number of bytes actually sent or 0 indicatig an error, buf is send in separate blocks of size TCP_SND_BUF (the maximum size that ESP32 can send)
-      int sendAll (int sockfd, char *buf, size_t len, unsigned long timeOut) {
+      int sendAll (int sockfd, const char *buf, size_t len, unsigned long timeOut) {
         size_t sentTotal = 0;
         size_t sentThisTime;
         size_t toSendThisTime;
@@ -203,7 +203,7 @@
         return 0; // never executes
       }
 
-      int sendAll (int sockfd, char *buf, unsigned long timeOut) { return sendAll (sockfd, buf, strlen (buf), timeOut); }
+      int sendAll (int sockfd, const char *buf, unsigned long timeOut) { return sendAll (sockfd, buf, strlen (buf), timeOut); }
 
       int recvAll (int sockfd, char *buf, size_t len, char *endingString, unsigned long timeOut) {
         int receivedTotal = 0;
@@ -648,18 +648,31 @@
                                                     break;
             case SYSTEM_EVENT_AP_PROBEREQRECVED:    break;
             case SYSTEM_EVENT_GOT_IP6:              break;
-            /*
-            case SYSTEM_EVENT_ETH_START:            dmesg ("[network] ethernet started");
+            case SYSTEM_EVENT_ETH_START:            
+                                                    #ifdef __DMESG__
+                                                        dmesg ("[network] ethernet started");
+                                                    #endif
                                                     break;
-            case SYSTEM_EVENT_ETH_STOP:             dmesg ("[network] ethernet stopped");
+            case SYSTEM_EVENT_ETH_STOP:             
+                                                    #ifdef __DMESG__
+                                                        dmesg ("[network] ethernet stopped");
+                                                    #endif
                                                     break;
-            case SYSTEM_EVENT_ETH_CONNECTED:        dmesg ("[network] ethernet connected");
+            case SYSTEM_EVENT_ETH_CONNECTED:        
+                                                    #ifdef __DMESG__
+                                                        dmesg ("[network] ethernet connected");
+                                                    #endif
                                                     break;
-            case SYSTEM_EVENT_ETH_DISCONNECTED:     dmesg ("[network] ethernet disconnected");
+            case SYSTEM_EVENT_ETH_DISCONNECTED:     
+                                                    #ifdef __DMESG__
+                                                        dmesg ("[network] ethernet disconnected");
+                                                    #endif
                                                     break;
-            case SYSTEM_EVENT_ETH_GOT_IP:           dmesg ("[network] ethernet got IP address");
-                                                    break;        
-            */
+            case SYSTEM_EVENT_ETH_GOT_IP:           
+                                                    #ifdef __DMESG__
+                                                        dmesg ("[network] ethernet got IP address");
+                                                    #endif
+                                                    break;
             default:                                
                                                     #ifdef __DMESG__
                                                         dmesg ("[network] event: ", event); // shouldn't happen
@@ -1238,7 +1251,7 @@
         #ifdef __DMESG__
             dmesg ("[network][ping] gethostbyname () error: ", h_errno, hstrerror (h_errno));
         #endif
-        if (telnetSocket >= 0) sendAll (telnetSocket, (char *) "gethostbyname () error", strlen ("gethostbyname () error"), 1000); // if called from Telnet server
+        if (telnetSocket >= 0) sendAll (telnetSocket, "gethostbyname () error", strlen ("gethostbyname () error"), 1000); // if called from Telnet server
         return 0;
       }
 
@@ -1249,7 +1262,7 @@
 
       // Create socket
       if ((s = socket (AF_INET, SOCK_RAW, IP_PROTO_ICMP)) < 0) {
-        if (telnetSocket >= 0) sendAll (telnetSocket, (char *) "Error creating socket.", strlen ("Error creating socket."), 1000); // if called from Telnet server
+        if (telnetSocket >= 0) sendAll (telnetSocket, "Error creating socket.", strlen ("Error creating socket."), 1000); // if called from Telnet server
         return 0;
       }
       
@@ -1264,7 +1277,7 @@
       
       if (setsockopt (s, SOL_SOCKET, SO_RCVTIMEO, &tOut, sizeof (tOut)) < 0) {
         closesocket (s);
-        if (telnetSocket >= 0) sendAll (telnetSocket, (char *) "Error setting socket options.", strlen ("Error setting socket options."), 1000); // dispalys intermediate result if called from tlnet server (telnetSocket > 0)
+        if (telnetSocket >= 0) sendAll (telnetSocket, "Error setting socket options.", strlen ("Error setting socket options."), 1000); // dispalys intermediate result if called from tlnet server (telnetSocket > 0)
         return 0;
       }
       

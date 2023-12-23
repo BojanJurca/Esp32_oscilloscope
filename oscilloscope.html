@@ -89,11 +89,11 @@
 
     <script type='text/javascript'>
 
-      // DEFINE VALID DIGITAL INPUT GPIOs HERE OR LEAVE EMPTY STRING FOR ALL (note that validAnalogInputs will also prevent digitalReading of listed GPIOs)
-      var validDigitalInputs = '';
+			// LIST INVALID DIGITAL INPUT GPIOs HERE (without spaces)
+			var invalidDigitalInputs = ''; // this is just an example, it really depends on your project
 
-      // DEFINE VALID ANALOG INPUT GPIOs HERE OR LEAVE EMPTY STRING FOR ALL
-      var validAnalogInputs = '36,37,38,39,32,33,34,35';
+			// LIST INVALID ANALOG INPUT GPIOs HERE (without spaces)
+			var invalidAnalogInputs = '16,17,18'; // this is just an example, it really depends on your project
 
 
       // from: https://www.w3schools.com/js/js_cookies.asp
@@ -128,15 +128,15 @@
     <br><h1>ESP32 oscilloscope</h1>
 
     <div class='d1'>Please customize this file, oscilloscope.html, to suit your project needs. 
-                    Initialize the validDigitalInputs and validAnalogInputs variables with the 
-                    lists of GPIOs that are valid for your project for example.</div>
+                    Initialize the invalidDigitalInputs and invalidAnalogInputs variables with the 
+                    lists of GPIOs that should not be addressed in digital or analog manner.</div>
 
     <hr />
     <div class='d1' style='height: 50px;'>
       <div class='d2'>&nbsp;ESP32 GPIOs <small><small>(1, 2)</small></div>
       <div class='d3' style='color: gray;'>
         <select id='gpio1'>
-                <option value='1'>GPIO  1</option><option value='2' selected='selected'>GPIO  2</option><option value='3'>GPIO  3</option><option value='4'>GPIO  4</option><option value='5'>GPIO  5</option>
+          <option value='0'>GPIO  0</option><option value='1'>GPIO  1</option><option value='2' selected='selected'>GPIO  2</option><option value='3'>GPIO  3</option><option value='4'>GPIO  4</option><option value='5'>GPIO  5</option>
           <option value='12'>GPIO 12</option><option value='13'>GPIO 13</option><option value='14'>GPIO 14</option><option value='15'>GPIO 15</option><option value='16'>GPIO 16</option>
           <option value='17'>GPIO 17</option><option value='18'>GPIO 18</option><option value='19'>GPIO 19</option><option value='21'>GPIO 21</option><option value='22'>GPIO 22</option>
           <option value='23'>GPIO 23</option><option value='25'>GPIO 25</option><option value='26'>GPIO 26</option><option value='27'>GPIO 27</option><option value='32'>GPIO 32</option>
@@ -145,8 +145,8 @@
       </div>
       <div class='d3' style='color: gray;'>
         <select id='gpio2'>
-                <option value='40' selected='selected'></option>
-          <option value='1'>GPIO  1</option><option value='2'>GPIO  2</option><option value='3'>GPIO  3</option><option value='4'>GPIO  4</option><option value='5'>GPIO  5</option>
+                <option value='255' selected='selected'></option>
+          <option value='0'>GPIO  0</option><option value='1'>GPIO  1</option><option value='2'>GPIO  2</option><option value='3'>GPIO  3</option><option value='4'>GPIO  4</option><option value='5'>GPIO  5</option>
           <option value='12'>GPIO 12</option><option value='13'>GPIO 13</option><option value='14'>GPIO 14</option><option value='15'>GPIO 15</option><option value='16'>GPIO 16</option>
           <option value='17'>GPIO 17</option><option value='18'>GPIO 18</option><option value='19'>GPIO 19</option><option value='21'>GPIO 21</option><option value='22'>GPIO 22</option>
           <option value='23'>GPIO 23</option><option value='25'>GPIO 25</option><option value='26'>GPIO 26</option><option value='27'>GPIO 27</option><option value='32'>GPIO 32</option>
@@ -287,15 +287,15 @@
       <div class='d2'>&nbsp;</div>
       <div class='d3'><button class='button button2' id='startButton' onclick="
 
-	      if (document.getElementById ('analog').checked && validAnalogInputs != '' && (',' + validAnalogInputs + ',').indexOf (',' + document.getElementById ('gpio1').value + ',') == -1) { 
-           alert ('Cannot analogRead GPIO ' + document.getElementById ('gpio1').value + '.'); 
-        } else if (document.getElementById ('analog').checked && document.getElementById ('gpio2').value != '40' && validAnalogInputs != '' && (',' + validAnalogInputs + ',').indexOf (',' + document.getElementById ('gpio2').value + ',') == -1) { 
-           alert ('Cannot analogRead GPIO ' + document.getElementById ('gpio2').value + '.'); 
-        } else if (document.getElementById ('digital').checked && (validDigitalInputs != '' && (',' + validDigitalInputs + ',').indexOf (',' + document.getElementById ('gpio1').value + ',') == -1 || (',' + validAnalogInputs + ',').indexOf (',' + document.getElementById ('gpio1').value + ',') > -1)) { 
-           alert ('Cannot digitalRead GPIO ' + document.getElementById ('gpio1').value + '.'); 
-        } else if (document.getElementById ('digital').checked && (document.getElementById ('gpio2').value != '40' && validDigitalInputs != '' && (',' + validDigitalInputs + ',').indexOf (',' + document.getElementById ('gpio2').value + ',') == -1 || (',' + validAnalogInputs + ',').indexOf (',' + document.getElementById ('gpio2').value + ',') > -1)) { 
-           alert ('Cannot digitalRead GPIO ' + document.getElementById ('gpio2').value + '.'); 
-        } else {
+        if (document.getElementById ('analog').checked && (',' + invalidAnalogInputs + ',').indexOf (',' + document.getElementById ('gpio1').value + ',') != -1) { 
+					alert ('Cannot analogRead GPIO ' + document.getElementById ('gpio1').value + '.'); 
+				} else if (document.getElementById ('analog').checked && document.getElementById ('gpio2').value != '255' && (',' + invalidAnalogInputs + ',').indexOf (',' + document.getElementById ('gpio2').value + ',') != -1) { 
+					alert ('Cannot analogRead GPIO ' + document.getElementById ('gpio2').value + '.'); 
+				} else if (document.getElementById ('digital').checked && (',' + invalidDigitalInputs + ',').indexOf (',' + document.getElementById ('gpio1').value + ',') != -1) {
+					alert ('Cannot digitalRead GPIO ' + document.getElementById ('gpio1').value + '.'); 
+				} else if (document.getElementById ('digital').checked && document.getElementById ('gpio2').value != '255' && (',' + invalidDigitalInputs + ',').indexOf (',' + document.getElementById ('gpio2').value + ',') != -1) { 
+					alert ('Cannot digitalRead GPIO ' + document.getElementById ('gpio2').value + '.'); 
+				} else {
 
            saveSettings ();
            drawBackgroundAndCalculateParameters ();
@@ -444,7 +444,7 @@
 						ws.send (endianArray);
 
 						// then send start command with sampling parameters
-						var startCommand = 'start ' + (document.getElementById ('analog').checked ? 'analog' : 'digital') + ' sampling on GPIO ' + document.getElementById ('gpio1').value + (document.getElementById ('gpio2').value == 40 ? '' : ', ' + document.getElementById ('gpio2').value) + ' every ';
+						var startCommand = 'start ' + (document.getElementById ('analog').checked ? 'analog' : 'digital') + ' sampling on GPIO ' + document.getElementById ('gpio1').value + (document.getElementById ('gpio2').value == 255 ? '' : ', ' + document.getElementById ('gpio2').value) + ' every ';
 						switch (document.getElementById ('frequency').value) {
 
 							// real sampling times will be passed back to browser in 16 bit integers - take care that values are <= 2^15 ( = 32767) but it is better to keep it below 5000 to be on the safe side !

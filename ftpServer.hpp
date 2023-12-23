@@ -2,11 +2,11 @@
 
     ftpServer.hpp 
  
-    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
   
     FTP server reads and executes FTP commands. The transfer of files in active in passive mode is supported but some of the commands may 
 
-    August 12, 2023, Bojan Jurca
+    December 25, 2023, Bojan Jurca
 
     Nomenclature used here for easier understaning of the code:
 
@@ -58,12 +58,11 @@
 
     // TUNNING PARAMETERS
 
-    #define FTP_SERVER_STACK_SIZE 2 * 1024                      // TCP listener
     #define FTP_SESSION_STACK_SIZE 8 * 1024                     // TCP connection
-    // #define FTP_SERVER_CORE 1 // 1 or 0                     // #define FTP_SERVER_CORE if you want ftpServer to run on specific core
+    // #define FTP_SERVER_CORE 1 // 1 or 0                      // #define FTP_SERVER_CORE if you want ftpServer to run on specific core
     #define FTP_CMDLINE_BUFFER_SIZE 300                         // reading and temporary keeping FTP command lines
-    #define FTP_CONTROL_CONNECTION_TIME_OUT 300000              // 300000 ms = 5 min 
-    #define FTP_DATA_CONNECTION_TIME_OUT 3000                   // 3000 ms = 3 sec 
+    #define FTP_CONTROL_CONNECTION_TIME_OUT 300000              // 300000 ms = 5 min, 0 for infinite
+    #define FTP_DATA_CONNECTION_TIME_OUT 3000                   // 3000 ms = 3 sec, 0 for infinite 
 
     #define ftpServiceUnavailable (char *) "421 FTP service is currently unavailable\r\n"
 
@@ -90,6 +89,11 @@
 
     // control ftpServer critical sections
     static SemaphoreHandle_t __ftpServerSemaphore__ = xSemaphoreCreateMutex (); 
+
+    // log what is going on within telnetServer
+    byte ftpServerConcurentTasks = 0;
+    byte ftpServerConcurentTasksHighWatermark = 0;
+
 
     // cycle through set of port numbers when FTP server is working in pasive mode
     int __pasiveDataPort__ () {
@@ -133,17 +137,29 @@
                             if (pdPASS != taskCreated) {
                               dmesg ("[ftpControlConnection] xTaskCreate error");
                             } else {
-                              __state__ = RUNNING;           
-                            }
+                                __state__ = RUNNING;
 
+                                xSemaphoreTake (__ftpServerSemaphore__, portMAX_DELAY);
+                                    ftpServerConcurentTasks++;
+                                    if (ftpServerConcurentTasks > ftpServerConcurentTasksHighWatermark)
+                                        ftpServerConcurentTasksHighWatermark = ftpServerConcurentTasks;
+                                xSemaphoreGive (__ftpServerSemaphore__);
+
+                                return; // success                              
+                            }
+                            dmesg ("[ftpConnection] xTaskCreate error"); // failure
                           }
 
         ~ftpControlConnection ()  {
+                                xSemaphoreTake (__ftpServerSemaphore__, portMAX_DELAY);
+                                    ftpServerConcurentTasks--;
+                                xSemaphoreGive (__ftpServerSemaphore__);
+
                                 closeControlConnection ();
                                 closeDataConnection ();
                             }
 
-        bool controlConnectionTimeOut () { return millis () - __lastActive__ >= FTP_CONTROL_CONNECTION_TIME_OUT; }
+        bool controlConnectionTimeOut () { return millis () - __lastActive__ >= FTP_CONTROL_CONNECTION_TIME_OUT && FTP_CONTROL_CONNECTION_TIME_OUT > 0; }
         
         void closeControlConnection () { // both, control and data connection
                                   int connectionSocket;
@@ -183,7 +199,7 @@
 
         // writing output to FTP control connection with error logging (dmesg)
         int sendFtp (char *buf) { 
-            int i = sendAll (__controlConnectionSocket__, buf, strlen (buf), FTP_CONTROL_CONNECTION_TIME_OUT);
+            int i = sendAll (__controlConnectionSocket__, buf, FTP_CONTROL_CONNECTION_TIME_OUT);
             if (i <= 0)
                 dmesg ("[ftpControlConnection] send error: ", errno, strerror (errno));
             return i;
@@ -246,6 +262,7 @@
               }
         // nextFtpCommand:
               receivedTotal = 0; // FTP client does not send another FTP command until it gets a reply from current one, meaning that cmdLine is empty now
+              // DEBUG: Serial.printf ("[ftpConnection] stack high-water mark: %lu\n", uxTaskGetStackHighWaterMark (NULL));
               
             } while (ths->__controlConnectionSocket__ > -1); // while the connection is still opened
 
@@ -490,7 +507,7 @@
           int connectingSocket = -1;
           struct sockaddr_in connectingAddress;
           socklen_t connectingAddressSize = sizeof (connectingAddress);
-          while (connectingSocket == -1 && millis () - lastActive < FTP_DATA_CONNECTION_TIME_OUT) {
+          while (connectingSocket == -1 && millis () - lastActive < FTP_DATA_CONNECTION_TIME_OUT || !FTP_DATA_CONNECTION_TIME_OUT) {
             delay (1);
             connectingSocket = accept (__dataConnectionSocket__, (struct sockaddr *) &connectingAddress, &connectingAddressSize);
           }
@@ -716,9 +733,9 @@
         STATE_TYPE state () { return __state__; }
     
         ftpServer (  // the following parameters will be handeled by ftpServer instance
-                     char *serverIP,                                                                // FTP server IP address, 0.0.0.0 for all available IP addresses
-                     int serverPort,                                                                // FTP server port
-                     bool (*firewallCallback) (char *connectingIP)                                  // a reference to callback function that will be celled when new connection arrives 
+                     const char *serverIP = "0.0.0.0",                                                    // FTP server IP address, 0.0.0.0 for all available IP addresses
+                     int serverPort = 21,                                                                 // FTP server port
+                     bool (*firewallCallback) (char *connectingIP) = NULL                                 // a reference to callback function that will be celled when new connection arrives 
                    )  { 
                         // create a local copy of parameters for later use
                         strncpy (__serverIP__, serverIP, sizeof (__serverIP__)); __serverIP__ [sizeof (__serverIP__) - 1] = 0;
@@ -729,9 +746,9 @@
                         __state__ = STARTING;                        
                         #define tskNORMAL_PRIORITY 1
                         #ifdef FTP_SERVER_CORE
-                            BaseType_t taskCreated = xTaskCreatePinnedToCore (__listenerTask__, "ftpServer", FTP_SERVER_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL, FTP_SERVER_CORE);
+                            BaseType_t taskCreated = xTaskCreatePinnedToCore (__listenerTask__, "ftpServer", 2 * 1024, this, tskNORMAL_PRIORITY, NULL, FTP_SERVER_CORE);
                         #else
-                            BaseType_t taskCreated = xTaskCreate (__listenerTask__, "ftpServer", FTP_SERVER_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL);
+                            BaseType_t taskCreated = xTaskCreate (__listenerTask__, "ftpServer", 2 * 1024, this, tskNORMAL_PRIORITY, NULL);
                         #endif
                         if (pdPASS != taskCreated) {
                           dmesg ("[ftpServer] xTaskCreate error");
@@ -802,6 +819,7 @@
                       int connectingSocket;
                       struct sockaddr_in connectingAddress;
                       socklen_t connectingAddressSize = sizeof (connectingAddress);
+                      // DEBUG: Serial.printf ("[ftpServer] listener taks: stack high-water mark: %lu\n", uxTaskGetStackHighWaterMark (NULL));
                       connectingSocket = accept (ths->__listeningSocket__, (struct sockaddr *) &connectingAddress, &connectingAddressSize);
                       if (connectingSocket == -1) {
                         if (ths->__listeningSocket__ > -1) dmesg ("[ftpServer] accept error: ", errno, strerror (errno));
@@ -833,7 +851,7 @@
                                   close (connectingSocket); // normally ftpControlConnection would do this but if it is not created we have to do it here
                                 } else {
                                   if (fcn->state () != ftpControlConnection::RUNNING) {
-                                    sendAll (connectingSocket, ftpServiceUnavailable, strlen (ftpServiceUnavailable), FTP_CONTROL_CONNECTION_TIME_OUT);
+                                    sendAll (connectingSocket, ftpServiceUnavailable, FTP_CONTROL_CONNECTION_TIME_OUT);
                                     delete (fcn); // normally ftpControlConnection would do this but if it is not running we have to do it here
                                   }
                                 }

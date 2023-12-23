@@ -2,13 +2,13 @@
  
     dmesg_functions.h
 
-    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
 
       - Use dmesg functions to put system messages in circular message queue.
 
       - Use dmesg telnet command to display messages in message queue.
 
-    March 12, 2023, Bojan Jurca
+    December 25, 2023, Bojan Jurca
     
 */
 
@@ -94,19 +94,19 @@
   
     __dmesgType__ __dmesgCircularQueue__ [DMESG_CIRCULAR_QUEUE_LENGTH];
 
-    RTC_DATA_ATTR unsigned int bootCount = 0;
+    // RTC_DATA_ATTR unsigned int bootCount = 0;
 
     bool __initializeDmesgCircularQueue__ () {
         __dmesgCircularQueue__ [0].message = fsString<DMESG_MAX_MESSAGE_LENGTH> ("[ESP32] CPU0 reset reason: ") + resetReason (rtc_get_reset_reason (0));
         __dmesgCircularQueue__ [1].message = fsString<DMESG_MAX_MESSAGE_LENGTH> ("[ESP32] CPU1 reset reason: ") + resetReason (rtc_get_reset_reason (1));
         __dmesgCircularQueue__ [2].message = fsString<DMESG_MAX_MESSAGE_LENGTH> ("[ESP32] wakeup reason: ") + wakeupReason ();
-        __dmesgCircularQueue__ [3].message = fsString<DMESG_MAX_MESSAGE_LENGTH> ("[ESP32] (re)started ") + fsString<DMESG_MAX_MESSAGE_LENGTH> (++ bootCount) + (char *) " times";
+        // __dmesgCircularQueue__ [3].message = fsString<DMESG_MAX_MESSAGE_LENGTH> ("[ESP32] (re)started ") + fsString<DMESG_MAX_MESSAGE_LENGTH> (++ bootCount) + (char *) " times";
         return true;      
     }
     bool __initializedDmesgCircularQueue__ = __initializeDmesgCircularQueue__ ();
   
     byte __dmesgBeginning__ = 0; // first used location
-    byte __dmesgEnd__ = 4;       // the location next to be used
+    byte __dmesgEnd__ = 3; // 4;       // the location next to be used
     static SemaphoreHandle_t __dmesgSemaphore__= xSemaphoreCreateMutex (); 
     
     // adds message to dmesg circular queue
@@ -118,6 +118,7 @@
             __dmesgCircularQueue__ [__dmesgEnd__].message = "";
             __dmesgCircularQueue__ [__dmesgEnd__].message += message1;
             __dmesgCircularQueue__ [__dmesgEnd__].message += message2;
+            // Serial.println (__dmesgCircularQueue__ [__dmesgEnd__].message);
             if ((__dmesgEnd__ = (__dmesgEnd__ + 1) % DMESG_CIRCULAR_QUEUE_LENGTH) == __dmesgBeginning__) __dmesgBeginning__ = (__dmesgBeginning__ + 1) % DMESG_CIRCULAR_QUEUE_LENGTH;
         xSemaphoreGive (__dmesgSemaphore__);
     }
