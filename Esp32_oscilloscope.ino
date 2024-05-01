@@ -17,6 +17,7 @@
 #include <WiFi.h>
 
 #include "servers/std/Cstring.hpp"
+#include "servers/std/Map.hpp"
 #include "servers/std/console.hpp"
 
 #include "Esp32_servers_config.h"
@@ -81,9 +82,24 @@ String telnetCommandHandlerCallback (int argc, char *argv [], telnetConnection *
 
     #define argv0is(X) (argc > 0 && !strcmp (argv[0], X))  
     #define argv1is(X) (argc > 1 && !strcmp (argv[1], X))
-    #define argv2is(X) (argc > 2 && !strcmp (argv[2], X))    
+    #define argv2is(X) (argc > 2 && !strcmp (argv[2], X)) 
 
 
+    // get Telnet session private memory to keep track of the session - this memory will be autmatically freed at the end of Telnet connection
+    oscSharedMemory *pOscSharedMemory = (oscSharedMemory *) tcn->privateMemory;
+
+    if (tcn->privateMemory == NULL) { // if not allocated yet
+        tcn->privateMemory = malloc (sizeof (oscSharedMemory));
+        if (tcn->privateMemory == NULL) // if memory allocation failed
+            return "Out of memory";
+
+        // fill in the default values
+        pOscSharedMemory = (oscSharedMemory *) tcn->privateMemory;
+        pOscSharedMemory->analog = true; // ------------------------ Are we going to read only analog values ???
+    }
+
+
+    // process SCPI commands
     if (argv0is ("*IDN?")) {
         if (argc == 1) {
             #ifdef DEFAULT_AP_SSID
@@ -98,8 +114,11 @@ String telnetCommandHandlerCallback (int argc, char *argv [], telnetConnection *
 
     else if (argv0is ("SARA")) {
         if (argc == 2) {
-            int sara = atoi (argv [1]);
-            if (sara > 0 && sara <= 1000) {
+            float sara;
+            if (sscanf (argv [1], "%fSa/s", sara) == 1 && sara > 0 && sara <= 1000) {
+
+              // sampling time (calculated from sara) sara value would go into    pOscSharedMemory->samplingTime
+
                 return "OK";
             } else {
                 return "Parameter out of range";
@@ -118,16 +137,19 @@ String telnetCommandHandlerCallback (int argc, char *argv [], telnetConnection *
     }
 
     else if (argv0is ("CHAN")) {
-        int chan1, chan2;
+        int gpio1, gpio2;
         switch (argc) {
-            case 3:   chan2 = atoi (argv [2]);
-                      if (chan2 < 0 || chan2 > 39) {
+            case 3:   gpio2 = atoi (argv [2]);
+                      if (gpio2 < 0 || gpio2 > 39) {
                           return String ("Wrong channel ") + argv [2];
                       }
-            case 2:   chan1 = atoi (argv [1]);
-                      if (chan1 < 0 || chan1 > 39) {
+                      pOscSharedMemory->gpio2 = gpio2;
+
+            case 2:   gpio1 = atoi (argv [1]);
+                      if (gpio1 < 0 || gpio1 > 39) {
                           return String ("Wrong channel ") + argv [1];
                       }
+                      pOscSharedMemory->gpio1 = gpio1;
                       break;
             default:  return "Wrong number of parameters";
         }
