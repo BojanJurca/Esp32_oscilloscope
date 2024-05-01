@@ -1,1 +1,958 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<link rel='shortcut icon' type='image/x-icon' sizes='192x192' href='/android-192-osc.png'>
+		<link rel='icon' type='image/png' sizes='192x192' href='/android-192-osc.png'>
+		<link rel='apple-touch-icon' sizes='180x180' href='/apple-180-osc.png'>
+		<meta http-equiv='content-type' content='text/html; charset=utf-8' />
 
+		<title>Esp32_oscilloscope</title>
+
+		<style>
+      		hr {border: 0; border-top: 1px solid lightgray; border-bottom: 1px solid lightgray}
+
+			h1 {font-family: verdana; font-size: 40px; text-align: center}
+
+			/* define grid for controls - we'll use d2 + d3 + d4 = 100% or d2 + d3 + d3 + d5 = 100% */
+			div.d1 {position: relative; width: 100%; height: 54px; font-family: verdana; font-size: 16px; color: hsl(0, 100%, 40%);}
+			div.d2 {position: relative; float: left; width: 40%; font-family: verdana; font-size: 32px; color: gray;}
+			div.d3 {position: relative; float: left; width: 16%; font-family: verdana; font-size: 32px; color: black;}
+			div.d4 {position: relative; float: left; width: 42%; font-family: verdana; font-size: 32px; color: gray;}
+			div.d5 {position: relative; float: left; width: 28%;}
+
+			/* select control */
+			select {padding: 8px 24px; border-radius: 12px; font-size: 26px; color: black; background-color: #eee; -webkit-appearance: none; -moz-appearance: none; box-sizing: border-box; border: 3px solid #ccc; -webkit-transition: 0.5s; transition: 0.5s; outline: none}
+    		select::-ms-expand {display: none}
+	      	select:disabled {background-color: #aaa}
+
+			/* radio button control */
+			.container {display: black; position: relative; padding-left: 222px; margin-bottom: 14px; cursor: pointer; font-family: verdana; font-size: 30px; color: gray; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none}
+      		.container input {position: absolute; opacity: 0; cursor: pointer; height: 0; width: 0}
+      		.checkmark {position: absolute; top: 0; left: 0; height: 46px; width: 46px; background-color: #ddd; border-radius: 50%}
+      		.container:hover input ~ .checkmark {background-color: #ccc}
+      		.container input:checked ~ .checkmark {background-color: hsl(207, 90%, 20%)  }
+      		.checkmark:after {content: ''; position: absolute; display: none}
+      		.container input:checked ~ .checkmark:after {display: block}
+      		.container .checkmark:after {top: 11px; left: 11px; width: 24px; height: 24px; border-radius: 50%; background: white}
+      		.container input:disabled ~ .checkmark {background-color: gray}
+      		.container input:disabled ~ .checkmark {background-color: #aaa}
+
+			/* slider control */
+			input[type='range'] {-webkit-appearance: none; -webkit-tap-highlight-color: rgba(255,255,255,0); width: 94%; height: 36px; margin: 0; border: none; padding: 4px 4px; border-radius: 28px; background: hsl(207, 90%, 30%); outline: none}
+  		    input[type='range']::-moz-range-track {border: inherit; background: transparent}
+     		input[type='range']::-ms-track {border: inherit; color: transparent; background: transparent}
+      		input[type='range']::-ms-fill-lower
+      		input[type='range']::-ms-fill-upper {background: transparent}
+      		input[type='range']::-ms-tooltip {display: none}
+      		input[type='range']::-webkit-slider-thumb {-webkit-appearance: none; width: 46px; height: 36px; border: none; border-radius: 20px; background-color: white}
+      		input[type='range']::-moz-range-thumb {width: 46px; height: 36px; border: none; border-radius: 20px; background-color: white}
+      		input[type='range']::-ms-thumb {width: 46px; height: 36px; border-radius: 20px; border: 0; background-color: white}
+      		input:disabled+.slider {background-color: #aaa}
+      		input[type='range']:disabled {background: #aaa}
+
+			/* switch control */
+			.switch {position: relative; display: inline-block; width: 86px; height: 46px}
+			.slider {position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; -webkit-transition: .4s; transition: .4s}
+			.slider:before {position: absolute; content: ''; height: 38px; width: 38px; left: 4px; bottom: 4px; background-color: white; -webkit-transition: .4s; transition: .4s}
+			input:checked+.slider {background-color: hsl(207, 90%, 30%) }
+			input:focus+.slider {box-shadow: 0 0 1px hsl(207, 90%, 30%) }
+			input:checked+.slider:before {-webkit-transform: translateX(40px); -ms-transform: translateX(40px); transform: translateX(40px)}
+			.switch input {display: none}
+			.slider.round {border-radius: 30px}
+			.slider.round:before {border-radius: 50%}
+			input:disabled+.slider {background-color: #aaa}
+
+			/* button control */
+			.button {padding: 10px 15px; font-size: 26px;text-align: center; cursor: pointer; outline: none; color: white; border: none; border-radius: 12px; box-shadow: 1px 1px #ccc; position: relative; top: 0px; height: 52px}
+		    button:disabled {background-color: #aaa}
+      		button:disabled:hover {background-color: #aaa}
+
+			/* blue button */
+			.button1 {background-color: hsl(207, 90%, 40%) }
+			.button1:hover {background-color: hsl(207, 90%, 30%) }
+			.button1:active {background-color: hsl(207, 90%, 30%); transform: translateY(3px)}
+
+			/* green button */
+			.button2 {background-color: hsl(82, 90%, 25%) }
+			.button2:hover {background-color: hsl(82, 90%, 20%) }
+			.button2:active {background-color: hsl(82, 90%, 20%); transform: translateY(3px)}
+
+			/* red button */
+			.button3 {background-color: hsl(0, 100%, 25%) }
+			.button3:hover {background-color: hsl(0, 100%, 20%) }
+			.button3:active {background-color: hsl(0, 100%, 20%); transform: translateY(3px)}
+
+			a:link, a:visited {color: gray; text-decoration: none; cursor: auto;}
+			a:hover {color: hsl(207, 90%, 40%); cursor:pointer; }
+			a:link:active, a:visited:active {color: gray;}
+
+			/* https://www.w3schools.com/css/tryit.asp?filename=trycss_tooltip */
+			.tooltip {position: relative;display: inline-block;}
+			.tooltip .tooltiptext {
+				visibility: hidden;
+				width: 320px;
+				background-color: rgb(255, 242, 0);
+				color: rgb(64, 64, 64);
+				text-align: left;
+				font-size: 75%;
+				border-radius: 6px;
+				padding: 5px 0;
+  				/* Position the tooltip */
+  				position: absolute;
+  				z-index: 1;
+  				top: -5px;
+  				left: 33%;
+				width: 200%;
+			}
+			.tooltip:hover .tooltiptext {visibility: visible !important;}
+
+		</style>
+
+		<script type='text/javascript'>
+
+			// DEFINE INVALID DIGITAL INPUT GPIOs HERE
+			var invalidDigitalInputs = '25,32,33,34';
+
+			// DEFINE INVALID ANALOG INPUT GPIOs HERE
+			var invalidAnalogInputs = '4,16';
+
+
+			// from: https://www.w3schools.com/js/js_cookies.asp
+			function getCookie(cname) {
+				var name = cname + "=";
+				var decodedCookie = decodeURIComponent(document.cookie);
+				var ca = decodedCookie.split(';');
+				for(var i = 0; i <ca.length; i++) {
+					var c = ca[i];
+					while (c.charAt(0) == ' ') {
+						c = c.substring(1);
+					}
+					if (c.indexOf(name) == 0) {
+						return c.substring(name.length, c.length);
+					}
+				}
+				return "";
+			}
+			// from: https://www.w3schools.com/js/js_cookies.asp
+			function setCookie(cname, cvalue, exdays) {
+				var d = new Date();
+				d.setTime(d.getTime() + (exdays*24*60*60*1000));
+				var expires = "expires="+ d.toUTCString();
+				document.cookie = cname + "=" + cvalue + ";" + expires + ";" // path=/";  we wont use path - cookies are used in this page only
+			}
+		</script>
+
+	</head>
+
+	<body>
+
+		<div class='d2' style='width: 100%;'>&nbsp;<small>Get free source code at: <a href='https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino'>https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino</a></small></div>
+		<br>
+
+		<br><h1>ESP32 oscilloscope</h1>
+
+		<hr />
+		<div class='d1' style='height: 50px;'>
+			<div class='d2'>&nbsp;ESP32 GPIOs <small><small>(1, 2)</small></div>
+			<div class='d3' style='color: gray;'> 
+				<select id='gpio1'>
+				    <option value='1'>GPIO  1</option><option value='2'>GPIO  2</option><option value='3'>GPIO  3</option><option value='4' selected='selected'>GPIO  4</option><option value='5'>GPIO  5</option>
+					<option value='12'>GPIO 12</option><option value='13'>GPIO 13</option><option value='14'>GPIO 14</option><option value='15'>GPIO 15</option><option value='16'>GPIO 16</option>
+					<option value='17'>GPIO 17</option><option value='18'>GPIO 18</option><option value='19'>GPIO 19</option><option value='21'>GPIO 21</option><option value='22'>GPIO 22</option>
+					<option value='23'>GPIO 23</option><option value='25'>GPIO 25</option><option value='26'>GPIO 26</option><option value='27'>GPIO 27</option><option value='32'>GPIO 32</option>
+					<option value='33'>GPIO 33</option><option value='34'>GPIO 34</option><option value='35'>GPIO 35</option><option value='36'>GPIO 36</option><option value='39'>GPIO 39</option>
+				</select>
+			</div>
+			<div class='d3' style='color: gray;'> 
+				<select id='gpio2'>
+				    	<option value='255' selected='selected'></option>
+					<option value='1'>GPIO  1</option><option value='2'>GPIO  2</option><option value='3'>GPIO  3</option><option value='4'>GPIO  4</option><option value='5'>GPIO  5</option>
+					<option value='12'>GPIO 12</option><option value='13'>GPIO 13</option><option value='14'>GPIO 14</option><option value='15'>GPIO 15</option><option value='16'>GPIO 16</option>
+					<option value='17'>GPIO 17</option><option value='18'>GPIO 18</option><option value='19'>GPIO 19</option><option value='21'>GPIO 21</option><option value='22'>GPIO 22</option>
+					<option value='23'>GPIO 23</option><option value='25'>GPIO 25</option><option value='26'>GPIO 26</option><option value='27'>GPIO 27</option><option value='32'>GPIO 32</option>
+					<option value='33'>GPIO 33</option><option value='34'>GPIO 34</option><option value='35'>GPIO 35</option><option value='36'>GPIO 36</option><option value='39'>GPIO 39</option>
+				</select>
+			</div>
+		</div>
+
+		<hr />
+		<div class='d1'>
+			<div class='d2'>&nbsp;digitalRead (GPIO)</div>
+			<div class='d5'>
+				<label class='container tooltip'>&nbsp;<input type='radio' checked='checked' name='radio1' id='digital' onchange="
+					drawBackgroundAndCalculateParameters ();
+					document.getElementById ('sensitivity').disabled = true;
+					document.getElementById ('sensitivityLabel').style.color = 'gray';
+					document.getElementById ('position').disabled = true;
+					document.getElementById ('positionLabel').style.color = 'gray';
+					document.getElementById ('posTreshold').disabled = true;
+					document.getElementById ('posTriggerLabel').style.color = 'gray';
+					document.getElementById ('negTreshold').disabled = true;
+					document.getElementById ('negTriggerLabel').style.color = 'gray';
+				"><span class='checkmark'></span><span class="tooltiptext">Demo ESP32 generates 1 kHz PWM signal on pin 16 which is connected to pin 4 where we can read it:<br><br>&nbsp;&nbsp;ledcSetup (0, 1000, 10);<br>&nbsp;&nbsp;ledcAttachPin (16, 0);<br>&nbsp;&nbsp;ledcWrite (0, 307);</span></label>
+			</div>
+		</div>
+
+		<div class='d1'>
+			<div class='d2'>&nbsp;analogRead (GPIO)</div>
+			<div class='d5'>
+				<label class='container tooltip'>&nbsp;<input type='radio' name='radio1' disabled id='analog' onchange="
+					drawBackgroundAndCalculateParameters ();
+					document.getElementById ('sensitivity').disabled = false;
+					document.getElementById ('sensitivityLabel').style.color = 'black';
+					document.getElementById ('position').disabled = false;
+					document.getElementById ('positionLabel').style.color = 'black';
+					document.getElementById ('posTreshold').disabled = false;
+					document.getElementById ('posTriggerLabel').style.color = 'black';
+					document.getElementById ('negTreshold').disabled = false;
+					document.getElementById ('negTriggerLabel').style.color = 'black';
+				"><span class='checkmark'></span><span class="tooltiptext">Demo ESP32 generates 50 Hz sine signal on pin 25 which is connected to pin 32 where we can read it:<br><br>&nbsp;&nbsp;byte sinus [256];<br><br>&nbsp;&nbsp;void setup () {<br>&nbsp;&nbsp;&nbsp;&nbsp;#define BYTE2RAD 2*PI/256<br>&nbsp;&nbsp;&nbsp;&nbsp;for (int i = 0; i < 256; i++)<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;sinus [i] = sin (i*BYTE2RAD)*100+110;<br>&nbsp;&nbsp;}<br><br>&nbsp;&nbsp;void loop () {<br>&nbsp;&nbsp;&nbsp;&nbsp;delayMicroseconds (55);<br>&nbsp;&nbsp;&nbsp;&nbsp;static byte b = 0;<br>&nbsp;&nbsp;&nbsp;&nbsp;dacWrite (25, sinus [b++]);<br> &nbsp;&nbsp;}</span></label>
+			</div>
+		</div>
+
+		<hr />
+		<div class='d1' id='vSens'>
+			<div class='d2'>&nbsp;Vertical sensitivity</div>
+			<div class='d3' id='sensitivityLabel'>100 %</div>
+			<div class='d5'> 
+				<input id='sensitivity' type='range' min='0' max='5' value='0' step='1' disabled onchange="
+					document.getElementById ('sensitivityLabel').textContent = sensitivityLabelFromSensitivitySlider (this.value);
+					drawBackgroundAndCalculateParameters ();
+				" />
+			</div>
+		</div>
+
+		<div class='d1' is=vPos>
+			<div class='d2'>&nbsp;Vertical position</div>
+			<div class='d3' id='positionLabel'>0</div>
+			<div class='d5'> 
+				<input id='position' type='range' min='0' max='4000' value='0' step='100' disabled onchange="
+					document.getElementById ('positionLabel').textContent = this.value;
+					drawBackgroundAndCalculateParameters ();
+				" />
+			</div>
+		</div>
+
+		<hr />
+		<div class='d1'>
+			<div class='d2'>&nbsp;Trigger on ↗ slope <small><small>(1)</small></small></div>
+			<div class='d3'>
+				<label class='switch'><input type='checkbox' id='posTrigger'><div class='slider round'></div></label>
+			</div>
+			<div class='d3' id='posTriggerLabel'>1000</div>
+			<div class='d5'>
+				<input id='posTreshold' type='range' min='1' max='4095' value='1000' step='1' disabled onchange="
+					document.getElementById ('posTriggerLabel').textContent = 'on ' + this.value;
+					document.getElementById ('posTrigger').checked = true;
+				" />
+			</div>
+		</div>
+		<div class='d1'>
+			<div class='d2'>&nbsp;Trigger on ↘ slope <small><small>(1)</small></small></div>
+			<div class='d3'>
+				<label class='switch'><input type='checkbox' id='negTrigger'><div class='slider round'></div></label>
+			</div>
+			<div class='d3' id='negTriggerLabel'>on 3000</div>
+			<div class='d5'> 
+				<input id='negTreshold' type='range' min='0' max='4094' value='3000' step='1' disabled onchange="
+					document.getElementById('negTriggerLabel').textContent = 'on ' + this.value;
+					document.getElementById('negTrigger').checked = true;
+				" />
+			</div>
+
+		</div>
+
+		<hr />
+		<div class='d1'>
+			<div class='d2'>&nbsp;Horizontal frequency</div>
+			<div class='d3' id='frequencyLabel'>1 KHz</div>
+			<div class='d5'> 
+				<input id='frequency' type='range' min='1' max='17' value='14' step='1' onchange="
+					document.getElementById ('frequencyLabel').textContent = frequencyLabelFromFrequencySlider (this.value);
+					drawBackgroundAndCalculateParameters ();
+				" />
+			</div>
+		</div>
+
+		<hr />
+		<div class='d1'>
+			<div class='d2'>&nbsp;Connect samples</div>
+			<div class='d3'>
+				<label class='switch'><input type='checkbox' checked id='lines' onclick="
+					if (!this.checked) document.getElementById ('markers').checked = true;
+				"><div class='slider round'></div></label>
+			</div>
+		</div>
+		<div class='d1'>
+			<div class='d2'>&nbsp;Mark samples</div>
+			<div class='d3'>
+				<label class='switch'><input type='checkbox' checked id='markers' onclick="
+					if (!this.checked) document.getElementById ('lines').checked = true;
+				"><div class='slider round'></div></label>
+			</div>
+		</div>
+
+		<hr />
+		<div class='d1'>
+			<div class='d2'>&nbsp;Remember settings</div>
+			<div class='d3'>
+				<label class='switch'><input type='checkbox' id='remember' onclick="
+					saveSettings ();
+				"><div class='slider round'></div></label>
+			</div>
+			<div class='d4'>&nbsp;<small><small>(uses cookies)</small></small></div>
+		</div>
+
+		<hr />
+		<div class='d1'>	
+			<div class='d2'>&nbsp;</div>
+			<div class='d3'><button class='button button2' id='startButton' onclick="
+
+				if (document.getElementById ('analog').checked && (',' + invalidAnalogInputs + ',').indexOf (',' + document.getElementById ('gpio1').value + ',') != -1) { 
+					alert ('Cannot analogRead GPIO ' + document.getElementById ('gpio1').value + '.'); 
+				} else if (document.getElementById ('analog').checked && document.getElementById ('gpio2').value != '255' && (',' + invalidAnalogInputs + ',').indexOf (',' + document.getElementById ('gpio2').value + ',') != -1) { 
+					alert ('Cannot analogRead GPIO ' + document.getElementById ('gpio2').value + '.'); 
+				} else if (document.getElementById ('digital').checked && (',' + invalidDigitalInputs + ',').indexOf (',' + document.getElementById ('gpio1').value + ',') != -1) {
+					alert ('Cannot digitalRead GPIO ' + document.getElementById ('gpio1').value + '.'); 
+				} else if (document.getElementById ('digital').checked && document.getElementById ('gpio2').value != '255' && (',' + invalidDigitalInputs + ',').indexOf (',' + document.getElementById ('gpio2').value + ',') != -1) { 
+					alert ('Cannot digitalRead GPIO ' + document.getElementById ('gpio2').value + '.'); 
+				} else {
+
+					saveSettings ();
+					drawBackgroundAndCalculateParameters ();
+					enableDisableControls (true);
+					startOscilloscope ();
+			    }
+
+			">&nbsp;START&nbsp;</button></div>
+			<div class='d4'><button class='button button3' id='stopButton' disabled onclick="
+				stopOscilloscope ();
+				enableDisableControls (false);
+			">&nbsp;STOP&nbsp;</button></div>
+		</div>
+
+		<br>
+
+		<canvas id='oscilloscope' width='968' height='512'></canvas></div>
+
+		<script type='text/javascript'>
+
+			var lastWidth = 0;
+			var currentWidth = document.documentElement.clientWidth; 
+			window.addEventListener ('resize', (e) => {         
+				currentWidth = document.documentElement.clientWidth;
+				// if oscilloscope is not running we can resize and redraw canvas right now
+				if (document.getElementById ('stopButton').disabled == true) drawBackgroundAndCalculateParameters ();
+			});
+			// correct canvas size
+			function resizeCanvas () {
+				if (lastWidth != currentWidth) {
+					document.getElementById ('oscilloscope').width = document.getElementById ('vSens').clientWidth;
+					lastWidth = currentWidth;
+				}
+			}
+			resizeCanvas ();
+
+			// initialization
+
+			function sensitivityLabelFromSensitivitySlider (value) {
+				switch (value) {
+					case '0':	return '100 %'; 
+					case '1':	return '200 %'; 
+					case '2':	return '400 %'; 
+					case '3':	return '1000 %'; 
+					case '4':	return '2000 %'; 
+					case '5':	return '4000 %'; 
+				}
+			}
+
+			function frequencyLabelFromFrequencySlider (value) {
+				switch (value) {
+					case '1':	return '0,1 Hz'; 
+					case '2':	return '0,2 Hz'; 
+					case '3':	return '0,5 Hz'; 
+					case '4':	return '1 Hz'; 
+					case '5':	return '2 Hz'; 
+					case '6':	return '5 Hz'; 
+					case '7':	return '10 Hz'; 
+					case '8':	return '20 Hz'; 
+					case '9':	return '50 Hz'; 
+					case '10':	return '60 Hz'; 
+					case '11':	return '100 Hz'; 
+					case '12':	return '200 Hz'; 
+					case '13':	return '500 Hz'; 
+					case '14':	return '1 KHz'; 
+					case '15':	return '2 KHz'; 
+					case '16':	return '5 KHz'; 
+					case '17':	return '10 KHz';
+				}
+			}
+
+			// DEBUG: console.log (document.cookie);
+
+			var v;
+			v = getCookie ('gpio1'); if (v != '') document.getElementById ('gpio1').value = v;
+			v = getCookie ('gpio2'); if (v != '') document.getElementById ('gpio2').value = v;
+			v = getCookie ('analog'); if (v == 'true') document.getElementById ('analog').checked = true; else document.getElementById ('digital').checked = true;
+			v = getCookie ('sensitivity'); if (v != '') { document.getElementById ('sensitivity').value = v; document.getElementById ('sensitivityLabel').textContent = sensitivityLabelFromSensitivitySlider (v); }
+			v = getCookie ('position'); if (v != '') { document.getElementById ('position').value = v; document.getElementById ('positionLabel').textContent = v;}
+			v = getCookie ('posTrigger'); if (v == 'true') document.getElementById ('posTrigger').checked = true;
+			v = getCookie ('posTreshold'); if (v != '') { document.getElementById ('posTreshold').value = v; document.getElementById ('posTriggerLabel').textContent = 'on ' + v; }
+			v = getCookie ('negTrigger'); if (v == 'true') document.getElementById ('negTrigger').checked = true;
+			v = getCookie ('negTreshold'); if (v != '') { document.getElementById ('negTreshold').value = v; document.getElementById ('negTriggerLabel').textContent = 'on ' + v; }
+			v = getCookie ('frequency'); if (v != '') { document.getElementById ('frequency').value = v; document.getElementById ('frequencyLabel').textContent = frequencyLabelFromFrequencySlider (v); }
+			v = getCookie ('lines'); if (v == 'false') document.getElementById ('lines').checked = false;
+			v = getCookie ('markers'); if (v == 'false') document.getElementById ('markers').checked = false;
+			v = getCookie ('remember'); if (v == 'true') document.getElementById ('remember').checked = true;
+
+			enableDisableControls (false);
+
+			// save settings into cookies
+			function saveSettings () {
+				if (document.getElementById ('remember').checked) {
+					// set cookies for 10 years
+					setCookie ('gpio1', document.getElementById ('gpio1').value, 3652);
+					setCookie ('gpio2', document.getElementById ('gpio2').value, 3652);
+					setCookie ('analog', document.getElementById ('analog').checked, 3652);
+					setCookie ('sensitivity', document.getElementById ('sensitivity').value, 3652);
+					setCookie ('position', document.getElementById ('position').value, 3652);
+					setCookie ('posTrigger', document.getElementById ('posTrigger').checked, 3652);
+					setCookie ('posTreshold', document.getElementById ('posTreshold').value, 3652);
+					setCookie ('negTrigger', document.getElementById ('negTrigger').checked, 3652);
+					setCookie ('negTreshold', document.getElementById ('negTreshold').value, 3652);
+					setCookie ('frequency', document.getElementById ('frequency').value, 3652);
+					setCookie ('lines', document.getElementById ('lines').checked, 3652);
+					setCookie ('markers', document.getElementById ('markers').checked, 3652);
+					setCookie ('remember', document.getElementById ('remember').checked, 3652);
+				} else {
+					// delete cookies
+					setCookie ('gpio1', '', -1);
+					setCookie ('gpio2', '', -1);
+					setCookie ('analog', '', -1);
+					setCookie ('sensitivity', '', -1);
+					setCookie ('position', '', -1);
+					setCookie ('posTrigger', '', -1);
+					setCookie ('posTreshold', '', -1);
+					setCookie ('negTrigger', '', -1);
+					setCookie ('negTreshold', '', -1);
+					setCookie ('frequency', '', -1);
+					setCookie ('lines', '', -1);
+					setCookie ('markers', '', -1);
+					setCookie ('remember', '', -1);
+				}
+			}
+
+			var webSocket = null;
+
+function stopOscilloscope () {
+  if (webSocket != null) {
+	webSocket.send ('stop');
+	webSocket.close ();
+	webSocket = null;
+  }
+}
+
+function startOscilloscope () {
+  stopOscilloscope ();
+
+   if ('WebSocket' in window) {
+	// open a web socket
+	var ws = new WebSocket ('ws://' + self.location.host + '/runOscilloscope');
+	webSocket = ws;
+
+	ws.onopen = function () {
+				  // first send endian identification Uint16 so ESP32 server will know the client architecture
+				  endianArray = new Uint16Array (1); endianArray [0] = 0xAABB;
+				  ws.send (endianArray);
+
+				  // then send start command with sampling parameters
+				  var startCommand = "start " + (document.getElementById ("analog").checked ? "analog" : "digital") + " sampling on GPIO " + document.getElementById ("gpio1").value + (document.getElementById ("gpio2").value == 255 ? "" : ", " + document.getElementById ("gpio2").value) + " every ";
+				  switch (document.getElementById ('frequency').value) {
+
+					  // real sampling times will be passed back to browser in 16 bit integers - take care that values are <= 2^15 ( = 32767) but it is better to keep it below 5000 to be on the safe side !
+
+					  // please note that oscilloscope reader can put in the output buffer  max 746 - 1 (continuous analog signal) samples per screen,
+		//                                                                    max 373 - 1 (1 signal) samples per screen,
+		//                                                                    max 248 - 1 (2 signals) samples per screen
+					  // but the number may be significantly lower if ESP32 can not keep up to required sampling rate
+		// for orientation, oscilloscope can make 1 (1 signal) digital sample roughly every 1.6 us,
+		//                                        1 (2 signals) digital sample roughly every 2.5 us,
+		//                                        1 (1 signal) analog sample roughly every 70 us,
+		//                                        1 (2 signals) analog sample roughly every 150 us,
+		//                                        max continuous analog sampling (1 signal only) frequency = 150 kHz (1 signal every 6,6 us)
+
+					  // 1 sample at a time mode, measurements in ms, actual sampling rate may be lower than specified
+
+					  case '1':	// screen width = 10 s => horizontal frequency = 0,1 Hz, max 370 (2 signals) samples per screen => sampling interval = 27 ms, sampling frequency (2 signals) = 74 Hz
+							  startCommand += "27 ms screen width = 10000 ms";
+							  break;
+					  case '2':	// screen width = 5 s => horizontal frequency = 0,2 Hz, max 357 (2 signals) samples per screen => sampling interval = 14 ms, sampling frequency (2 signals) = 142 Hz
+							  startCommand += "21 ms screen width = 5000 ms";
+							  break; 
+					  case '3':	// screen width = 2 s => horizontal frequency = 0,5 Hz, max 333 (2 signals) samples per screen => sampling interval = 6 ms, sampling frequency (2 signals) = 322 Hz
+							  startCommand += "6 ms screen width = 2000 ms"; 
+							  break;
+
+					  // screen at a time mode from now on
+		// switch to measurements in us from now on, actual sampling rate may be lower than specified
+
+					  case '4':	// screen width = 1 s => horizontal frequency = 1 Hz, 400 samples per screen => sampling interval = 2500 us, sampling frequency (1 signal) = 400 Hz
+							  startCommand += "2500 us screen width = 1000000 us"; 
+							  break;
+					  case '5':	// screen width = 500 ms => horizontal frequency = 2 Hz, 400 samples per screen => sampling interval = 1250 us, sampling frequency (1 signal) = 800 Hz
+							  startCommand += "1250 us screen width = 500000 us";
+							  break;
+		case '6':	// screen width = 200 ms => horizontal frequency = 5 Hz, 400 samples per screen => sampling interval = 500 us, sampling frequency (1 signal) = 2 kHz
+							  startCommand += "500 us screen width = 200000 us";
+							  break;
+		case '7':	// screen width = 100 ms => horizontal frequency = 10 Hz, 400 samples per screen => sampling interval = 250 us, sampling frequency (1 signal) = 4 kHz
+							  startCommand += "250 us screen width = 100000 us";
+							  break;
+					  case '8':	// screen width = 50 ms => horizontal frequency = 20 Hz, 400 samples per screen => sampling interval = 125 us, sampling frequency (1 signal) = 8 kHz
+							  startCommand += "125 us screen width = 50000 us";
+							  break;
+		case '9':	// screen width = 20 ms => horizontal frequency = 50 Hz, 400 samples per screen => sampling interval = 50 us, sampling frequency (1 signal) = 20 kHz
+							  startCommand += "50 us screen width = 20000 us";
+							  break;
+					  case '10':	// screen width = 16 ms => horizontal frequency = 60 Hz, 388 samples per screen => sampling interval = 43 us, sampling frequency (1 signal) = 23,2 kHz
+							startCommand += "43 us screen width = 16667 us"; 
+							  break;
+		case '11':	// screen width = 10 ms => horizontal frequency = 100 Hz, 400 samples per screen => sampling interval = 25 us, sampling frequency (single signal) = 40 kHz
+			startCommand += "25 us screen width = 10000 us";
+							  break;
+					  case '12':	// screen width = 5 ms => horizontal frequency = 200 Hz, 385 samples per screen => sampling interval = 13 us, sampling frequency = 76,9 kHz
+			startCommand += "13 us screen width = 5000 us"; 
+							  break;
+
+		// ESP32 can not sample faster than 150 kHz, we can only reduce the number of samples per screen
+	
+		case '13':	// screen width = 2 ms => horizontal frequency = 500 Hz, 372 samples per screen => sampling interval = 6 us, sampling frequency = 166,6 kHz
+			startCommand += "7 us screen width = 2000 us"; 
+							  break;
+		case '14':	// screen width = 1 ms => horizontal frequency = 1 kHz, 334 samples per screen => sampling interval = 3 us, sampling frequency = 333,3 kHz
+			startCommand += "3 us screen width = 1000 us"; 
+							  break;
+					  case '15':	// screen width = 500 us => horizontal frequency = 2 kHz, 250 samples per screen => sampling interval = 2 us, sampling frequency = 500 kHz
+			startCommand += "2 us screen width = 500 us"; 
+							  break;
+					  case '16':	// screen width = 200 us => horizontal frequency = 5 kHz, 200 samples per screen => sampling interval = 1 us, sampling frequency = 1 MHz
+			startCommand += "1 us screen width = 200 us"; 
+							  break;
+		case '17':	// screen width = 100 us => horizontal frequency = 10 kHz, 100 samples per screen => sampling interval = 1 us, sampling frequency = 1 MHz
+			startCommand += "1 us screen width = 100 us"; 
+							  break;
+				  }
+				  if (document.getElementById ("posTrigger").checked) startCommand += " set positive slope trigger to " + (document.getElementById ("analog").checked ? document.getElementById ("posTreshold").value : 1);
+				  if (document.getElementById ("negTrigger").checked) startCommand += " set negative slope trigger to " + (document.getElementById ("analog").checked ? document.getElementById ("negTreshold").value : 0);
+
+				  ws.send (startCommand);
+	};
+
+	ws.onmessage = function (evt) {
+	  if (typeof (evt.data) === 'string' || evt.data instanceof String) { // UTF-8 formatted string - error message from ESP32 server
+		alert ('Error message from server: ' + evt.data); // oscilloscope code reporting error (synatx error, ...)
+		enableDisableControls (false);
+	  }
+	  if (evt.data instanceof Blob) { // binary data - array of samples
+		// receive binary data as blob and then convert it into array buffer and draw oscilloscope signal
+		var myInt16Array = null;
+		var myArrayBuffer = null;
+		var myFileReader = new FileReader ();
+		myFileReader.onload = function (event) {
+		  myArrayBuffer = event.target.result;
+		  myInt16Array = new Int16Array (myArrayBuffer);
+		  // console.log (myInt16Array.length); // the number of 16-bit words received
+		  // console.log (myInt16Array);
+		  drawSignal (myInt16Array, 0, myInt16Array.length - 1); 
+		};
+		myFileReader.readAsArrayBuffer (evt.data);
+	  }
+	};
+
+	ws.onclose = function () {
+	  // websocket is closed
+	  console.log ('WebSocket closed.');
+	  // enableDisableControls (false); // TO DO: figure out why some onclose events (at lower frequencies) are false, than uncomment this line
+	};
+
+	ws.onerror = function (event) {
+	  ws.close ();
+	  alert ('WebSocket error: ' + event);
+	  enableDisableControls (false);
+	};
+
+  } else {
+	alert ('WebSockets are not supported by your browser.');
+  }
+}
+
+// drawing parameters
+
+var screenWidthTime;        // oscilloscope screen width in time units
+var continuousSamplingTime; // only when continuous sampliong takes place
+var restartDrawingSignal;   // used for drawing the signal
+var screenTimeOffset;       // used for drawing the signal
+
+var xOffset;
+var xScale;
+var yOffset;
+var yScale;
+var yLast;
+
+function drawBackgroundAndCalculateParameters () {
+
+  resizeCanvas ();
+
+  var x;    // x coordinate
+  var y;    // y coordinate
+  var i;    // x coordinate in canvas units
+  var j;    // y coordinate in canas units
+  var yGridTick;
+  var gridTop;  // y value at the top of the grid
+
+  restartDrawingSignal = true;  // drawing parameter - for later use
+  if (continuousSamplingTime == 0) {
+	  screenTimeOffset = 0;   // drawing parameter - for later use
+  } else {
+	  screenTimeOffset = -continuousSamplingTime; // so that the first real continuous sample will start at 0
+  }
+
+  var canvas = document.getElementById ('oscilloscope');
+  var ctx = canvas.getContext ('2d');
+
+  // colour background
+  ctx.fillStyle = 'hsl(207, 90%, 10%)';
+  ctx.beginPath ();
+  ctx.moveTo (0, 0);
+  ctx.lineTo (canvas.width - 1, 0);
+  ctx.lineTo (canvas.width - 1, canvas.height - 1);
+  ctx.lineTo (0, canvas.height - 1);
+  ctx.fill ();
+
+  // calculate drawing parametes and draw grid and scale
+  ctx.strokeStyle = 'hsl(207, 90%, 40%)';
+  ctx.lineWidth = 1;
+  ctx.font = '16px Verdana';
+
+  xOffset = 50;
+
+  // draw analog signal grid
+
+  if (document.getElementById ('analog').checked) {
+
+	// signal sensitivity
+
+	yScale = -(canvas.height - 60) / 4096;
+	yGridTick = 1000;
+
+	switch (document.getElementById ('sensitivity').value) {
+	  case '0': yScale *= 1; break;
+	  case '1': yScale *= 2; break;
+	  case '2': yScale *= 4; yGridTick = 200; break;
+	  case '3': yScale *= 8; yGridTick = 200; break;
+	  case '4': yScale *= 10; yGridTick = 100; break;
+	  case '5': yScale *= 20; yGridTick = 100; break;
+	}
+
+	yOffset = canvas.height - 50 - parseInt (document.getElementById ('position').value) * yScale;
+	gridTop = yOffset + yScale * 4095 + 5;
+
+	// draw horizontal grid and scale
+
+	for (y = 0; y < 4096; y += yGridTick) {
+	  j = yOffset + yScale * y;
+	  ctx.strokeText (y.toString (), 5, j + 5);
+	  ctx.beginPath ();
+	  ctx.moveTo (xOffset - 5, j);
+	  ctx.lineTo (canvas.width, j);
+	  ctx.stroke ();
+	}
+
+  // draw digital signal grid
+
+  } else {
+	yOffset = canvas.height - 100;
+	yScale = -(canvas.height - 200);
+	for (y = 0; y <= 1; y += 0.333333) {
+	  j = yOffset + yScale * y;
+	  ctx.beginPath ();
+	  ctx.moveTo (xOffset - 5, j);
+	  ctx.lineTo (canvas.width, j);
+	  ctx.stroke ();
+	}
+	ctx.strokeText ('0', 5, yOffset + 5);
+	ctx.strokeText ('1', 5, yOffset + yScale * 1 + 5);
+	gridTop = yOffset + yScale * 1 - 25;
+  }
+
+  // draw vertical grid and scale
+
+  switch (document.getElementById ('frequency').value) {
+
+	case '1': screenWidthTime = 10000; // (ms) horizontal frequency = 0,1 Hz, whole width = 10 s, grid tick width = 1 s
+		xGridTick = screenWidthTime / 10;
+		xScale = (canvas.width - xOffset) / screenWidthTime;
+		xLabel = '1 s';
+		break;
+	case '2': screenWidthTime = 5000; // (ms) horizontal frequency = 0,2 Hz, whole width = 5 s, grid tick width = 0,5 s
+		xGridTick = screenWidthTime / 10;
+		xScale = (canvas.width - xOffset) / screenWidthTime;
+		xLabel = '500 ms';
+		break;
+	case '3': screenWidthTime = 2000; // (ms) horizontal frequency = 0,5 Hz, whole width = 2 s, grid tick width = 0,2 s
+		xGridTick = screenWidthTime / 10;
+		xScale = (canvas.width - xOffset) / screenWidthTime;
+		xLabel = '200 ms';
+		break;
+	case '4': screenWidthTime = 1000000; // (us) horizontal frequency = 1 Hz, whole width = 1 s, grid tick width = 0,1 s
+		xGridTick = screenWidthTime / 10;
+		xScale = (canvas.width - xOffset) / screenWidthTime;
+		xLabel = '100 ms';
+		break;
+	case '5': screenWidthTime = 500000; // (us) horizontal frequency = 2 Hz, whole width = 0,5 s, grid tick width = 0,05 s
+		xGridTick = screenWidthTime / 10;
+		xScale = (canvas.width - xOffset) / screenWidthTime;
+		xLabel = '50 ms';
+		break;
+	case '6': screenWidthTime = 200000; // (us) horizontal frequency = 5 Hz, whole width = 0,2 s, grid tick width = 0,02 s
+		xGridTick = screenWidthTime / 10;
+		xScale = (canvas.width - xOffset) / screenWidthTime;
+		xLabel = '20 ms';
+		break;
+	case '7': screenWidthTime = 100000; // (us) horizontal frequency = 10 Hz, whole width = 0,1 s, grid tick width = 0,01 s
+		xGridTick = screenWidthTime / 10;
+		xScale = (canvas.width - xOffset) / screenWidthTime;
+		xLabel = '10 ms';
+		break;
+	case '8': screenWidthTime = 50000; // (us) horizontal frequency = 20 Hz, whole width = 0,05 s, grid tick width = 0,005 s
+		xGridTick = screenWidthTime / 10;
+		xScale = (canvas.width - xOffset) / screenWidthTime;
+		xLabel = '5 ms';
+		break;
+	case '9': screenWidthTime = 20000; // horizontal frequency = 50 Hz, whole width = 0,02 s, grid tick width = 0,002 s
+		xGridTick = screenWidthTime / 10;
+		xScale = (canvas.width - xOffset) / screenWidthTime;
+		xLabel = '2 ms';
+		break;
+	case '10':  screenWidthTime = 16667; // horizontal frequency = 60 Hz, whole width = 0,017 s, grid tick width = 0,002 s
+		xGridTick = 2000;
+		xScale = (canvas.width - xOffset) / screenWidthTime;
+		xLabel = '2 ms';
+		break;
+	case '11':  screenWidthTime = 10000; // horizontal frequency = 100 Hz, whole width = 0,01 s, grid tick width = 0,001 s
+		xGridTick = screenWidthTime / 10;
+		xScale = (canvas.width - xOffset) / screenWidthTime;
+		xLabel = '1 ms';
+		break;
+	case '12':  screenWidthTime = 5000; // horizontal frequency = 200 Hz, whole width = 0,005 s, grid tick width = 0,0005 s
+		xGridTick = screenWidthTime / 10;
+		xScale = (canvas.width - xOffset) / screenWidthTime;
+		xLabel = '500 us';
+		break;
+	case '13':  screenWidthTime = 2000; // horizontal frequency = 500 Hz, whole width = 0,002 s, grid tick width = 0,0002 s
+		xGridTick = screenWidthTime / 10;
+		xScale = (canvas.width - xOffset) / screenWidthTime;
+		xLabel = '200 us';
+		break;
+	case '14':  screenWidthTime = 1000; // horizontal frequency = 1000 Hz, whole width = 0,001 s, grid tick width = 0,0001 s
+		xGridTick = screenWidthTime / 10;
+		xScale = (canvas.width - xOffset) / screenWidthTime;
+		xLabel = '100 us';
+		break;
+	case '15':  screenWidthTime = 500; // horizontal frequency = 2000 Hz, whole width = 0,00005 s, grid tick width = 0,00005 s
+		xGridTick = screenWidthTime / 10;
+		xScale = (canvas.width - xOffset) / screenWidthTime;
+		xLabel = '50 us';
+		break;
+	case '16':  screenWidthTime = 200; // horizontal frequency = 5000 Hz, whole width = 0,00002 s, grid tick width = 0,00002 s
+		xGridTick = screenWidthTime / 10;
+		xScale = (canvas.width - xOffset) / screenWidthTime;
+		xLabel = '20 us';
+		break;
+	case '17':  screenWidthTime = 100; // horizontal frequency = 10000 Hz, whole width = 0,0001 s (100 us), grid tick width = 0,0001 s (10 us)
+		xGridTick = screenWidthTime / 10;
+		xScale = (canvas.width - xOffset) / screenWidthTime;
+		xLabel = '10 us';
+		break;
+  }
+
+  for (x = 0; x < screenWidthTime; x += xGridTick) {
+	i = xOffset + xScale * x;
+	ctx.strokeText (xLabel, i + 25, yOffset + 25);
+	ctx.beginPath ();
+	ctx.moveTo (i, yOffset + 5);
+	ctx.lineTo (i, gridTop);
+	ctx.stroke ();
+  }
+}
+
+drawBackgroundAndCalculateParameters ();
+
+var lastI;  // last drawn sample (time)
+var lastJ1; // signal 1
+var lastJ2; // signal 2
+
+var wordsPerSample = 1; // will be correctly initialized when dummy sample arrives: 2 for 1 signal, 3 for 2 signals
+
+function drawSignal (myInt16Array, startInd, endInd) { 
+  if (startInd > endInd) return;
+  // console.log ('drawSignal (' + startInd.toString () + ', ' + endInd.toString () + ')');
+
+  // find dummy sample (the one with value < 0) which will tells javascript client to start drawing from beginning of the screen
+  for (var ind = startInd; ind <= endInd; ind += wordsPerSample) {
+	if (myInt16Array [ind] < 0) { // if signal value < 0 this is a dummy value which also holds the information about how numbers are stored in the buffer
+	  switch (myInt16Array [ind]) {
+		case -2:  wordsPerSample = 2; // 1 signal (analog or digital) with deltaTime
+				  continuousSamplingTime = 0; // actual sambling wil be provided in the buffer
+				  break;
+		case -3:  wordsPerSample = 3; // 2 signals (analog or digital) with deltaTime
+				  continuousSamplingTime = 0; // actual sambling wil be provided in the buffer
+				  break;
+		default:  // < 0              // continuous (analog) sampling
+				  wordsPerSample = 1;
+				  continuousSamplingTime = -myInt16Array [ind]; // sampling time is provided in the dummy sample
+				  screenTimeOffset = -continuousSamplingTime; // so that the first real continuous sample will start at 0
+	  }
+	  // console.log ('Got dummy sample at ' + ind.toString () + ' value: ' + myInt16Array [ind].toString ());
+	  drawSignal (myInt16Array, startInd, ind - wordsPerSample); // to previuos sample
+	  drawBackgroundAndCalculateParameters ();
+	  drawSignal (myInt16Array, ind + wordsPerSample, endInd); // from next sample on
+	  return;
+	}
+  }
+
+  var canvas = document.getElementById ('oscilloscope');
+  var ctx = canvas.getContext ('2d');
+
+  var analog = document.getElementById ('analog').checked;
+  var lines = document.getElementById ('lines').checked;
+  var markers = document.getElementById ('markers').checked;
+
+  ctx.lineWidth = 3;
+
+  // console.log ('arayBufferType = ' + arayBufferType.toString ());
+  for (var ind = startInd; ind <= endInd; ind += wordsPerSample) { 
+
+	// calculate sample position
+	if (continuousSamplingTime == 0) {
+		screenTimeOffset += myInt16Array [ind + wordsPerSample - 1]; // deltaTime is provided in the buffer
+	} else {
+		screenTimeOffset += continuousSamplingTime; // continouus sampling
+	}
+
+	i = xOffset + xScale * screenTimeOffset;   // time
+	j1 = yOffset + yScale * myInt16Array [ind]; // signal 1
+	j2 = wordsPerSample >= 3 ? yOffset + yScale * myInt16Array [ind + 1] : -1; // signal 2, -1 if missing
+
+	// lines
+	if (lines) {
+	  if (restartDrawingSignal) {
+		restartDrawingSignal = false;
+	  } else {
+		if (analog) { // analog
+		  // signal 2
+		  if (j2 >= 0) {
+			ctx.strokeStyle = '#ff8000';
+			ctx.beginPath ();
+			ctx.moveTo (lastI, lastJ2);
+			ctx.lineTo (i, j2);
+			ctx.stroke ();
+		  }
+		  // signal 1
+		  ctx.strokeStyle = '#ffbf80';
+		  ctx.beginPath ();
+		  ctx.moveTo (lastI, lastJ1);
+		  ctx.lineTo (i, j1);
+		  ctx.stroke ();
+		} else { // digital
+		  // signal 2
+		  if (j2 >= 0) {
+			ctx.strokeStyle = '#ff8000';
+			ctx.beginPath ();
+			ctx.moveTo (lastI, lastJ2);
+			ctx.lineTo (i, lastJ2);
+			ctx.lineTo (i, j2);
+			ctx.stroke ();
+		  }
+		  // signal 1
+		  ctx.strokeStyle = '#ffbf80';
+		  ctx.beginPath ();
+		  ctx.moveTo (lastI, lastJ1);
+		  ctx.lineTo (i, lastJ1);
+		  ctx.lineTo (i, j1);
+		  ctx.stroke ();
+		}
+	  }
+
+	}
+
+	// markers
+	if (markers) {
+	  // signal 2
+	  if (j2 >= 0) {
+		ctx.strokeStyle = '#ff8000';
+		ctx.beginPath ();
+		ctx.arc (i, j2, 2, 0, 2 * Math.PI, false);
+		ctx.stroke ();
+	  }
+	  // signal 1
+	  ctx.strokeStyle = '#ffbf80';
+	  ctx.beginPath ();
+	  ctx.arc (i, j1, 2, 0, 2 * Math.PI, false);
+	  ctx.stroke ();
+	}
+
+	lastI = i;
+	lastJ1 = j1;
+	lastJ2 = j2;
+  }
+
+}
+
+// eneable and disable controls
+
+function enableDisableControls (workMode) {
+  if (workMode) {
+	// disable GPIO, analog/digital, trigger, frequency and start, enable stop
+	document.getElementById ('gpio1').disabled = true;
+	document.getElementById ('gpio2').disabled = true;
+	document.getElementById ('analog').disabled = true;
+	document.getElementById ('digital').disabled = true;
+	document.getElementById ('posTrigger').disabled = true;
+	document.getElementById ('posTreshold').disabled = true;
+	document.getElementById ('posTriggerLabel').style.color = 'gray';
+	document.getElementById ('negTrigger').disabled = true;
+	document.getElementById ('negTreshold').disabled = true;
+	document.getElementById ('negTriggerLabel').style.color = 'gray';
+	document.getElementById ('frequency').disabled = true;
+	document.getElementById ('frequencyLabel').style.color = 'gray';
+	document.getElementById ('startButton').disabled = true;
+	document.getElementById ('stopButton').disabled = false;
+  } else {
+	// enable GPIO, analog/digital, trigger, frequency and start, disable stop
+	document.getElementById ('gpio1').disabled = false;
+	document.getElementById ('gpio2').disabled = false;
+	document.getElementById ('analog').disabled = false;
+	document.getElementById ('digital').disabled = false;
+	document.getElementById ('posTrigger').disabled = false;
+	document.getElementById ('negTrigger').disabled = false;
+	document.getElementById ('frequency').disabled = false;
+	document.getElementById ('frequencyLabel').style.color = 'black';
+	document.getElementById ('startButton').disabled = false;
+	document.getElementById ('stopButton').disabled = true;
+	if (document.getElementById ('analog').checked) {
+	  document.getElementById ('sensitivity').disabled = false;
+	  document.getElementById ('sensitivityLabel').style.color = 'black';
+	  document.getElementById ('position').disabled = false;
+	  document.getElementById ('positionLabel').style.color = 'black';
+	  document.getElementById ('posTreshold').disabled = false;
+	  document.getElementById ('posTriggerLabel').style.color = 'black';
+	  document.getElementById ('negTreshold').disabled = false;
+	  document.getElementById ('negTriggerLabel').style.color = 'black';
+	}
+  }
+}
+
+</script>
+</body>
+</html>
