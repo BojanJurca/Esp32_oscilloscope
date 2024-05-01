@@ -134,6 +134,43 @@ String telnetCommandHandlerCallback (int argc, char *argv [], telnetConnection *
         return "OK";
     }
 
+    else if (argv0is ("NS")) {
+        if (argc == 2) {
+            int noOfSamples = atoi (argv [1]);
+            if (noOfSamples > 0 && noOfSamples <= 1000) {
+                return "OK";
+            } else {
+                return "Parameter out of range";
+            }
+        } else {
+            return "Wrong number of parameters";  
+        }
+    }
+
+    else if (argv0is ("TRSE")) {
+        if (argc == 5) {
+            return "Can this be simplified? As to channel, slope and value?";
+        } else {
+            return "Wrong number of parameters";  
+        }
+    }
+
+    else if (argv0is ("ARM")) {
+        if (argc == 1) {
+            return "1.1 2.2 3.3 and so on until STOP. Which commands MUST be issued before ARM? SARA? CHAN? NS? What happens if they are not?";
+        } else {
+            return "Wrong number of parameters";
+        }
+    }
+
+    else if (argv0is ("STOP")) {
+        if (argc == 1) {
+            return "OK";
+        } else {
+            return "Wrong number of parameters";
+        }
+    }
+
     else if (argv0is ("STAST?")) {
         if (argc == 1) {
             return "Ready";
