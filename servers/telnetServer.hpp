@@ -80,6 +80,7 @@
     #define TELNET_CONNECTION_TIME_OUT 300000                   // 300000 ms = 5 min, 0 for infinite
     #define TELNET_SESSION_MAX_ARGC 24                          // max number of arguments in command line
 
+
     #define telnetServiceUnavailable "Telnet service is currently unavailable.\r\n"
 
     #ifndef HOSTNAME
@@ -212,6 +213,9 @@
                                       telnetServerConcurentTasks--;
                                   xSemaphoreGive (__telnetServerSemaphore__);
 
+                                  if (privateMemory)
+                                      free (privateMemory);
+
                                   closeConnection ();
                               }
 
@@ -253,7 +257,6 @@
         }
 
         int sendTelnet (const char *buf) { return sendTelnet (buf, strlen (buf)); }
-
 
         // reading input from Telnet client with extraction of IAC commands
         char recvTelnetChar (bool onlyPeek = false) { // returns valid character or 0 in case of error, extracts IAC commands from stream
@@ -371,6 +374,8 @@
           } // while
           return 0;
         }
+
+        void *privateMemory = NULL; // to be used by a calling program if needed - if used this memory will be autmatically freed at the end of Telnet connection
         
       private:
 
