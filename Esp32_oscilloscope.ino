@@ -201,7 +201,7 @@ String telnetCommandHandlerCallback (int argc, char *argv [], telnetConnection *
         }
     }
 
-    return "Unknown command";
+    return ""; // let Telnet server try to handle the command itself
 }
 
 
