@@ -105,9 +105,11 @@
     */
 
     struct oscSharedMemory {         // data structure to be shared among oscilloscope tasks
-      // basic data
+      // basic data for web oscilloscope
       WebSocket *webSocket;                   // open webSocket for communication with javascript client
       bool clientIsBigEndian;                 // true if javascript client is big endian machine
+      // basic data for PulseView
+      int noOfSamples;
       // sampling sharedMemory
       char readType [8];                      // analog or digital  
       bool analog;                            // true if readType is analog, false if digital (digitalRead)
@@ -191,6 +193,20 @@
                 __oscilloscope_h_debug__ ("oscReader_millis: samplingTime was too long (to fit in 15 bits in (almost?) all cases) and is corrected to " + String (samplingTime));
         }        
 
+        /**/
+        cout << "----- oscReader_millis () -----\r\n";
+        cout << "samplingTime " << samplingTime << " ms" << endl;
+        cout << "positiveTrigger " << positiveTrigger << endl;
+        cout << "negativeTrigger " << negativeTrigger << endl;
+        cout << "gpio1 " << gpio1 << endl;
+        cout << "gpio2 " << gpio2 << endl;
+        cout << "noOfSignals " << noOfSignals << endl;
+        cout << "positiveTriggerTreshold " << positiveTriggerTreshold << endl;
+        cout << "negativeTriggerTreshold " << negativeTriggerTreshold << endl;
+        cout << "screenWidthTime " << screenWidthTime << endl;
+        delay (100);
+        /**/
+
         // Calculate screen refresh period. It sholud be arround 50 ms (sustainable screen refresh rate is arround 20 Hz) but it is better if it is a multiple value of screenWidthTime.
         unsigned long screenRefreshMilliseconds; // screen refresh period
         int noOfSamplesPerScreen = screenWidthTime / samplingTime; if (noOfSamplesPerScreen * samplingTime < screenWidthTime) noOfSamplesPerScreen ++;
@@ -200,6 +216,8 @@
 
         // determine mode of operation sample at a time or screen at a time - this only makes sense when screenWidthTime is measured in ms
         bool oneSampleAtATime = screenWidthTime > 1000;
+
+        readBuffer->samplesAreReady = true; // this information will be always copied to sendBuffer together with the samples
 
         // mark sendBuffer as already beeing sent, meaning it is free now
         sendBuffer->samplesAreReady = true;
@@ -399,6 +417,20 @@
                 __oscilloscope_h_debug__ ("oscReader_digital: samplingTime was too long (to fit in 15 bits in (almost?) all cases) and is corrected to " + String (samplingTime));
         }  
 
+        /**/
+        cout << "----- oscReader_digital () -----\r\n";
+        cout << "samplingTime " << samplingTime << " us" << endl;
+        cout << "positiveTrigger " << positiveTrigger << endl;
+        cout << "negativeTrigger " << negativeTrigger << endl;
+        cout << "gpio1 " << gpio1 << endl;
+        cout << "gpio2 " << gpio2 << endl;
+        cout << "noOfSignals " << noOfSignals << endl;
+        cout << "positiveTriggerTreshold " << positiveTriggerTreshold << endl;
+        cout << "negativeTriggerTreshold " << negativeTriggerTreshold << endl;
+        cout << "screenWidthTime " << screenWidthTime << endl;
+        delay (100);
+        /**/
+
         // Calculate screen refresh period. It sholud be arround 50 ms (sustainable screen refresh rate is arround 20 Hz) but it is better if it is a multiple value of screenWidthTime.
         unsigned long screenRefreshMilliseconds; // screen refresh period
         int noOfSamplesPerScreen = screenWidthTime / samplingTime; if (noOfSamplesPerScreen * samplingTime < screenWidthTime) noOfSamplesPerScreen ++;
@@ -406,8 +438,7 @@
         screenRefreshMilliseconds = correctedScreenWidthTime >= 50000 ? correctedScreenWidthTime / 1000 : ((50500 / correctedScreenWidthTime) * correctedScreenWidthTime) / 1000;
         __oscilloscope_h_debug__ ("oscReader_digital: samplingTime = " + String (samplingTime) + ", screenWidthTime = " + String (screenWidthTime));
 
-        // mark sendBuffer as already beeing sent, meaning it is free now
-        sendBuffer->samplesAreReady = true;
+        readBuffer->samplesAreReady = true; // this information will be always copied to sendBuffer together with the samples
 
         // thanks to gin66 (https://github.com/BojanJurca/Esp32_oscilloscope/issues/19 we can also read GPIOs that were configured for OUTPUT or PWM
         if (gpio1 <= 39) PIN_INPUT_ENABLE (GPIO_PIN_MUX_REG [gpio1]);
@@ -567,11 +598,26 @@
                 __oscilloscope_h_debug__ ("oscReader_analog: 2 signals samplingTime was too short (regarding to buffer size) and is corrected to " + String (samplingTime));
             }
         }
-        // Is samplingTime is too long for 15 bits, make a correction. Max sample time can be 32767 (15 bits) but since in some case actual sample time can be much larger than required le's keep it below 5000.
+        // Is samplingTime is too long for 15 bits? Make a correction. Max sample time can be 32767 (15 bits) but since in some case actual sample time can be much larger than required let's keep it below 5000.
         if (samplingTime > 5000) {
                 samplingTime = 5000;
-                __oscilloscope_h_debug__ ("oscReader_analog: samplingTime was too long (to fit in 15 bits in (almost?) all cases) and is corrected to " + String (samplingTime));
-        }  
+                // __oscilloscope_h_debug__ ("oscReader_analog: samplingTime was too long (to fit in 15 bits in (almost?) all cases) and is corrected to " + String (samplingTime));
+                cout << "oscReader_analog: samplingTime was too long (to fit in 15 bits in (almost?) all cases) and is corrected to " << samplingTime;
+        }
+
+        /**/
+        cout << "----- oscReader_analog () -----\r\n";
+        cout << "samplingTime " << samplingTime << " us" << endl;
+        cout << "positiveTrigger " << positiveTrigger << endl;
+        cout << "negativeTrigger " << negativeTrigger << endl;
+        cout << "gpio1 " << gpio1 << endl;
+        cout << "gpio2 " << gpio2 << endl;
+        cout << "noOfSignals " << noOfSignals << endl;
+        cout << "positiveTriggerTreshold " << positiveTriggerTreshold << endl;
+        cout << "negativeTriggerTreshold " << negativeTriggerTreshold << endl;
+        cout << "screenWidthTime " << screenWidthTime << endl;
+        delay (100);
+        /**/
 
         // Calculate screen refresh period. It sholud be arround 50 ms (sustainable screen refresh rate is arround 20 Hz) but it is better if it is a multiple value of screenWidthTime.
         unsigned long screenRefreshMilliseconds; // screen refresh period
@@ -580,8 +626,7 @@
         screenRefreshMilliseconds = correctedScreenWidthTime >= 50000 ? correctedScreenWidthTime / 1000 : ((50500 / correctedScreenWidthTime) * correctedScreenWidthTime) / 1000;
         __oscilloscope_h_debug__ ("oscReader_analog: samplingTime = " + String (samplingTime) + ", screenWidthTime = " + String (screenWidthTime));
 
-        // mark sendBuffer as already beeing sent, meaning it is free now
-        sendBuffer->samplesAreReady = true;
+        readBuffer->samplesAreReady = true; // this information will be always copied to sendBuffer together with the samples
 
         // thanks to gin66 (https://github.com/BojanJurca/Esp32_oscilloscope/issues/19 we can also read GPIOs that were configured for OUTPUT or PWM
         // if (gpio1 <= 39) PIN_INPUT_ENABLE (GPIO_PIN_MUX_REG [gpio1]);
@@ -767,7 +812,7 @@
 
             // calculate correct sampling time so that it will prefectly aligh with sampleRate (regarding integer calculation rounding) and that the sample buffer is large enough 
             unsigned long sampleRate = 1000000 / samplingTime; // samplingTime is in us
-            int noOfSamplesToTakeFirstTime = sampleRate * screenWidthTime / 1000000 + 1 + 8; // screenWIdhtTime is in us, 1 sample more than the distancesbetween them (A) (E)
+            int noOfSamplesToTakeFirstTime = sampleRate * screenWidthTime / 1000000 + 1 + 8; // screenWidhtTime is in us, 1 sample more than the distancesbetween them (A) (E)
             while (samplingTime != 1000000 / sampleRate // integer clculation rounding missmatch
               || (unsigned long) samplingTime * (OSCILLOSCOPE_I2S_BUFFER_SIZE - 1 - 1) < screenWidthTime // samples do not fill the screen (additional - 1 due to possible (B))
               || noOfSamplesToTakeFirstTime > (OSCILLOSCOPE_I2S_BUFFER_SIZE - 1 - 1) // samples do not fit in the buffer (the first sample is dummy sample, additional - 1 due to (B))
@@ -790,6 +835,19 @@
                 #endif
             }
 
+            /**/
+            cout << "----- oscReader_I2S () -----\r\n";
+            cout << "samplingTime " << samplingTime << " us" << endl;
+            cout << "positiveTrigger " << positiveTrigger << endl;
+            cout << "negativeTrigger " << negativeTrigger << endl;
+            cout << "gpio1 " << gpio1 << endl;
+            // cout << "gpio2 " << gpio2 << endl;
+            // cout << "noOfSignals " << noOfSignals << endl;
+            cout << "positiveTriggerTreshold " << positiveTriggerTreshold << endl;
+            cout << "negativeTriggerTreshold " << negativeTriggerTreshold << endl;
+            cout << "screenWidthTime " << screenWidthTime << endl;
+            delay (100);
+            /**/
 
             // Calculate screen refresh period. It sholud be arround 50 ms (sustainable screen refresh rate is arround 20 Hz) but it is better if it is a multiple value of screenWidthTime.
             unsigned long screenRefreshMilliseconds; // screen refresh period
@@ -800,8 +858,7 @@
             __oscilloscope_h_debug__ ("oscReader_analog_1_signal_i2s: sampleRate = " + String (sampleRate) + ", noOfSamplesToTake = " + String (noOfSamplesToTakeFirstTime));
             __oscilloscope_h_debug__ ("oscReader_analog_1_signal_i2s: screenRefreshMilliseconds = " + String (screenRefreshMilliseconds) + " ms (should be close to 50 ms), screen refresh frequency = " + String (1000.0 / screenRefreshMilliseconds) + " Hz (should be close to 20 Hz)");
 
-            // mark sendBuffer as already beeing sent, meaning it is free now
-            sendBuffer->samplesAreReady = true;
+            readBuffer->samplesAreReady = true; // this information will be always copied to sendBuffer together with the samples
 
             // thanks to gin66 (https://github.com/BojanJurca/Esp32_oscilloscope/issues/19 we can also read GPIOs that were configured for OUTPUT or PWM
             if (gpio1 <= 39) PIN_INPUT_ENABLE (GPIO_PIN_MUX_REG [gpio1]);
@@ -1009,6 +1066,7 @@
         delay (1);
         // send samples to javascript client if they are ready
         if (sendBuffer->samplesAreReady && sendBuffer->sampleCount) {
+
           // copy buffer with samples within critical section
           oscSamples sendSamples = *sendBuffer;
           sendBuffer->samplesAreReady = false; // oscRader will set this flag when buffer is the next time ready for sending

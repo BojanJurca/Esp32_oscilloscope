@@ -212,10 +212,6 @@
                                   xSemaphoreTake (__telnetServerSemaphore__, portMAX_DELAY);
                                       telnetServerConcurentTasks--;
                                   xSemaphoreGive (__telnetServerSemaphore__);
-
-                                  if (privateMemory)
-                                      free (privateMemory);
-
                                   closeConnection ();
                               }
 
@@ -375,7 +371,7 @@
           return 0;
         }
 
-        void *privateMemory = NULL; // to be used by a calling program if needed - if used this memory will be autmatically freed at the end of Telnet connection
+        void *privateMemory = NULL; // to be used by a calling program if needed
         
       private:
 
@@ -469,6 +465,11 @@
                 *ths->__cmdLine__ = 0;
               #endif
             } // login procedure
+
+            // notify callback handler procedure with special SESSION START command 
+            char *sessionStart = (char *) "SESSION START";
+            if (ths->__telnetCommandHandlerCallback__) ths->__telnetCommandHandlerCallback__ (1, &sessionStart, ths);
+
             // this is where telnet session really starts
             while (true) { // endless loop of reading and executing commands
               
@@ -533,12 +534,17 @@
 
           } // code block
         endOfConnection:  
-          #ifdef __DMESG__
-              if (ths->__prompt__) dmesgQueue << "[telnetConnection] user logged out: " << ths->__userName__; // if prompt is set, we know that login was successful
-          #endif
-          // all variables are freed now, unload the instance and stop the task (in this order)
-          delete ths;
-          vTaskDelete (NULL);                
+
+            // notify callback handler procedure with special SESSION END command 
+            char *sessionEnd = (char *) "SESSION END";
+            if (ths->__telnetCommandHandlerCallback__) ths->__telnetCommandHandlerCallback__ (1, &sessionEnd, ths);
+
+            #ifdef __DMESG__
+                if (ths->__prompt__) dmesgQueue << "[telnetConnection] user logged out: " << ths->__userName__; // if prompt is set, we know that login was successful
+            #endif
+            // all variables are freed now, unload the instance and stop the task (in this order)
+            delete ths;
+            vTaskDelete (NULL);                
         }
 
         string internalTelnetCommandHandler (int argc, char *argv [], telnetConnection *tcn) {
