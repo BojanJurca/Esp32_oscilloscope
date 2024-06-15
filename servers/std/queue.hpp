@@ -11,7 +11,7 @@
  *                              |<---------------- maxSize ------------>|  
  *
  * 
- *  Bojan Jurca, April 20, 2024
+ *  May 22, 2024, Bojan Jurca
  * 
  */
 
@@ -26,9 +26,9 @@
 
 
     // error flags: there are only two types of error flags that can be set: OVERFLOW and OUT_OF_RANGE - please note that all errors are negative (char) numbers
-    #define OK           ((signed char) 0b00000000) //    0 - no error 
-    #define BAD_ALLOC    ((signed char) 0b10000001) // -127 - out of memory
-    #define OUT_OF_RANGE ((signed char) 0b10000010) // -126 - invalid index
+    #define err_ok           ((signed char) 0b00000000) //    0 - no error 
+    #define err_bad_alloc    ((signed char) 0b10000001) // -127 - out of memory
+    #define err_out_of_range ((signed char) 0b10000010) // -126 - invalid index
 
 
     // type of memory used
@@ -70,9 +70,9 @@
                 #endif
                 if (__elements__ == NULL) {
                     #ifdef __THROW_QUEUE_EXCEPTIONS__
-                        throw BAD_ALLOC;
+                        throw err_bad_alloc;
                     #endif
-                    __errorFlags__ |= BAD_ALLOC;
+                    __errorFlags__ |= err_bad_alloc;
                 }
 
                 #ifndef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno
@@ -83,9 +83,9 @@
 
                 if (__elements__ == NULL) {
                     #ifdef __THROW_QUEUE_EXCEPTIONS__
-                        throw BAD_ALLOC;
+                        throw err_bad_alloc;
                     #endif
-                    __errorFlags__ |= BAD_ALLOC;
+                    __errorFlags__ |= err_bad_alloc;
                 }
             }
 
@@ -152,9 +152,9 @@
             queueType &operator [] (int position) {
                 if (position < 0 || position >= __size__) {
                     #ifdef __THROW_QUEUE_EXCEPTIONS__
-                        throw OUT_OF_RANGE;
+                        throw err_out_of_range;
                     #endif                      
-                    __errorFlags__ |= OUT_OF_RANGE;                    
+                    __errorFlags__ |= err_out_of_range;                    
                 }
                 return __elements__ [(__front__ + position) % maxSize];
             }
@@ -167,9 +167,9 @@
             queueType &at (int position) {
                 if (position < 0 || position >= __size__) {
                     #ifdef __THROW_QUEUE_EXCEPTIONS__
-                        throw OUT_OF_RANGE;
+                        throw err_out_of_range;
                     #endif                      
-                    __errorFlags__ |= OUT_OF_RANGE;                    
+                    __errorFlags__ |= err_out_of_range;                    
                 }
                 return __elements__ [(__front__ + position) % maxSize];
             }
@@ -187,8 +187,8 @@
             signed char push_back (queueType element) {
                 #if QUEUE_MEMORY_TYPE != STACK_OR_GLOBAL_MEM
                     if (__elements__ == NULL) {
-                        __errorFlags__ |= BAD_ALLOC;
-                        return BAD_ALLOC;
+                        __errorFlags__ |= err_bad_alloc;
+                        return err_bad_alloc;
                     }
                 #endif
 
@@ -209,7 +209,7 @@
                     __size__ ++;
                     pushed_back (element);
                 }
-                return OK;
+                return err_ok;
             }
 
 
@@ -220,10 +220,10 @@
             signed char pop_front () {
                 if (__size__ == 0) {
                     #ifdef __THROW_QUEUE_EXCEPTIONS__
-                        if (__size__ == 0) throw OUT_OF_RANGE;
+                        if (__size__ == 0) throw err_out_of_range;
                     #endif          
-                    __errorFlags__ |= OUT_OF_RANGE;                                      
-                    return OUT_OF_RANGE;
+                    __errorFlags__ |= err_out_of_range;                                      
+                    return err_out_of_range;
                 }
 
                 // remove the first element
@@ -231,7 +231,7 @@
                 __size__ --;
                 popped_front (__elements__ [__front__]);
         
-                return OK;
+                return err_ok;
             }
 
 
@@ -349,9 +349,9 @@
 
                 if (__elements__ == NULL) {
                     #ifdef __THROW_QUEUE_EXCEPTIONS__
-                        throw BAD_ALLOC;
+                        throw err_bad_alloc;
                     #endif
-                    __errorFlags__ |= BAD_ALLOC;
+                    __errorFlags__ |= err_bad_alloc;
                 }
 
                 #ifndef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno
@@ -364,9 +364,9 @@
 
                 if (__elements__ == NULL) {
                     #ifdef __THROW_QUEUE_EXCEPTIONS__
-                        throw BAD_ALLOC;
+                        throw err_bad_alloc;
                     #endif
-                    __errorFlags__ |= BAD_ALLOC;
+                    __errorFlags__ |= err_bad_alloc;
                 }
             }
 
@@ -435,9 +435,9 @@
             String &operator [] (int position) {
                 if (position < 0 || position >= __size__) {
                     #ifdef __THROW_QUEUE_EXCEPTIONS__
-                        throw OUT_OF_RANGE;
+                        throw err_out_of_range;
                     #endif                      
-                    __errorFlags__ |= OUT_OF_RANGE;                    
+                    __errorFlags__ |= err_out_of_range;                    
                 }
                 return __elements__ [(__front__ + position) % maxSize];
             }
@@ -450,9 +450,9 @@
             String &at (int position) {
                 if (position < 0 || position >= __size__) {
                     #ifdef __THROW_QUEUE_EXCEPTIONS__
-                        throw OUT_OF_RANGE;
+                        throw err_out_of_range;
                     #endif                      
-                    __errorFlags__ |= OUT_OF_RANGE;                    
+                    __errorFlags__ |= err_out_of_range;                    
                 }
                 return __elements__ [(__front__ + position) % maxSize];
             }
@@ -470,14 +470,14 @@
             signed char push_back (String element) {
                 #if QUEUE_MEMORY_TYPE != STACK_OR_GLOBAL_MEM
                     if (__elements__ == NULL) {
-                        __errorFlags__ |= BAD_ALLOC;
-                        return BAD_ALLOC;
+                        __errorFlags__ |= err_bad_alloc;
+                        return err_bad_alloc;
                     }
                 #endif
 
                 if (!element) {                        // ... check if parameter construction is valid
-                    __errorFlags__ |= BAD_ALLOC;       // report error if it is not
-                    return BAD_ALLOC;
+                    __errorFlags__ |= err_bad_alloc;       // report error if it is not
+                    return err_bad_alloc;
                 }
 
                 // add the new element at the end = (__front__ + __size__) % __capacity__
@@ -498,7 +498,7 @@
                     __size__ ++;
                     pushed_back (element);
                 }
-                return OK;
+                return err_ok;
             }
 
 
@@ -509,10 +509,10 @@
             signed char pop_front () {
                 if (__size__ == 0) {
                     #ifdef __THROW_QUEUE_EXCEPTIONS__
-                        if (__size__ == 0) throw OUT_OF_RANGE;
+                        if (__size__ == 0) throw err_out_of_range;
                     #endif          
-                    __errorFlags__ |= OUT_OF_RANGE;                                      
-                    return OUT_OF_RANGE;
+                    __errorFlags__ |= err_out_of_range;                                      
+                    return err_out_of_range;
                 }
 
                 // remove first element
@@ -521,7 +521,7 @@
                 popped_front (__elements__ [__front__]);
                 delete __elements__ [__front__];
         
-                return OK;
+                return err_ok;
             }
 
 

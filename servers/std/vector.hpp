@@ -23,7 +23,7 @@
  *                              |<-------------- __capacity__ --------->|  
  *
  * 
- *  Bojan Jurca, April 18, 2024
+ *  May 22, 2024, Bojan Jurca
  * 
  */
 
@@ -38,10 +38,10 @@
 
 
     // error flags: there are only two types of error flags that can be set: OVERFLOW and OUT_OF_RANGE - please note that all errors are negative (char) numbers
-    #define OK           ((signed char) 0b00000000) //    0 - no error 
-    #define BAD_ALLOC    ((signed char) 0b10000001) // -127 - out of memory
-    #define OUT_OF_RANGE ((signed char) 0b10000010) // -126 - invalid index
-    #define NOT_FOUND    ((signed char) 0b10000100) // -124 - key is not found        
+    #define err_ok           ((signed char) 0b00000000) //    0 - no error 
+    #define err_bad_alloc    ((signed char) 0b10000001) // -127 - out of memory
+    #define err_out_of_range ((signed char) 0b10000010) // -126 - invalid index
+    #define err_not_found    ((signed char) 0b10000100) // -124 - key is not found        
 
 
     // type of memory used
@@ -135,10 +135,10 @@
             signed char reserve (int newCapacity) {
                 if (newCapacity < __size__) {
                     #ifdef __THROW_VECTOR_EXCEPTIONS__
-                        throw BAD_ALLOC;
+                        throw err_bad_alloc;
                     #endif
-                    __errorFlags__ |= BAD_ALLOC;   
-                    return BAD_ALLOC;
+                    __errorFlags__ |= err_bad_alloc;   
+                    return err_bad_alloc;
                 }
                 if (newCapacity > __size__) {
                     signed char e = __changeCapacity__ (newCapacity);
@@ -147,7 +147,7 @@
                     }
                 }
                 __reservation__ = newCapacity;              
-                return OK; // no change in capacity is needed
+                return err_ok; // no change in capacity is needed
             }
 
 
@@ -184,9 +184,9 @@
             vectorType &operator [] (int position) {
                 if (position < 0 || position >= __size__) {
                     #ifdef __THROW_VECTOR_EXCEPTIONS__
-                        throw OUT_OF_RANGE;
+                        throw err_out_of_range;
                     #endif                      
-                    __errorFlags__ |= OUT_OF_RANGE;                    
+                    __errorFlags__ |= err_out_of_range;                    
                 }
                 return __elements__ [(__front__ + position) % __capacity__];
             }
@@ -199,9 +199,9 @@
             vectorType &at (int position) {
                 if (position < 0 || position >= __size__) {
                     #ifdef __THROW_VECTOR_EXCEPTIONS__
-                        throw OUT_OF_RANGE;
+                        throw err_out_of_range;
                     #endif                      
-                    __errorFlags__ |= OUT_OF_RANGE;                    
+                    __errorFlags__ |= err_out_of_range;                    
                 }
                 return __elements__ [(__front__ + position) % __capacity__];
             }
@@ -299,7 +299,7 @@
                 // add the new element at the end = (__front__ + __size__) % __capacity__, at this point we can be sure that there is enough __capacity__ of __elements__
                 __elements__ [(__front__ + __size__) % __capacity__] = element;
                 __size__ ++;
-                return OK;
+                return err_ok;
             }
 
            /*
@@ -322,7 +322,7 @@
                 __front__ = (__front__ + __capacity__ - 1) % __capacity__; // __front__ - 1
                 __elements__ [__front__] = element;
                 __size__ ++;
-                return OK;
+                return err_ok;
             }
 
 
@@ -338,10 +338,10 @@
             signed char pop_back () {
                 if (__size__ == 0) {
                     #ifdef __THROW_VECTOR_EXCEPTIONS__
-                        if (__size__ == 0) throw OUT_OF_RANGE;
+                        if (__size__ == 0) throw err_out_of_range;
                     #endif          
-                    __errorFlags__ |= OUT_OF_RANGE;                    
-                    return OUT_OF_RANGE;
+                    __errorFlags__ |= err_out_of_range;                    
+                    return err_out_of_range;
                 }
                 
                 // remove last element
@@ -349,7 +349,7 @@
 
                 // do we have to free the space occupied by deleted element?
                 if (__capacity__ > __size__ + __increment__ - 1) __changeCapacity__ (__size__); // doesn't matter if it does't succeed, the element is deleted anyway
-                return OK;
+                return err_ok;
             }
 
 
@@ -360,10 +360,10 @@
             signed char pop_front () {
                 if (__size__ == 0) {
                     #ifdef __THROW_VECTOR_EXCEPTIONS__
-                        if (__size__ == 0) throw OUT_OF_RANGE;
+                        if (__size__ == 0) throw err_out_of_range;
                     #endif          
-                    __errorFlags__ |= OUT_OF_RANGE;                                      
-                    return OUT_OF_RANGE;
+                    __errorFlags__ |= err_out_of_range;                                      
+                    return err_out_of_range;
                 }
 
                 // remove first element
@@ -372,7 +372,7 @@
         
                 // do we have to free the space occupied by deleted element?
                 if (__capacity__ > __size__ + __increment__ - 1) __changeCapacity__ (__size__);  // doesn't matter if it does't succeed, the elekent is deleted anyway
-                return OK;
+                return err_ok;
             }
 
       
@@ -390,8 +390,8 @@
                     e = (e + 1) % __capacity__;
                 }
                 
-                __errorFlags__ |= NOT_FOUND;
-                return NOT_FOUND;
+                __errorFlags__ |= err_not_found;
+                return err_not_found;
             }
 
 
@@ -408,10 +408,10 @@
                 // is position a valid index?
                 if (position < 0 || position >= __size__) {
                     #ifdef __THROW_VECTOR_EXCEPTIONS__
-                        throw OUT_OF_RANGE;
+                        throw err_out_of_range;
                     #endif                              
-                    __errorFlags__ |= OUT_OF_RANGE;                    
-                    return OUT_OF_RANGE;
+                    __errorFlags__ |= err_out_of_range;                    
+                    return err_out_of_range;
                 }
       
                 // try 2 faster options first
@@ -420,8 +420,8 @@
       
                 // do we have to free the space occupied by the element to be deleted? This is the slowest option
                 if (__capacity__ > __size__ - 1 + __increment__ - 1)  
-                    if (__changeCapacity__ (__size__ - 1, position, - 1) == OK)
-                        return OK;
+                    if (__changeCapacity__ (__size__ - 1, position, - 1) == err_ok)
+                        return err_ok;
                     // else (if failed to change capacity) proceeed
       
                 // we have to reposition the elements, weather from the __front__ or from the calculated back, whichever is faster
@@ -460,10 +460,10 @@
                 // is position a valid index?
                 if (position < 0 || position > __size__) { // allow size () so the insertion in an empty vector is possible
                     #ifdef __THROW_VECTOR_EXCEPTIONS__
-                        throw OUT_OF_RANGE;
+                        throw err_out_of_range;
                     #endif                           
-                    __errorFlags__ |= OUT_OF_RANGE;                       
-                    return OUT_OF_RANGE;
+                    __errorFlags__ |= err_out_of_range;                       
+                    return err_out_of_range;
                 }
       
                 // try 2 faster options first
@@ -475,7 +475,7 @@
                     signed char e = __changeCapacity__ (__size__ + __increment__, -1, position);
                     if (e)                              return e;
                     // else
-                    __elements__ [position] = element;  return OK; 
+                    __elements__ [position] = element;  return err_ok; 
                 }
       
                 // we have to reposition the elements, weather from the __front__ or from the calculated back, whichever is faster
@@ -492,7 +492,7 @@
                     }
                     // insert the new element now
                     __elements__ [e1] = element;
-                    return OK;
+                    return err_ok;
                 } else {
                     // move elements from __size__ - 1 to position 1 position up
                     int back = (__front__ + __size__) % __capacity__; // calculated back + 1
@@ -505,7 +505,7 @@
                     }
                     // insert the new element now
                     __elements__ [e1] = element;        
-                    return OK;
+                    return err_ok;
                 }
             }
 
@@ -683,7 +683,7 @@
                     __elements__ = NULL;
                     __size__ = 0;
                     __front__ = 0;
-                    return OK;
+                    return err_ok;
                 } 
                 // else
 
@@ -695,10 +695,10 @@
                 #endif
                 if (newElements == NULL) {
                     #ifdef __THROW_VECTOR_EXCEPTIONS__
-                        throw BAD_ALLOC;
+                        throw err_bad_alloc;
                     #endif
-                    __errorFlags__ |= BAD_ALLOC;
-                    return BAD_ALLOC;
+                    __errorFlags__ |= err_bad_alloc;
+                    return err_bad_alloc;
                 }
 
                 #ifndef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno
@@ -737,7 +737,7 @@
                 __capacity__ = newCapacity;
                 __elements__ = newElements;
                 __front__ = 0;  // the first element is now aligned with 0
-                return OK;
+                return err_ok;
             }
 
     };
@@ -850,10 +850,10 @@
             signed char reserve (int newCapacity) {
                 if (newCapacity < __size__) {
                     #ifdef __THROW_VECTOR_EXCEPTIONS__
-                        throw BAD_ALLOC;
+                        throw err_bad_alloc;
                     #endif
-                    __errorFlags__ |= BAD_ALLOC;   
-                    return BAD_ALLOC;
+                    __errorFlags__ |= err_bad_alloc;   
+                    return err_bad_alloc;
                 }
                 if (newCapacity > __size__) {
                     signed char e = __changeCapacity__ (newCapacity);
@@ -862,7 +862,7 @@
                     }
                 }
                 __reservation__ = newCapacity;              
-                return OK; // no change in capacity is needed
+                return err_ok; // no change in capacity is needed
             }
 
 
@@ -899,9 +899,9 @@
             String &operator [] (int position) {
                 if (position < 0 || position >= __size__) {
                     #ifdef __THROW_VECTOR_EXCEPTIONS__
-                        throw OUT_OF_RANGE;
+                        throw err_out_of_range;
                     #endif 
-                    __errorFlags__ |= OUT_OF_RANGE;                                         
+                    __errorFlags__ |= err_out_of_range;                                         
                 }
                 return __elements__ [(__front__ + position) % __capacity__];
             }
@@ -914,9 +914,9 @@
             String &at (int position) {
                 if (position < 0 || position >= __size__) {
                     #ifdef __THROW_VECTOR_EXCEPTIONS__
-                        throw OUT_OF_RANGE;
+                        throw err_out_of_range;
                     #endif    
-                    __errorFlags__ |= OUT_OF_RANGE;                                      
+                    __errorFlags__ |= err_out_of_range;                                      
                 }
                 return __elements__ [(__front__ + position) % __capacity__];
             }
@@ -1001,8 +1001,8 @@
     
             signed char push_back (String element) {
                 if (!element) {                             // ... check if parameter construction is valid
-                    __errorFlags__ |= BAD_ALLOC;       // report error if it is not
-                    return BAD_ALLOC;
+                    __errorFlags__ |= err_bad_alloc;       // report error if it is not
+                    return err_bad_alloc;
                 }
 
                 // do we have to resize __elements__ first?
@@ -1019,7 +1019,7 @@
                 // add the new element at the end = (__front__ + __size__) % __capacity__, at this point we can be sure that there is enough __capacity__ of __elements__
                 __swapStrings__ (&__elements__ [(__front__ + __size__) % __capacity__], &element);
                 __size__ ++;
-                return OK;
+                return err_ok;
             }
 
            /*
@@ -1028,8 +1028,8 @@
               
             signed char push_front (String element) {
                 if (!element) {                             // ... check if parameter construction is valid
-                    __errorFlags__ |= BAD_ALLOC;       // report error if it is not
-                    return BAD_ALLOC;
+                    __errorFlags__ |= err_bad_alloc;       // report error if it is not
+                    return err_bad_alloc;
                 }
 
                 // do we have to resize __elements__ first?
@@ -1047,7 +1047,7 @@
                 __front__ = (__front__ + __capacity__ - 1) % __capacity__; // __front__ - 1
                 __swapStrings__ (&__elements__ [__front__], &element);
                 __size__ ++;
-                return OK;
+                return err_ok;
             }
 
 
@@ -1063,10 +1063,10 @@
             signed char pop_back () {
                 if (__size__ == 0) {
                     #ifdef __THROW_VECTOR_EXCEPTIONS__
-                        if (__size__ == 0) throw OUT_OF_RANGE;
+                        if (__size__ == 0) throw err_out_of_range;
                     #endif          
-                    __errorFlags__ |= OUT_OF_RANGE;                    
-                    return OUT_OF_RANGE;
+                    __errorFlags__ |= err_out_of_range;                    
+                    return err_out_of_range;
                 }
                 
                 // remove last element
@@ -1074,7 +1074,7 @@
 
                 // do we have to free the space occupied by deleted element?
                 if (__capacity__ > __size__ + __increment__ - 1) __changeCapacity__ (__size__); // doesn't matter if it does't succeed, the element is deleted anyway
-                return OK;
+                return err_ok;
             }
 
 
@@ -1085,10 +1085,10 @@
             signed char pop_front () {
                 if (__size__ == 0) {
                     #ifdef __THROW_VECTOR_EXCEPTIONS__
-                        if (__size__ == 0) throw OUT_OF_RANGE;
+                        if (__size__ == 0) throw err_out_of_range;
                     #endif        
-                    __errorFlags__ |= OUT_OF_RANGE;                                        
-                    return OUT_OF_RANGE;
+                    __errorFlags__ |= err_out_of_range;                                        
+                    return err_out_of_range;
                 }
 
                 // remove first element
@@ -1097,7 +1097,7 @@
         
                 // do we have to free the space occupied by deleted element?
                 if (__capacity__ > __size__ + __increment__ - 1) __changeCapacity__ (__size__);  // doesn't matter if it does't succeed, the elekent is deleted anyway
-                return OK;
+                return err_ok;
             }
 
       
@@ -1110,8 +1110,8 @@
       
             int find (String element) {
                 if (!element) {                             // ... check if parameter construction is valid
-                    __errorFlags__ |= BAD_ALLOC;       // report error if it is not
-                    return BAD_ALLOC;
+                    __errorFlags__ |= err_bad_alloc;       // report error if it is not
+                    return err_bad_alloc;
                 }
 
                 int e = __front__;
@@ -1120,8 +1120,8 @@
                     e = (e + 1) % __capacity__;
                 }
                 
-                __errorFlags__ |= NOT_FOUND;
-                return NOT_FOUND;
+                __errorFlags__ |= err_not_found;
+                return err_not_found;
             }
 
 
@@ -1138,10 +1138,10 @@
                 // is position a valid index?
                 if (position < 0 || position >= __size__) {
                     #ifdef __THROW_VECTOR_EXCEPTIONS__
-                        throw OUT_OF_RANGE;
+                        throw err_out_of_range;
                     #endif  
-                    __errorFlags__ |= OUT_OF_RANGE;                                                
-                    return OUT_OF_RANGE;
+                    __errorFlags__ |= err_out_of_range;                                                
+                    return err_out_of_range;
                 }
       
                 // try 2 faster options first
@@ -1150,8 +1150,8 @@
       
                 // do we have to free the space occupied by the element to be deleted? This is the slowest option
                 if (__capacity__ > __size__ - 1 + __increment__ - 1)  
-                    if (__changeCapacity__ (__size__ - 1, position, - 1) == OK)
-                        return OK;
+                    if (__changeCapacity__ (__size__ - 1, position, - 1) == err_ok)
+                        return err_ok;
                     // else (if failed to change capacity) proceeed
       
                 // we have to reposition the elements, weather from the __front__ or from the calculated back, whichever is faster
@@ -1188,17 +1188,17 @@
 
             signed char insert (int position, String element) {
                 if (!element) {                             // ... check if parameter construction is valid
-                    __errorFlags__ |= BAD_ALLOC;       // report error if it is not
-                    return BAD_ALLOC;
+                    __errorFlags__ |= err_bad_alloc;       // report error if it is not
+                    return err_bad_alloc;
                 }
 
                 // is position a valid index?
                 if (position < 0 || position > __size__) { // allow size () so the insertion in an empty vector is possible
                     #ifdef __THROW_VECTOR_EXCEPTIONS__
-                        throw OUT_OF_RANGE;
+                        throw err_out_of_range;
                     #endif   
-                    __errorFlags__ |= OUT_OF_RANGE;                                               
-                    return OUT_OF_RANGE;
+                    __errorFlags__ |= err_out_of_range;                                               
+                    return err_out_of_range;
                 }
       
                 // try 2 faster options first
@@ -1210,7 +1210,7 @@
                     signed char e = __changeCapacity__ (__size__ + __increment__, -1, position);
                     if (e)                                                 return e;
                     // else
-                    __swapStrings__ (&__elements__ [position], &element);  return OK; 
+                    __swapStrings__ (&__elements__ [position], &element);  return err_ok; 
                 }
       
                 // we have to reposition the elements, weather from the __front__ or from the calculated back, whichever is faster
@@ -1227,7 +1227,7 @@
                     }
                     // insert the new element now
                     __swapStrings__ (&__elements__ [e1], &element);
-                    return OK;
+                    return err_ok;
                 } else {
                     // move elements from __size__ - 1 to position 1 position up
                     int back = (__front__ + __size__) % __capacity__; // calculated back + 1
@@ -1240,7 +1240,7 @@
                     }
                     // insert the new element now
                     __swapStrings__ (&__elements__ [e1], &element);        
-                    return OK;
+                    return err_ok;
                 }
             }
 
@@ -1416,7 +1416,7 @@
                     __elements__ = NULL;
                     __size__ = 0;
                     __front__ = 0;
-                    return OK;
+                    return err_ok;
                 } 
 
                 // allocate new memory for the vector
@@ -1427,10 +1427,10 @@
                 #endif
                 if (newElements == NULL) {
                     #ifdef __THROW_VECTOR_EXCEPTIONS__
-                        throw BAD_ALLOC;
+                        throw err_bad_alloc;
                     #endif
-                    __errorFlags__ |= BAD_ALLOC;
-                    return BAD_ALLOC;
+                    __errorFlags__ |= err_bad_alloc;
+                    return err_bad_alloc;
                 }
 
                 #ifndef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno
@@ -1471,7 +1471,7 @@
                 __capacity__ = newCapacity;
                 __elements__ = newElements;
                 __front__ = 0;  // the first element is now aligned with 0
-                return OK;
+                return err_ok;
             }
 
 

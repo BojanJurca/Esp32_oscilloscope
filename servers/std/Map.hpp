@@ -7,7 +7,7 @@
  *
  * Map functions are not thread-safe.
  * 
- * Bojan Jurca, April 20, 2024
+ * May 22, 2024, Bojan Jurca
  *  
  */
 
@@ -23,11 +23,11 @@
 
 
     // error flags: there are only two types of error flags that can be set: OVERFLOW and OUT_OF_RANGE - please note that all errors are negative (char) numbers
-    #define OK              ((signed char) 0b00000000)  //    0 - no error
-    #define BAD_ALLOC       ((signed char) 0b10000001)  // -127 - out of memory
-    #define NOT_FOUND       ((signed char) 0b10000100)  // -124 - key is not found
-    #define NOT_UNIQUE      ((signed char) 0b10001000)  // -120 - key is not unique
-    #define CANT_DO_IT_NOW  ((signed char) 0b11000000)  //  -64 - not the right time to do the operation, like triing to change data while iterating
+    #define err_ok              ((signed char) 0b00000000)  //    0 - no error
+    #define err_bad_alloc       ((signed char) 0b10000001)  // -127 - out of memory
+    #define err_not_found       ((signed char) 0b10000100)  // -124 - key is not found
+    #define err_not_unique      ((signed char) 0b10001000)  // -120 - key is not unique
+    #define err_cant_do_it_now  ((signed char) 0b11000000)  //  -64 - not the right time to do the operation, like triing to change data while iterating
 
 
     // type of memory used
@@ -80,14 +80,14 @@
                         if (is_same<keyType, String>::value)   // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                             if (!i.key) {                           // ... check if parameter construction is valid
                                 // log_e ("BAD_ALLOC");
-                                __errorFlags__ = BAD_ALLOC;         // report error if it is not
+                                __errorFlags__ = err_bad_alloc;         // report error if it is not
                                 return;
                             }
 
                         if (is_same<valueType, String>::value) // if value is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                             if (!i.value) {                         // ... check if parameter construction is valid
                                 // log_e ("BAD_ALLOC");
-                                __errorFlags__ = BAD_ALLOC;         // report error if it is not
+                                __errorFlags__ = err_bad_alloc;         // report error if it is not
                                 return;
                             }
 
@@ -175,9 +175,9 @@
                         if (!e->key) {                            // ... check if parameter construction is valid
                             // log_e ("BAD_ALLOC");
                             #ifdef __USE_MAP_EXCEPTIONS__
-                                throw BAD_ALLOC;
+                                throw err_bad_alloc;
                             #endif
-                            __errorFlags__ |= BAD_ALLOC;          // report error if it is not
+                            __errorFlags__ |= err_bad_alloc;          // report error if it is not
                             return this;
                         }
 
@@ -185,9 +185,9 @@
                         if (!e->value) {                          // ... check if parameter construction is valid
                             // log_e ("BAD_ALLOC");
                             #ifdef __USE_MAP_EXCEPTIONS__
-                                throw BAD_ALLOC;
+                                throw err_bad_alloc;
                             #endif
-                            __errorFlags__ |= BAD_ALLOC;          // report error if it is not
+                            __errorFlags__ |= err_bad_alloc;          // report error if it is not
                             return this;
                         }
 
@@ -217,9 +217,9 @@
                     if (!(String *) &key) {                 // ... check if parameter construction is valid
                         // log_e ("BAD_ALLOC");
                         #ifdef __USE_MAP_EXCEPTIONS__
-                            throw BAD_ALLOC;
+                            throw err_bad_alloc;
                         #endif
-                        __errorFlags__ |= BAD_ALLOC;        // report error if it is not
+                        __errorFlags__ |= err_bad_alloc;        // report error if it is not
                         return NULL;
                     }
 
@@ -246,9 +246,9 @@
                     if (!(String *) &key) {                 // ... check if parameter construction is valid
                         // log_e ("BAD_ALLOC");
                         #ifdef __USE_MAP_EXCEPTIONS__
-                            throw BAD_ALLOC;
+                            throw err_bad_alloc;
                         #endif
-                        __errorFlags__ |= BAD_ALLOC;        // report error if it is not
+                        __errorFlags__ |= err_bad_alloc;        // report error if it is not
                         dummyValue1 = dummyValue2;
                         return dummyValue1;                 // operator must return a reference, so return the reference to dummy value (make a copy of the default value first)
                     }
@@ -275,7 +275,7 @@
            /*
             *  Erases the Map pair identified by key
             *  
-            *  Returns OK if succeeds and error NOT_FOUND or BAD_ALLOC if String key parameter could not be constructed.
+            *  Returns OK if succeeds and error err_not_found or err_bad_alloc if String key parameter could not be constructed.
             */
 
             signed char erase (keyType key) { 
@@ -284,17 +284,17 @@
                     if (!(String *) &key) {                 // ... check if parameter construction is valid
                         // log_e ("BAD_ALLOC");
                         #ifdef __USE_MAP_EXCEPTIONS__
-                            throw BAD_ALLOC;
+                            throw err_bad_alloc;
                         #endif
-                        __errorFlags__ |= BAD_ALLOC;        // report error if it is not
-                        return BAD_ALLOC;                   // report error if it is not
+                        __errorFlags__ |= err_bad_alloc;        // report error if it is not
+                        return err_bad_alloc;                   // report error if it is not
                     }
 
                 signed char h = __erase__ (&__root__, key); 
                 if  (h >= 0) {  // OK, h contains the balanced binary search tree height 
                     __height__ = h;
                     __size__ --;
-                    return OK;
+                    return err_ok;
                 } else // h contains error flag
                     return h;
             }
@@ -310,27 +310,27 @@
                     if (!pair.key) {                        // ... check if parameter construction is valid
                         // log_e ("BAD_ALLOC");
                         #ifdef __USE_MAP_EXCEPTIONS__
-                            throw BAD_ALLOC;
+                            throw err_bad_alloc;
                         #endif
-                        __errorFlags__ |= BAD_ALLOC;        // report error if it is not
-                        return BAD_ALLOC;                   // report error if it is not
+                        __errorFlags__ |= err_bad_alloc;        // report error if it is not
+                        return err_bad_alloc;                   // report error if it is not
                     }
 
                 if (is_same<valueType, String>::value) // if value is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!pair.value) {                      // ... check if parameter construction is valid
                         // log_e ("BAD_ALLOC");
                         #ifdef __USE_MAP_EXCEPTIONS__
-                            throw BAD_ALLOC;
+                            throw err_bad_alloc;
                         #endif
-                        __errorFlags__ |= BAD_ALLOC;        // report error if it is not
-                        return BAD_ALLOC;                   // report error if it is not
+                        __errorFlags__ |= err_bad_alloc;        // report error if it is not
+                        return err_bad_alloc;                   // report error if it is not
                     }
 
                 __balancedBinarySearchTreeNode__ *pInserted = NULL; 
                 int h = __insert__ (&__root__, pair.key, pair.value, &pInserted);                 
                 if  (h >= 0) {  // OK, h contains the balanced binary search tree height 
                     __height__ = h;
-                    return OK;
+                    return err_ok;
                 } else
                     return h;
             }
@@ -341,27 +341,27 @@
                     if (!key) {                             // ... check if parameter construction is valid
                         // log_e ("BAD_ALLOC");
                         #ifdef __USE_MAP_EXCEPTIONS__
-                            throw BAD_ALLOC;
+                            throw err_bad_alloc;
                         #endif
-                        __errorFlags__ |= BAD_ALLOC;        // report error if it is not
-                        return BAD_ALLOC;                   // report error if it is not
+                        __errorFlags__ |= err_bad_alloc;        // report error if it is not
+                        return err_bad_alloc;                   // report error if it is not
                     }
 
                 if (is_same<valueType, String>::value) // if value is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!(String *) &value) {               // ... check if parameter construction is valid
                         // log_e ("BAD_ALLOC");
                         #ifdef __USE_MAP_EXCEPTIONS__
-                            throw BAD_ALLOC;
+                            throw err_bad_alloc;
                         #endif
-                        __errorFlags__ |= BAD_ALLOC;        // report error if it is not
-                        return BAD_ALLOC;                   // report error if it is not
+                        __errorFlags__ |= err_bad_alloc;        // report error if it is not
+                        return err_bad_alloc;                   // report error if it is not
                     }
 
                 __balancedBinarySearchTreeNode__ *pInserted = NULL;
                 int h = __insert__ (&__root__, key, value, &pInserted);
                 if  (h >= 0) {  // OK, h contains the balanced binary search tree height
                     __height__ = h;
-                    return OK;
+                    return err_ok;
                 } else
                     return h;
             }
@@ -533,7 +533,7 @@
             int __size__ = 0;
             int8_t __height__ = 0;
 
-            // we need 2 values to handle NOT_FOUND conditions with [] operator
+            // we need 2 values to handle err_not_found conditions with [] operator
             valueType __dummyValue1__ = {};            
             valueType __dummyValue2__ = {};          
 
@@ -558,10 +558,10 @@
                     if (n == NULL) {
                         // log_e ("BAD_ALLOC");
                         #ifdef __USE_MAP_EXCEPTIONS__
-                            throw BAD_ALLOC;
+                            throw err_bad_alloc;
                         #endif
-                        __errorFlags__ |= BAD_ALLOC;
-                        return BAD_ALLOC;
+                        __errorFlags__ |= err_bad_alloc;
+                        return err_bad_alloc;
                     }
 
                     memset (n, 0, sizeof (__balancedBinarySearchTreeNode__)); // prevent caling String destructor at the following assignments
@@ -629,10 +629,10 @@
                 if (!((*p)->pair.key < key)) { // meaning at this point that key == (*p)->pair.key
                     // log_e ("NOT_UNIQUE");
                     #ifdef __USE_MAP_EXCEPTIONS__
-                        throw NOT_UNIQUE;
+                        throw err_not_unique;
                     #endif
-                    __errorFlags__ |= NOT_UNIQUE;
-                    return NOT_UNIQUE;
+                    __errorFlags__ |= err_not_unique;
+                    return err_not_unique;
                 }
         
                 // 4. case: add a new node to the right subtree of the current node
@@ -689,10 +689,10 @@
                 if ((*p) == NULL) {
                     // log_e ("NOT_FOUND");
                     #ifdef __USE_MAP_EXCEPTIONS__
-                        throw NOT_FOUND;
+                        throw err_not_found;
                     #endif                    
-                    __errorFlags__ |= NOT_FOUND;
-                    return NOT_FOUND; 
+                    __errorFlags__ |= err_not_found;
+                    return err_not_found; 
                 }
                         
                 // 2. case: delete the node from the left subtree
@@ -728,7 +728,7 @@
                         delete (*p);
                         (*p) = NULL;
                         // __size__ --; // we'll do it if erase () function instead
-                        return OK;
+                        return err_ok;
                     }
                     // 3.b. case: delete a node with only left child 
                     if ((*p)->rightSubtree == NULL) {

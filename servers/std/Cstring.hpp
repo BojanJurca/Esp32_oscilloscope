@@ -3,7 +3,7 @@
  * 
  * This file is part of C++ std package for Arduino: https://github.com/BojanJurca/console-string-vector-map-for-Arduino
  * 
- * Bojan Jurca, April 27, 2024
+ * May 22, 2024, Bojan Jurca
  *  
  */
 
@@ -43,14 +43,14 @@
         #ifdef SHOW_COMPILE_TIME_INFORMATION
             #pragma message "Cstring with default Cstring size was not defined previously, #defining the default string as Cstring<300> in Cstring.hpp" 
         #endif
-        #define string Cstring<300>
+        #define cstring Cstring<300>
     #endif
 
 
-    // error flags: there are only two types of error flags that can be set: OVERFLOW and OUT_OF_RANGE - please note that all errors are negative (char) numbers
-    #define OK           ((signed char) 0b00000000) //    0 - no error    
-    #define OVERFLOW     ((signed char) 0b10000001) // -127 - buffer overflow
-    #define OUT_OF_RANGE ((signed char) 0b10000010) // -126 - invalid index
+    // error flags: there are only two types of error flags that can be set: err_overflow and err_out_of_range- please note that all errors are negative (char) numbers
+    #define err_or           ((signed char) 0b00000000) //    0 - no error    
+    #define err_overflow     ((signed char) 0b10000001) // -127 - buffer overflow
+    #define err_out_of_range ((signed char) 0b10000010) // -126 - invalid index
 
 
     // fixed size string, actually C char arrays with additional functions and operators
@@ -75,7 +75,7 @@
                 if (other) {                                                  // check if NULL char * pointer to overcome from possible programmer's errors
                     strncpy (this->__c_str__, other, N + 1);
                     if (this->__c_str__ [N]) {
-                         __errorFlags__ = OVERFLOW;                           // OVEVRFLOW
+                         __errorFlags__ = err_overflow;                       // err_overflow
                         this->__c_str__ [N] = 0;                              // mark the end of the string regardles OVERFLOW
                     }
                 } 
@@ -89,7 +89,7 @@
             Cstring (const char& other) {                      // for declarations with initialization, like Cstring<15> d ('c'); (convert char to Cstring)
                 this->__c_str__ [0] = other;
                 if (this->__c_str__ [N]) {
-                    __errorFlags__ = OVERFLOW;                                // OVEVRFLOW
+                    __errorFlags__ = err_overflow;                            // err_overflow
                     this->__c_str__ [N] = 0;                                  // mark the end of the string regardles OVERFLOW
                 }
             }
@@ -97,7 +97,7 @@
             Cstring (int number) {                             // for declarations with initialization, like Cstring<15> e (3); (convert int to Cstring)
                 snprintf (this->__c_str__, N + 2, "%i", number);
                 if (this->__c_str__ [N]) {
-                    __errorFlags__ = OVERFLOW;                                // OVEVRFLOW
+                    __errorFlags__ = err_overflow;                            // err_overflow
                     this->__c_str__ [N] = 0;                                  // mark the end of the string regardles OVERFLOW
                 }
             }
@@ -105,7 +105,7 @@
             Cstring (unsigned int number) {                    // for declarations with initialization, like Cstring<15> e (3); (convert unsigned int to Cstring)
                 snprintf (this->__c_str__, N + 2, "%u", number);
                 if (this->__c_str__ [N]) {
-                    __errorFlags__ = OVERFLOW;                                // OVEVRFLOW
+                    __errorFlags__ = err_overflow;                            // err_overflow
                     this->__c_str__ [N] = 0;                                  // mark the end of the string regardles OVERFLOW
                 }
             }
@@ -113,7 +113,7 @@
             Cstring (long number) {                            // for declarations with initialization, like Cstring<15> e (3); (convert long to Cstring)
                 snprintf (this->__c_str__, N + 2, "%l", number);
                 if (this->__c_str__ [N]) {
-                    __errorFlags__ = OVERFLOW;                                // OVEVRFLOW
+                    __errorFlags__ = err_overflow;                            // err_overflow
                     this->__c_str__ [N] = 0;                                  // mark the end of the string regardles OVERFLOW
                 }
             }
@@ -121,7 +121,7 @@
             Cstring (unsigned long number) {                   // for declarations with initialization, like Cstring<15> e (3); (convert unsigned long to Cstring)
                 snprintf (this->__c_str__, N + 2, "%lu", number);
                 if (this->__c_str__ [N]) {
-                    __errorFlags__ = OVERFLOW;                                // OVEVRFLOW
+                    __errorFlags__ = err_overflow;                            // err_overflow
                     this->__c_str__ [N] = 0;                                  // mark the end of the string regardles OVERFLOW
                 }
             }
@@ -129,7 +129,7 @@
             Cstring (float number) {                           // for declarations with initialization, like Cstring<15> e (3.1); (convert float to Cstring)
                 snprintf (this->__c_str__, N + 2, "%f", number);
                 if (this->__c_str__ [N]) {
-                    __errorFlags__ = OVERFLOW;                                // OVEVRFLOW
+                    __errorFlags__ = err_overflow;                            // err_overflow
                     this->__c_str__ [N] = 0;                                  // mark the end of the string regardles OVERFLOW
                 }
             }
@@ -137,7 +137,7 @@
             Cstring (double number) {                          // for declarations with initialization, like Cstring<15> e (3.1); (convert float to Cstring)
                 snprintf (this->__c_str__, N + 2, "%lf", number);
                 if (this->__c_str__ [N]) {
-                    __errorFlags__ = OVERFLOW;                                // OVEVRFLOW
+                    __errorFlags__ = err_overflow;                            // err_overflow
                     this->__c_str__ [N] = 0;                                  // mark the end of the string regardles OVERFLOW
                 }
             }
@@ -152,7 +152,7 @@
                 if (other) {                                                  // check if NULL char * pointer to overcome from possible programmers' errors
                     strncpy (this->__c_str__, other, N + 1);
                     if (this->__c_str__ [N]) {
-                        this->__errorFlags__ = OVERFLOW;                      // OVEVRFLOW
+                        this->__errorFlags__ = err_overflow;                  // err_overflow
                         this->__c_str__ [N] = 0;                              // mark the end of the string regardles OVERFLOW
                     } else {
                         this->__errorFlags__ = 0;                             // clear error after new assignment
@@ -179,7 +179,7 @@
             Cstring operator = (const char& other) {           // for assigning character to Cstring, like: a = 'b';
                 this->__c_str__ [0] = other; 
                 if (this->__c_str__ [N]) {
-                    this->__errorFlags__ = OVERFLOW;                          // OVEVRFLOW
+                    this->__errorFlags__ = err_overflow;                      // err_overflow
                 } else {
                     this->__errorFlags__ = 0;                                 // clear error after new assignment
                 }
@@ -194,7 +194,7 @@
             Cstring operator = (int number) {                   // for assigning int to Cstring, like: a = 1234;
                 snprintf (this->__c_str__, N + 2, "%i", number);
                 if (this->__c_str__ [N]) {
-                    this->__errorFlags__ = OVERFLOW;                          // OVEVRFLOW
+                    this->__errorFlags__ = err_overflow;                      // err_overflow
                     this->__c_str__ [N] = 0;                                  // mark the end of the string regardles OVERFLOW
                 } else {
                     this->__errorFlags__ = 0;                                 // clear error after new assignment
@@ -205,7 +205,7 @@
             Cstring operator = (unsigned int number) {           // for assigning unsigned int to Cstring, like: a = 1234;
                 snprintf (this->__c_str__, N + 2, "%u", number);
                 if (this->__c_str__ [N]) {
-                    this->__errorFlags__ = OVERFLOW;                          // OVEVRFLOW
+                    this->__errorFlags__ = err_overflow;                      // err_overflow
                     this->__c_str__ [N] = 0;                                  // mark the end of the string regardles the OVERFLOW
                 } else {
                     this->__errorFlags__ = 0;                                 // clear error after new assignment
@@ -216,7 +216,7 @@
             Cstring operator = (long number) {                   // for assigning long to Cstring, like: a = 1234;
                 snprintf (this->__c_str__, N + 2, "%l", number);
                 if (this->__c_str__ [N]) {
-                    this->__errorFlags__ = OVERFLOW;                          // OVEVRFLOW
+                    this->__errorFlags__ = err_overflow;                      // err_overflow
                     this->__c_str__ [N] = 0;                                  // mark the end of the string regardles OVERFLOW
                 } else {
                     this->__errorFlags__ = 0;                                 // clear error after new assignment
@@ -227,7 +227,7 @@
             Cstring operator = (unsigned long number) {          // for assigning unsigned long to Cstring, like: a = 1234;
                 snprintf (this->__c_str__, N + 2, "%lu", number);
                 if (this->__c_str__ [N]) {
-                    this->__errorFlags__ = OVERFLOW;                          // OVEVRFLOW
+                    this->__errorFlags__ = err_overflow;                      // err_overflow
                     this->__c_str__ [N] = 0;                                  // mark the end of the string regardles OVERFLOW
                 } else {
                     this->__errorFlags__ = 0;                                 // clear error after new assignment
@@ -238,7 +238,7 @@
             Cstring operator = (float number) {                  // for assigning float to Cstring, like: a = 1234.5;
                 snprintf (this->__c_str__, N + 2, "%f", number);
                 if (this->__c_str__ [N]) {
-                    this->__errorFlags__ = OVERFLOW;                          // OVEVRFLOW
+                    this->__errorFlags__ = err_overflow;                      // err_overflow
                     this->__c_str__ [N] = 0;                                  // mark the end of the string regardles OVEFLOW
                 } else {
                     this->__errorFlags__ = 0;                                 // clear error after new assignment
@@ -249,7 +249,7 @@
             Cstring operator = (double number) {                 // for assigning double to Cstring, like: a = 1234.5;
                 snprintf (this->__c_str__, N + 2, "%lf", number);
                 if (this->__c_str__ [N]) {
-                    this->__errorFlags__ = OVERFLOW;                          // OVEVRFLOW
+                    this->__errorFlags__ = err_overflow;                      // err_overflow
                     this->__c_str__ [N] = 0;                                  // mark the end of the string regardles OVERFLOW
                 } else {
                     this->__errorFlags__ = 0;                                 // clear error after new assignment
@@ -263,7 +263,7 @@
                 if (other) {                                                  // check if NULL char * pointer to overcome from possible programmer's errors
                     strncat (this->__c_str__, other, N + 1 - strlen (this->__c_str__));
                     if (this->__c_str__ [N]) {
-                        this->__errorFlags__ |= OVERFLOW;                     // add OVERFLOW flag to possibe already existing error flags
+                        this->__errorFlags__ |= err_overflow;                     // add err_overflow flag to possibe already existing error flags
                         this->__c_str__ [N] = 0;                              // mark the end of the string regardles OVERFLOW
                     } 
                 }
@@ -274,7 +274,7 @@
                 strncat (this->__c_str__, other.__c_str__, N + 1 - strlen (this->__c_str__));
                 this->__errorFlags__ |= other.__errorFlags__;                 // add all errors from other string
                 if (this->__c_str__ [N]) {
-                    this->__errorFlags__ |= OVERFLOW;                         // add OVERFLOW flag to possibe already existing error flags
+                    this->__errorFlags__ |= err_overflow;                         // add err_overflow flag to possibe already existing error flags
                     this->__c_str__ [N] = 0;                                  // mark the end of the string regardles OVERFLOW
                 } 
                 return *this;
@@ -285,7 +285,7 @@
                 strncat (this->__c_str__, other.c_str (), N + 1 - strlen (this->__c_str__));
                 this->__errorFlags__ |= other.errorFlags ();                  // add all errors from other string
                 if (this->__c_str__ [N]) {
-                    this->__errorFlags__ |= OVERFLOW;                         // add OVERFLOW flag to possibe already existing error flags
+                    this->__errorFlags__ |= err_overflow;                         // add err_overflow flag to possibe already existing error flags
                     this->__c_str__ [N] = 0;                                  // mark the end of the string regardles OVERFLOW
                 } 
                 return *this;
@@ -297,7 +297,7 @@
                     this->__c_str__ [l] = other; 
                     this->__c_str__ [l + 1] = 0; 
                 } else {
-                    __errorFlags__ |= OVERFLOW;                               // add OVERFLOW flag to possibe already existing error flags
+                    __errorFlags__ |= err_overflow;                               // add err_overflow flag to possibe already existing error flags
                 }
                 return *this;
             }   
@@ -306,7 +306,7 @@
                 size_t l = strlen (this->__c_str__);
                 snprintf (this->__c_str__ + l, N + 2 - l, "%i", number);
                 if (this->__c_str__ [N]) {
-                    this->__errorFlags__ |= OVERFLOW;                         // add OVERFLOW flag to possibe already existing error flags
+                    this->__errorFlags__ |= err_overflow;                         // add err_overflow flag to possibe already existing error flags
                     this->__c_str__ [N] = 0;                                  // mark the end of the string regardles OVERFLOW
                 } 
                 return *this;
@@ -316,7 +316,7 @@
                 size_t l = strlen (this->__c_str__);
                 snprintf (this->__c_str__ + l, N + 2 - l, "%u", number);
                 if (this->__c_str__ [N]) {
-                    this->__errorFlags__ |= OVERFLOW;                         // add OVERFLOW flag to possibe already existing error flags
+                    this->__errorFlags__ |= err_overflow;                         // add err_overflow flag to possibe already existing error flags
                     this->__c_str__ [N] = 0;                                  // mark the end of the string regardles OVERFLOW
                 } 
                 return *this;
@@ -326,7 +326,7 @@
                 size_t l = strlen (this->__c_str__);
                 snprintf (this->__c_str__ + l, N + 2 - l, "%l", number);
                 if (this->__c_str__ [N]) {
-                    this->__errorFlags__ |= OVERFLOW;                         // add OVERFLOW flag to possibe already existing error flags
+                    this->__errorFlags__ |= err_overflow;                         // add err_overflow flag to possibe already existing error flags
                     this->__c_str__ [N] = 0;                                  // mark the end of the string regardles OVERFLOW
                 } 
                 return *this;
@@ -336,7 +336,7 @@
                 size_t l = strlen (this->__c_str__);
                 snprintf (this->__c_str__ + l, N + 2 - l, "%lu", number);
                 if (this->__c_str__ [N]) {
-                    this->__errorFlags__ |= OVERFLOW;                         // add OVERFLOW flag to possibe already existing error flags
+                    this->__errorFlags__ |= err_overflow;                         // add err_overflow flag to possibe already existing error flags
                     this->__c_str__ [N] = 0;                                  // mark the end of the string regardles OVERFLOW
                 } 
                 return *this;
@@ -346,7 +346,7 @@
                 size_t l = strlen (this->__c_str__);
                 snprintf (this->__c_str__ + l, N + 2 - l, "%f", number);
                 if (this->__c_str__ [N]) {
-                    this->__errorFlags__ |= OVERFLOW;                         // add OVERFLOW flag to possibe already existing error flags
+                    this->__errorFlags__ |= err_overflow;                         // add err_overflow flag to possibe already existing error flags
                     this->__c_str__ [N] = 0;                                  // mark the end of the string regardles OVERFLOW
                 } 
                 return *this;
@@ -356,7 +356,7 @@
                 size_t l = strlen (this->__c_str__);
                 snprintf (this->__c_str__ + l, N + 2 - l, "%lf", number);
                 if (this->__c_str__ [N]) {
-                    this->__errorFlags__ |= OVERFLOW;                         // add OVERFLOW flag to possibe already existing error flags
+                    this->__errorFlags__ |= err_overflow;                         // add err_overflow flag to possibe already existing error flags
                     this->__c_str__ [N] = 0;                                  // mark the end of the string regardles OVERFLOW
                 } 
                 return *this;
@@ -393,24 +393,36 @@
 
         
             // logical operators: ==, !=, <, <=, >, >=, ignore all possible errors
+
             inline bool operator == (const char *other) __attribute__((always_inline))        { return !strcmp (this->__c_str__, other); }              // Cstring : C string   
             inline bool operator == (char *other) __attribute__((always_inline))              { return !strcmp (this->__c_str__, other); }              // Cstring : C string   
-            inline bool operator == (const Cstring& other) __attribute__((always_inline))    { return !strcmp (this->__c_str__, other.__c_str__); }    // Cstring : Cstring
+            inline bool operator == (const Cstring& other) __attribute__((always_inline))     { return !strcmp (this->__c_str__, other.__c_str__); }    // Cstring : Cstring
+            inline bool operator == (Cstring& other) __attribute__((always_inline))           { return !strcmp (this->__c_str__, other.__c_str__); }    // Cstring : Cstring
+
             inline bool operator != (const char *other) __attribute__((always_inline))        { return strcmp (this->__c_str__, other); }               // Cstring : C string
             inline bool operator != (char *other) __attribute__((always_inline))              { return strcmp (this->__c_str__, other); }               // Cstring : C string
-            inline bool operator != (const Cstring& other) __attribute__((always_inline))    { return strcmp (this->__c_str__, other.__c_str__); }     // Cstring : Cstring
+            inline bool operator != (const Cstring& other) __attribute__((always_inline))     { return strcmp (this->__c_str__, other.__c_str__); }     // Cstring : Cstring
+            inline bool operator != (Cstring& other) __attribute__((always_inline))           { return strcmp (this->__c_str__, other.__c_str__); }     // Cstring : Cstring
+
             inline bool operator <  (const char *other) __attribute__((always_inline))        { return strcmp (this->__c_str__, other) < 0; }           // Cstring : C string
             inline bool operator <  (char *other) __attribute__((always_inline))              { return strcmp (this->__c_str__, other) < 0; }           // Cstring : C string
-            inline bool operator <  (const Cstring& other) __attribute__((always_inline))    { return strcmp (this->__c_str__, other.__c_str__) < 0; } // Cstring : Cstring
+            inline bool operator <  (const Cstring& other) __attribute__((always_inline))     { return strcmp (this->__c_str__, other.__c_str__) < 0; } // Cstring : Cstring
+            inline bool operator <  (Cstring& other) __attribute__((always_inline))           { return strcmp (this->__c_str__, other.__c_str__) < 0; } // Cstring : Cstring
+
             inline bool operator <= (const char *other) __attribute__((always_inline))        { return strcmp (this->__c_str__, other) <= 0; }          // Cstring : C string
             inline bool operator <= (char *other) __attribute__((always_inline))              { return strcmp (this->__c_str__, other) <= 0; }          // Cstring : C string
-            inline bool operator <= (const Cstring& other) __attribute__((always_inline))    { return strcmp (this->__c_str__, other.__c_str__) <= 0; }// Cstring : Cstring
+            inline bool operator <= (const Cstring& other) __attribute__((always_inline))     { return strcmp (this->__c_str__, other.__c_str__) <= 0; }// Cstring : Cstring
+            inline bool operator <= (Cstring& other) __attribute__((always_inline))           { return strcmp (this->__c_str__, other.__c_str__) <= 0; }// Cstring : Cstring
+
             inline bool operator >  (const char *other) __attribute__((always_inline))        { return strcmp (this->__c_str__, other) > 0; }           // Cstring : C string    
             inline bool operator >  (char *other) __attribute__((always_inline))              { return strcmp (this->__c_str__, other) > 0; }           // Cstring : C string    
-            inline bool operator >  (const Cstring& other) __attribute__((always_inline))    { return strcmp (this->__c_str__, other.__c_str__) > 0; } // Cstring : Cstring
+            inline bool operator >  (const Cstring& other) __attribute__((always_inline))     { return strcmp (this->__c_str__, other.__c_str__) > 0; } // Cstring : Cstring
+            inline bool operator >  (Cstring& other) __attribute__((always_inline))           { return strcmp (this->__c_str__, other.__c_str__) > 0; } // Cstring : Cstring
+
             inline bool operator >= (const char *other) __attribute__((always_inline))        { return strcmp (this->__c_str__, other) >= 0; }          // Cstring : C string    
             inline bool operator >= (char *other) __attribute__((always_inline))              { return strcmp (this->__c_str__, other) >= 0; }          // Cstring : C string    
-            inline bool operator >= (const Cstring& other) __attribute__((always_inline))    { return strcmp (this->__c_str__, other.__c_str__) >= 0; }// Cstring : Cstring
+            inline bool operator >= (const Cstring& other) __attribute__((always_inline))     { return strcmp (this->__c_str__, other.__c_str__) >= 0; }// Cstring : Cstring
+            inline bool operator >= (Cstring& other) __attribute__((always_inline))           { return strcmp (this->__c_str__, other.__c_str__) >= 0; }// Cstring : Cstring
 
 
             // [] operator
@@ -432,9 +444,9 @@
                 Cstring<N> r;
                 r.__errorFlags__ = this->__errorFlags__;                      // inherit all errors from original string
                 if (pos >= strlen (this->__c_str__)) {
-                    r.__errorFlags__ |= OUT_OF_RANGE;
+                    r.__errorFlags__ |= err_out_of_range;
                 } else {
-                    strncpy (r.__c_str__, this->__c_str__ + pos, len);        // can't overflow 
+                    strncpy (r.__c_str__, this->__c_str__ + pos, len);        // can't err_overflow 
                 }
                 return r;
             }
@@ -475,13 +487,13 @@
             }
         
             // some Arduino String-like member functions
-            Cstring<N> substring (size_t from = 0, size_t to = N - 1) {
+            Cstring substring (size_t from = 0, size_t to = N - 1) {
                 Cstring<N> r;
                 r.__errorFlags__ = this->__errorFlags__;                      // inherit all errors from original string
                 if (from >= strlen (this->__c_str__) || to < from) {
-                    r.__errorFlags__ |= OUT_OF_RANGE;
+                    r.__errorFlags__ |= err_out_of_range;
                 } else {
-                    strncpy (r.__c_str__, this->__c_str__ + from, to - from); // can't overflow 
+                    strncpy (r.__c_str__, this->__c_str__ + from, to - from); // can't err_overflow 
                 }
                 return r;
             }
@@ -548,7 +560,7 @@
             void rPad (size_t toLength, char withChar) {
                 if (toLength > N) {
                   toLength = N;
-                  __errorFlags__ |= OVERFLOW;                                 // error? overflow?
+                  __errorFlags__ |= err_overflow;                                 // error? overflow?
                 }
                 size_t l = strlen (__c_str__);
                 while (l < toLength) __c_str__ [l ++] = withChar;
