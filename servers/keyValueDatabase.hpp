@@ -50,7 +50,7 @@
  *            - data file offset (uint16_t) of a free block
  *            - size of a free block (int16_t)
  * 
- * Bojan Jurca, April 27, 2024
+ * May 22, 2024, Bojan Jurca
  *  
  */
 
@@ -73,9 +73,9 @@
     #include "std/vector.hpp"
 
     // error flags - only tose not defined in Map.hpp, please, note that all error flgs are negative (char) numbers
-    #define DATA_CHANGED    ((signed char) 0b10010000) // -112 - unexpected data value found
-    #define FILE_IO_ERROR   ((signed char) 0b10100000) //  -96 - file operation error
-    #define CANT_DO_IT_NOW  ((signed char) 0b11000000) //  -64 - for example changing the data while iterating or loading the data if already loaded
+    #define err_data_changed    ((signed char) 0b10010000) // -112 - unexpected data value found
+    #define err_file_io         ((signed char) 0b10100000) //  -96 - file operation error
+    #define err_cant_do_it_now  ((signed char) 0b11000000) //  -64 - for example changing the data while iterating or loading the data if already loaded
 
     #ifdef SEMAPHORE_H // RTOS is running beneath Arduino sketch, multitasking (and semaphores) is supported
         static SemaphoreHandle_t __keyValueDatabaseSemaphore__ = xSemaphoreCreateMutex (); 
@@ -144,13 +144,13 @@
                 // log_i ("(dataFileName)");
                 Lock ();
                 if (__dataFile__) {
-                    // log_e ("data already loaded error: CANT_DO_IT_NOW");
+                    // log_e ("data already loaded error: err_cant_do_it_now");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw CANT_DO_IT_NOW;
+                        throw err_cant_do_it_now;
                     #endif
-                    __errorFlags__ |= CANT_DO_IT_NOW;
+                    __errorFlags__ |= err_cant_do_it_now;
                     Unlock (); 
-                    return CANT_DO_IT_NOW;
+                    return err_cant_do_it_now;
                 }
 
                 // load new data
@@ -164,25 +164,25 @@
                           __dataFile__ = fileSystem.open (dataFileName, "r+"); // , false);
                     } else {
                         Unlock (); 
-                        // log_e ("error opening the data file: FILE_IO_ERROR");
+                        // log_e ("error opening the data file: err_file_io");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw FILE_IO_ERROR;
+                            throw err_file_io;
                         #endif
-                        __errorFlags__ |= FILE_IO_ERROR;
+                        __errorFlags__ |= err_file_io;
                         Unlock ();
-                        return FILE_IO_ERROR;
+                        return err_file_io;
                     }
                 }
 
                 if (__dataFile__.isDirectory ()) {
                     __dataFile__.close ();
-                    // log_e ("error data file shouldn't be a directory: FILE_IO_ERROR");
+                    // log_e ("error data file shouldn't be a directory: err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw FILE_IO_ERROR;
+                        throw err_file_io;
                     #endif
-                    __errorFlags__ |= FILE_IO_ERROR;
+                    __errorFlags__ |= err_file_io;
                     Unlock (); 
-                    return FILE_IO_ERROR;
+                    return err_file_io;
                 }
 
                 __dataFileSize__ = __dataFile__.size ();         
@@ -195,7 +195,7 @@
 
                     signed char e = __readBlock__ (blockSize, key, value, (uint32_t) blockOffset, true);
                     if (e) { // != OK
-                        // log_e ("error reading the data block: FILE_IO_ERROR");
+                        // log_e ("error reading the data block: err_file_io");
                         __dataFile__.close ();
                         Unlock (); 
                         return e;
@@ -226,7 +226,7 @@
 
                 Unlock (); 
                 // log_i ("OK");
-                return OK;
+                return err_ok;
             }
 
 
@@ -261,43 +261,43 @@
             signed char Insert (keyType key, valueType value) {
                 // log_i ("(key, value)");
                 if (!__dataFile__) { 
-                    // log_e ("error, data file not opened: FILE_IO_ERROR");
+                    // log_e ("error, data file not opened: err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw FILE_IO_ERROR;
+                        throw err_file_io;
                     #endif
-                    __errorFlags__ |= FILE_IO_ERROR;
-                    return FILE_IO_ERROR; 
+                    __errorFlags__ |= err_file_io;
+                    return err_file_io; 
                 }
 
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!(String *) &key) {                                                                                   // ... check if parameter construction is valid
-                        // log_e ("String key construction error: BAD_ALLOC");
+                        // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw BAD_ALLOC;
+                            throw err_bad_alloc;
                         #endif
-                        __errorFlags__ |= BAD_ALLOC;
-                        return BAD_ALLOC;
+                        __errorFlags__ |= err_bad_alloc;
+                        return err_bad_alloc;
                     }
 
                 if (is_same<valueType, String>::value)                                                                        // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!(String *) &value) {                                                                                 // ... check if parameter construction is valid
-                        // log_e ("String value construction error: BAD_ALLOC");
+                        // log_e ("String value construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw BAD_ALLOC;
+                            throw err_bad_alloc;
                         #endif
-                        __errorFlags__ |= BAD_ALLOC;
-                        return BAD_ALLOC;
+                        __errorFlags__ |= err_bad_alloc;
+                        return err_bad_alloc;
                     }
 
                 Lock (); 
                 if (__inIteration__) {
-                    // log_e ("not while iterating, error: CANT_DO_IT_NOW");
+                    // log_e ("not while iterating, error: err_cant_do_it_now");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw CANT_DO_IT_NOW;
+                        throw err_cant_do_it_now;
                     #endif
-                    __errorFlags__ |= CANT_DO_IT_NOW;
+                    __errorFlags__ |= err_cant_do_it_now;
                     Unlock (); 
-                    return CANT_DO_IT_NOW;
+                    return err_cant_do_it_now;
                 }
 
                 // 1. get ready for writting into __dataFile__
@@ -319,13 +319,13 @@
                     blockSize += sizeof (valueType);
                 }
                 if (blockSize > 32768) {
-                    // log_e ("block size > 32768, error: BAD_ALLOC");
+                    // log_e ("block size > 32768, error: err_bad_alloc");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw BAD_ALLOC;
+                        throw err_bad_alloc;
                     #endif
-                    __errorFlags__ |= BAD_ALLOC;
+                    __errorFlags__ |= err_bad_alloc;
                     Unlock (); 
-                    return BAD_ALLOC;
+                    return err_bad_alloc;
                 }
 
                 // 2. search __freeBlocksList__ for most suitable free block, if it exists
@@ -351,13 +351,13 @@
                     blockSize = __freeBlocksList__ [freeBlockIndex].blockSize;
                 }
                 if (!__dataFile__.seek (blockOffset, SeekSet)) {
-                    // log_e ("seek error FILE_IO_ERROR");
+                    // log_e ("seek error err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw FILE_IO_ERROR;
+                        throw err_file_io;
                     #endif
-                    __errorFlags__ |= FILE_IO_ERROR;
+                    __errorFlags__ |= err_file_io;
                     Unlock (); 
-                    return FILE_IO_ERROR;
+                    return err_file_io;
                 }
 
                 // 4. update (memory) Map structure 
@@ -387,13 +387,13 @@
                         return e;
                     }
                     // roll-back succeded
-                    // log_e ("roll-back succeeded, returning error: BAD_ALLOC");
+                    // log_e ("roll-back succeeded, returning error: err_bad_alloc");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw BAD_ALLOC;
+                        throw err_bad_alloc;
                     #endif
-                    __errorFlags__ |= BAD_ALLOC;
+                    __errorFlags__ |= err_bad_alloc;
                     Unlock (); 
-                    return BAD_ALLOC;
+                    return err_bad_alloc;
                 }
 
                 int16_t i = 0;
@@ -441,13 +441,13 @@
                         return e;
                     }
                     // roll-back succeded
-                    // log_e ("roll-back succeeded, returning error: FILE_IO_ERROR");
+                    // log_e ("roll-back succeeded, returning error: err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw FILE_IO_ERROR;
+                        throw err_file_io;
                     #endif
-                    __errorFlags__ |= FILE_IO_ERROR;
+                    __errorFlags__ |= err_file_io;
                     Unlock (); 
-                    return FILE_IO_ERROR;
+                    return err_file_io;
                 }
 
                 // write succeeded
@@ -464,7 +464,7 @@
                 
                 // log_i ("OK");
                 Unlock (); 
-                return OK;
+                return err_ok;
             }
 
 
@@ -476,12 +476,12 @@
                 // log_i ("(key, block offset)");
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!(String *) &key) {                                                                                   // ... check if parameter construction is valid
-                        // log_e ("String key construction error: BAD_ALLOC");
+                        // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw BAD_ALLOC;
+                            throw err_bad_alloc;
                         #endif
-                        __errorFlags__ |= BAD_ALLOC;
-                        return BAD_ALLOC;
+                        __errorFlags__ |= err_bad_alloc;
+                        return err_bad_alloc;
                     }
 
                 Lock ();
@@ -491,14 +491,14 @@
                     blockOffset = *p;
                     Unlock ();  
                     // log_i ("OK");
-                    return OK;
+                    return err_ok;
                 } else { // not found or error
                     signed char e = Map<keyType, uint32_t>::errorFlags ();
-                    if (e == NOT_FOUND) {
+                    if (e == err_not_found) {
                         // log_i ("error (key): NOT_FOUD");
-                        __errorFlags__ |= NOT_FOUND;
+                        __errorFlags__ |= err_not_found;
                         Unlock ();  
-                        return NOT_FOUND;
+                        return err_not_found;
                     } else {
                         // log_i ("error: some other error, check result");
                         __errorFlags__ |= e;
@@ -516,22 +516,22 @@
             signed char FindValue (keyType key, valueType *value, uint32_t blockOffset = 0xFFFFFFFF) { 
                 // log_i ("(key, *value, block offset)");
                 if (!__dataFile__) { 
-                    // log_e ("error, data file not opened: FILE_IO_ERROR");
+                    // log_e ("error, data file not opened: err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw FILE_IO_ERROR;
+                        throw err_file_io;
                     #endif
-                    __errorFlags__ |= FILE_IO_ERROR;
-                    return FILE_IO_ERROR; 
+                    __errorFlags__ |= err_file_io;
+                    return err_file_io; 
                 }
 
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!(String *) &key) {                                                                                   // ... check if parameter construction is valid
-                        // log_e ("String key construction error: BAD_ALLOC");
+                        // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw BAD_ALLOC;
+                            throw err_bad_alloc;
                         #endif
-                        __errorFlags__ |= BAD_ALLOC;
-                        return BAD_ALLOC;
+                        __errorFlags__ |= err_bad_alloc;
+                        return err_bad_alloc;
                     }
 
                 keyType storedKey = {};
@@ -545,9 +545,9 @@
                         signed char e = Map<keyType, uint32_t>::errorFlags ();
                         if (e) { // != OK
                             // log_i ("error (key): NOT_FOUD");
-                            __errorFlags__ |= NOT_FOUND;
+                            __errorFlags__ |= err_not_found;
                             Unlock ();  
-                            return NOT_FOUND;
+                            return err_not_found;
                         } else {
                             // log_i ("error: some other error, check result");
                             __errorFlags__ |= e;
@@ -563,24 +563,24 @@
                     if (blockSize > 0 && storedKey == key) {
                         // log_i ("OK");
                         Unlock ();  
-                        return OK; // success  
+                        return err_ok; // success  
                     } else {
-                        // log_e ("error that shouldn't happen: DATA_CHANGED");
+                        // log_e ("error that shouldn't happen: err_data_changed");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw DATA_CHANGED;
+                            throw err_data_changed;
                         #endif
-                        __errorFlags__ |= DATA_CHANGED;
+                        __errorFlags__ |= err_data_changed;
                         Unlock ();  
-                        return DATA_CHANGED; // shouldn't happen, but check anyway ...
+                        return err_data_changed; // shouldn't happen, but check anyway ...
                     }
                 } else {
-                    // log_e ("error reading data block: FILE_IO_ERROR");
+                    // log_e ("error reading data block: err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw FILE_IO_ERROR;
+                        throw err_file_io;
                     #endif
-                    __errorFlags__ |= FILE_IO_ERROR;
+                    __errorFlags__ |= err_file_io;
                     Unlock ();  
-                    return FILE_IO_ERROR; 
+                    return err_file_io; 
                 } 
             }
 
@@ -592,32 +592,32 @@
             signed char Update (keyType key, valueType newValue, uint32_t *pBlockOffset = NULL) {
                 // log_i ("(key, value)");
                 if (!__dataFile__) { 
-                    // log_e ("error, data file not opened: FILE_IO_ERROR");
+                    // log_e ("error, data file not opened: err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw FILE_IO_ERROR;
+                        throw err_file_io;
                     #endif
-                    __errorFlags__ |= FILE_IO_ERROR;
-                    return FILE_IO_ERROR; 
+                    __errorFlags__ |= err_file_io;
+                    return err_file_io; 
                 }
 
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!(String *) &key) {                                                                                   // ... check if parameter construction is valid
-                        // log_e ("String key construction error: BAD_ALLOC");
+                        // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw BAD_ALLOC;
+                            throw err_bad_alloc;
                         #endif
-                        __errorFlags__ |= BAD_ALLOC;
-                        return BAD_ALLOC;
+                        __errorFlags__ |= err_bad_alloc;
+                        return err_bad_alloc;
                     }
 
                 if (is_same<valueType, String>::value)                                                                        // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!(String *) &newValue) {                                                                              // ... check if parameter construction is valid
-                        // log_e ("String value construction error: BAD_ALLOC");
+                        // log_e ("String value construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw BAD_ALLOC;
+                            throw err_bad_alloc;
                         #endif
-                        __errorFlags__ |= BAD_ALLOC;
-                        return BAD_ALLOC;
+                        __errorFlags__ |= err_bad_alloc;
+                        return err_bad_alloc;
                     }
 
                 Lock (); 
@@ -651,16 +651,16 @@
                 if (e) { // != OK
                     // log_e ("read block error");
                     Unlock ();  
-                    return FILE_IO_ERROR;
+                    return err_file_io;
                 } 
                 if (blockSize <= 0 || storedKey != key) {
-                    // log_e ("error that shouldn't happen: DATA_CHANGED");
+                    // log_e ("error that shouldn't happen: err_data_changed");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw DATA_CHANGED;
+                        throw err_data_changed;
                     #endif
-                    __errorFlags__ |= DATA_CHANGED;
+                    __errorFlags__ |= err_data_changed;
                     Unlock ();  
-                    return DATA_CHANGED; // shouldn't happen, but check anyway ...
+                    return err_data_changed; // shouldn't happen, but check anyway ...
                 }
 
                 // 3. calculate new block and data size
@@ -682,13 +682,13 @@
                     newBlockSize += sizeof (valueType);
                 }
                 if (newBlockSize > 32768) {
-                    // log_e ("block size > 32768, error: BAD_ALLOC");
+                    // log_e ("block size > 32768, error: err_bad_alloc");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw BAD_ALLOC;
+                        throw err_bad_alloc;
                     #endif
-                    __errorFlags__ |= BAD_ALLOC;
+                    __errorFlags__ |= err_bad_alloc;
                     Unlock (); 
-                    return BAD_ALLOC;
+                    return err_bad_alloc;
                 }
 
                 // 4. decide where to write the new value: existing block or a new one
@@ -705,13 +705,13 @@
                     // 5. write new value to __dataFile__
                     // log_i ("step 5: write new value");
                     if (!__dataFile__.seek (dataFileOffset, SeekSet)) {
-                        // log_e ("seek error: FILE_IO_ERROR");
+                        // log_e ("seek error: err_file_io");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw FILE_IO_ERROR;
+                            throw err_file_io;
                         #endif
-                        __errorFlags__ |= FILE_IO_ERROR;
+                        __errorFlags__ |= err_file_io;
                         Unlock ();  
-                        return FILE_IO_ERROR;
+                        return err_file_io;
                     }
                     int bytesToWrite;
                     int bytesWritten;
@@ -726,17 +726,17 @@
                         // log_e ("write failed failed, can't roll-back, critical error, closing data file");
                         __dataFile__.close (); // memory key value pairs and disk data file are synchronized any more - it is better to clost he file, this would cause all disk related operations from now on to fail
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw FILE_IO_ERROR;
+                            throw err_file_io;
                         #endif
-                        __errorFlags__ |= FILE_IO_ERROR;
+                        __errorFlags__ |= err_file_io;
                         Unlock ();  
-                        return FILE_IO_ERROR;
+                        return err_file_io;
                     }
                     // success
                     __dataFile__.flush ();
                     Unlock ();  
                     // log_i ("OK");
-                    return OK;
+                    return err_ok;
 
                 } else { // existing block is not big eneugh, we'll need a new block - more difficult case
                     // log_i ("new block is needed");
@@ -764,13 +764,13 @@
                         newBlockSize = __freeBlocksList__ [freeBlockIndex].blockSize;
                     }
                     if (!__dataFile__.seek (newBlockOffset, SeekSet)) {
-                        // log_e ("seek error FILE_IO_ERROR");
+                        // log_e ("seek error err_file_io");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw FILE_IO_ERROR;
+                            throw err_file_io;
                         #endif
-                        __errorFlags__ |= FILE_IO_ERROR;
+                        __errorFlags__ |= err_file_io;
                         Unlock (); 
-                        return FILE_IO_ERROR;
+                        return err_file_io;
                     }
 
                     // 8. construct the block to be written
@@ -779,11 +779,11 @@
                     if (!block) {
                         // log_e ("malloc error, out of memory");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw BAD_ALLOC;
+                            throw err_bad_alloc;
                         #endif
-                        __errorFlags__ |= BAD_ALLOC;
+                        __errorFlags__ |= err_bad_alloc;
                         Unlock (); 
-                        return BAD_ALLOC;
+                        return err_bad_alloc;
                     }
 
                     int16_t i = 0;
@@ -819,13 +819,13 @@
                             // log_e ("seek failed failed, can't roll-back, critical error, closing data file");
                             __dataFile__.close (); // memory key value pairs and disk data file are synchronized any more - it is better to clost he file, this would cause all disk related operations from now on to fail
                         }
-                        // log_e ("error FILE_IO_ERROR");
+                        // log_e ("error err_file_io");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw FILE_IO_ERROR;
+                            throw err_file_io;
                         #endif
-                        __errorFlags__ |= FILE_IO_ERROR;
+                        __errorFlags__ |= err_file_io;
                         Unlock (); 
-                        return FILE_IO_ERROR;
+                        return err_file_io;
                     }
                     free (block);
                     __dataFile__.flush ();
@@ -839,25 +839,25 @@
                     }
                     // mark old block as free
                     if (!__dataFile__.seek (*pBlockOffset, SeekSet)) {
-                        // log_e ("seek error: FILE_IO_ERROR");
+                        // log_e ("seek error: err_file_io");
                         __dataFile__.close (); // data file is corrupt (it contains two entries with the same key) and it is not likely we can roll it back
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw FILE_IO_ERROR;
+                            throw err_file_io;
                         #endif
-                        __errorFlags__ |= FILE_IO_ERROR;
+                        __errorFlags__ |= err_file_io;
                         Unlock (); 
-                        return FILE_IO_ERROR;
+                        return err_file_io;
                     }
                     blockSize = (int16_t) -blockSize;
                     if (__dataFile__.write ((byte *) &blockSize, sizeof (blockSize)) != sizeof (blockSize)) {
-                        // log_e ("write error: FILE_IO_ERROR");
+                        // log_e ("write error: err_file_io");
                         __dataFile__.close (); // data file is corrupt (it contains two entries with the same key) and it si not likely we can roll it back
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw FILE_IO_ERROR;
+                            throw err_file_io;
                         #endif
-                        __errorFlags__ |= FILE_IO_ERROR;
+                        __errorFlags__ |= err_file_io;
                         Unlock (); 
-                        return FILE_IO_ERROR;
+                        return err_file_io;
                     }
                     __dataFile__.flush ();
                     // update __freeBlocklist__
@@ -869,11 +869,11 @@
                     *pBlockOffset = newBlockOffset; // there is no reason this would fail
                     Unlock ();  
                     // log_i ("OK");
-                    return OK;
+                    return err_ok;
                 }
 
                 // Unlock ();  
-                // return OK;
+                // return err_ok;
             }
 
 
@@ -884,22 +884,22 @@
             signed char Update (keyType key, void (*updateCallback) (valueType &value), uint32_t *pBlockOffset = NULL) {
                 // log_i ("(key, value)");
                 if (!__dataFile__) { 
-                    // log_e ("error, data file not opened: FILE_IO_ERROR");
+                    // log_e ("error, data file not opened: err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw FILE_IO_ERROR;
+                        throw err_file_io;
                     #endif
-                    __errorFlags__ |= FILE_IO_ERROR;
-                    return FILE_IO_ERROR; 
+                    __errorFlags__ |= err_file_io;
+                    return err_file_io; 
                 }
 
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!(String *) &key) {                                                                                   // ... check if parameter construction is valid
-                        // log_e ("String key construction error: BAD_ALLOC");
+                        // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw BAD_ALLOC;
+                            throw err_bad_alloc;
                         #endif
-                        __errorFlags__ |= BAD_ALLOC;
-                        return BAD_ALLOC;
+                        __errorFlags__ |= err_bad_alloc;
+                        return err_bad_alloc;
                     }
 
                 Lock (); 
@@ -924,7 +924,7 @@
                 }                
                 // log_i ("OK");
                 Unlock ();
-                return OK;
+                return err_ok;
             }
 
 
@@ -935,32 +935,32 @@
             signed char Upsert (keyType key, valueType newValue) {
                 // log_i ("(key, value)");
                 if (!__dataFile__) { 
-                    // log_e ("error, data file not opened: FILE_IO_ERROR");
+                    // log_e ("error, data file not opened: err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw FILE_IO_ERROR;
+                        throw err_file_io;
                     #endif
-                    __errorFlags__ |= FILE_IO_ERROR;
-                    return FILE_IO_ERROR; 
+                    __errorFlags__ |= err_file_io;
+                    return err_file_io; 
                 }
 
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!(String *) &key) {                                                                                   // ... check if parameter construction is valid
-                        // log_e ("String key construction error: BAD_ALLOC");
+                        // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw BAD_ALLOC;
+                            throw err_bad_alloc;
                         #endif
-                        __errorFlags__ |= BAD_ALLOC;
-                        return BAD_ALLOC;
+                        __errorFlags__ |= err_bad_alloc;
+                        return err_bad_alloc;
                     }
 
                 if (is_same<valueType, String>::value)                                                                        // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!(String *) &newValue) {                                                                              // ... check if parameter construction is valid
-                        // log_e ("String value construction error: BAD_ALLOC");
+                        // log_e ("String value construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw BAD_ALLOC;
+                            throw err_bad_alloc;
                         #endif
-                        __errorFlags__ |= BAD_ALLOC;
-                        return BAD_ALLOC;
+                        __errorFlags__ |= err_bad_alloc;
+                        return err_bad_alloc;
                     }
 
                 Lock ();
@@ -985,32 +985,32 @@
             signed char Upsert (keyType key, void (*updateCallback) (valueType &value), valueType defaultValue) {
                 // log_i ("(key, value)");
                 if (!__dataFile__) { 
-                    // log_e ("error, data file not opened: FILE_IO_ERROR");
+                    // log_e ("error, data file not opened: err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw FILE_IO_ERROR;
+                        throw err_file_io;
                     #endif
-                    __errorFlags__ |= FILE_IO_ERROR;
-                    return FILE_IO_ERROR; 
+                    __errorFlags__ |= err_file_io;
+                    return err_file_io; 
                 }
 
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!(String *) &key) {                                                                                   // ... check if parameter construction is valid
-                        // log_e ("String key construction error: BAD_ALLOC");
+                        // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw BAD_ALLOC;
+                            throw err_bad_alloc;
                         #endif
-                        __errorFlags__ |= BAD_ALLOC;
-                        return BAD_ALLOC;
+                        __errorFlags__ |= err_bad_alloc;
+                        return err_bad_alloc;
                     }
 
                 if (is_same<valueType, String>::value)                                                                        // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!(String *) &defaultValue) {                                                                          // ... check if parameter construction is valid
-                        // log_e ("String value construction error: BAD_ALLOC");
+                        // log_e ("String value construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw BAD_ALLOC;
+                            throw err_bad_alloc;
                         #endif
-                        __errorFlags__ |= BAD_ALLOC;
-                        return BAD_ALLOC;
+                        __errorFlags__ |= err_bad_alloc;
+                        return err_bad_alloc;
                     }
 
                 Lock (); 
@@ -1036,34 +1036,34 @@
             signed char Delete (keyType key) {
                 // log_i ("(key, value)");
                 if (!__dataFile__) { 
-                    // log_e ("error, data file not opened: FILE_IO_ERROR");
+                    // log_e ("error, data file not opened: err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw FILE_IO_ERROR;
+                        throw err_file_io;
                     #endif
-                    __errorFlags__ |= FILE_IO_ERROR;
-                    return FILE_IO_ERROR; 
+                    __errorFlags__ |= err_file_io;
+                    return err_file_io; 
                 }
 
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!(String *) &key) {                                                                                   // ... check if parameter construction is valid
-                        // log_e ("String key construction error: BAD_ALLOC");
+                        // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw BAD_ALLOC;
+                            throw err_bad_alloc;
                         #endif
-                        __errorFlags__ |= BAD_ALLOC;
-                        return BAD_ALLOC;
+                        __errorFlags__ |= err_bad_alloc;
+                        return err_bad_alloc;
                     }
 
                 Lock (); 
 
                 if (__inIteration__) {
-                    // log_e ("not while iterating, error: CANT_DO_IT_NOW");
+                    // log_e ("not while iterating, error: err_cant_do_it_now");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw CANT_DO_IT_NOW;
+                        throw err_cant_do_it_now;
                     #endif
-                    __errorFlags__ |= CANT_DO_IT_NOW;
+                    __errorFlags__ |= err_cant_do_it_now;
                     Unlock (); 
-                    return CANT_DO_IT_NOW;
+                    return err_cant_do_it_now;
                 }
 
                 // 1. get blockOffset
@@ -1079,32 +1079,32 @@
                 // 2. read the block size
                 // log_i ("step 2: reading block size from data file");
                 if (!__dataFile__.seek (blockOffset, SeekSet)) {
-                    // log_e ("seek failed, error FILE_IO_ERROR");
+                    // log_e ("seek failed, error err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw FILE_IO_ERROR;
+                        throw err_file_io;
                     #endif
-                    __errorFlags__ |= FILE_IO_ERROR;
+                    __errorFlags__ |= err_file_io;
                     Unlock (); 
-                    return FILE_IO_ERROR;
+                    return err_file_io;
                 }
                 int16_t blockSize;
                 if (__dataFile__.read ((uint8_t *) &blockSize, sizeof (int16_t)) != sizeof (blockSize)) {
-                    // log_e ("read failed, error FILE_IO_ERROR");
+                    // log_e ("read failed, error err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw FILE_IO_ERROR;
+                        throw err_file_io;
                     #endif
-                    __errorFlags__ |= FILE_IO_ERROR;
+                    __errorFlags__ |= err_file_io;
                     Unlock (); 
-                    return FILE_IO_ERROR;
+                    return err_file_io;
                 }
                 if (blockSize < 0) { 
-                    // log_e ("error that shouldn't happen: DATA_CHANGED");
+                    // log_e ("error that shouldn't happen: err_data_changed");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw DATA_CHANGED;
+                        throw err_data_changed;
                     #endif
-                    __errorFlags__ |= DATA_CHANGED;
+                    __errorFlags__ |= err_data_changed;
                     Unlock (); 
-                    return DATA_CHANGED; // shouldn't happen, but check anyway ...
+                    return err_data_changed; // shouldn't happen, but check anyway ...
                 }
 
                 // 3. erase the key from Map
@@ -1121,7 +1121,7 @@
                 // log_i ("step 4: mark bloc as free");
                 blockSize = (int16_t) -blockSize;
                 if (!__dataFile__.seek (blockOffset, SeekSet)) {
-                  // log_e ("seek failed, error FILE_IO_ERROR");
+                  // log_e ("seek failed, error err_file_io");
 
                     // 5. (try to) roll-back
                     // log_i ("step 5: try to roll-back");
@@ -1129,13 +1129,13 @@
                         // log_e ("Map::insert failed failed, can't roll-back, critical error, closing data file");
                         __dataFile__.close (); // memory key value pairs and disk data file are synchronized any more - it is better to clost the file, this would cause all disk related operations from now on to fail
                     }
-                    // log_e ("error FILE_IO_ERROR");
+                    // log_e ("error err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw FILE_IO_ERROR;
+                        throw err_file_io;
                     #endif
-                    __errorFlags__ |= FILE_IO_ERROR;
+                    __errorFlags__ |= err_file_io;
                     Unlock (); 
-                    return FILE_IO_ERROR;
+                    return err_file_io;
                 }
                 if (__dataFile__.write ((byte *) &blockSize, sizeof (blockSize)) != sizeof (blockSize)) {
                     // log_e ("write failed, try to roll-back");
@@ -1144,13 +1144,13 @@
                         // log_e ("Map::insert failed failed, can't roll-back, critical error, closing data file");
                         __dataFile__.close (); // memory key value pairs and disk data file are synchronized any more - it is better to clost he file, this would cause all disk related operations from now on to fail
                     }
-                    // log_e ("error FILE_IO_ERROR");
+                    // log_e ("error err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw FILE_IO_ERROR;
+                        throw err_file_io;
                     #endif
-                    __errorFlags__ |= FILE_IO_ERROR;
+                    __errorFlags__ |= err_file_io;
                     Unlock (); 
-                    return FILE_IO_ERROR;
+                    return err_file_io;
                 }
                 __dataFile__.flush ();
 
@@ -1164,7 +1164,7 @@
                 }
                 // log_i ("OK");
                 Unlock ();  
-                return OK;
+                return err_ok;
             }
 
 
@@ -1177,13 +1177,13 @@
                 
                 Lock (); 
                     if (__inIteration__) {
-                      // log_e ("not while iterating, error: CANT_DO_IT_NOW");
+                      // log_e ("not while iterating, error: err_cant_do_it_now");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw CANT_DO_IT_NOW;
+                            throw err_cant_do_it_now;
                         #endif
-                        __errorFlags__ |= CANT_DO_IT_NOW;
+                        __errorFlags__ |= err_cant_do_it_now;
                         Unlock (); 
-                        return CANT_DO_IT_NOW;
+                        return err_cant_do_it_now;
                     }
 
                     if (__dataFile__) __dataFile__.close (); 
@@ -1192,24 +1192,24 @@
                     if (__dataFile__) {
                         __dataFile__.close (); 
                     } else {
-                        // log_e ("truncate failed, error FILE_IO_ERROR");
+                        // log_e ("truncate failed, error err_file_io");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw FILE_IO_ERROR;
+                            throw err_file_io;
                         #endif
-                        __errorFlags__ |= FILE_IO_ERROR;
+                        __errorFlags__ |= err_file_io;
                         Unlock ();  
-                        return FILE_IO_ERROR;
+                        return err_file_io;
                     }
 
                     __dataFile__ = fileSystem.open (__dataFileName__, "r+"); // , false);
                     if (!__dataFile__) {
-                        // log_e ("data file open failed, error FILE_IO_ERROR");
+                        // log_e ("data file open failed, error err_file_io");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw FILE_IO_ERROR;
+                            throw err_file_io;
                         #endif
-                        __errorFlags__ |= FILE_IO_ERROR;
+                        __errorFlags__ |= err_file_io;
                         Unlock ();  
-                        return FILE_IO_ERROR;
+                        return err_file_io;
                     }
 
                     __dataFileSize__ = 0; 
@@ -1217,7 +1217,7 @@
                     __freeBlocksList__.clear ();
                 // log_i ("OK");
                 Unlock ();  
-                return OK;
+                return err_ok;
             }
 
 
@@ -1363,27 +1363,27 @@
             signed char __readBlock__ (int16_t& blockSize, keyType& key, valueType& value, uint32_t blockOffset, bool skipReadingValue = false) {
                 // reposition file pointer to the beginning of a block
                 if (!__dataFile__.seek (blockOffset, SeekSet)) {
-                    // log_e ("seek error FILE_IO_ERROR");
+                    // log_e ("seek error err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw FILE_IO_ERROR;
+                        throw err_file_io;
                     #endif
-                    __errorFlags__ |= FILE_IO_ERROR;
-                    return FILE_IO_ERROR;
+                    __errorFlags__ |= err_file_io;
+                    return err_file_io;
                 }
 
                 // read block size
                 if (__dataFile__.read ((uint8_t *) &blockSize, sizeof (int16_t)) != sizeof (blockSize)) {
-                    // log_e ("read block size error FILE_IO_ERROR");
+                    // log_e ("read block size error err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                        throw FILE_IO_ERROR;
+                        throw err_file_io;
                     #endif
-                    __errorFlags__ |= FILE_IO_ERROR;                    
-                    return FILE_IO_ERROR;
+                    __errorFlags__ |= err_file_io;                    
+                    return err_file_io;
                 }
                 // if block is free the reading is already done
                 if (blockSize < 0) { 
                     // log_i ("OK");
-                    return OK;
+                    return err_ok;
                 }
 
                 // read key
@@ -1393,23 +1393,23 @@
                             char c = (char) __dataFile__.read (); 
                             if (!c) break;
                             if (!((String *) &key)->concat (c)) {
-                                // log_e ("String key construction error BAD_ALLOC");
+                                // log_e ("String key construction error err_bad_alloc");
                                 #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                                    throw BAD_ALLOC;
+                                    throw err_bad_alloc;
                                 #endif
-                                __errorFlags__ |= BAD_ALLOC;
-                                return BAD_ALLOC;
+                                __errorFlags__ |= err_bad_alloc;
+                                return err_bad_alloc;
                             }
                     }
                 } else {
                     // fixed size key
                     if (__dataFile__.read ((uint8_t *) &key, sizeof (key)) != sizeof (key)) {
-                        // log_e ("read key error FILE_IO_ERROR");
+                        // log_e ("read key error err_file_io");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                            throw FILE_IO_ERROR;
+                            throw err_file_io;
                         #endif
-                        __errorFlags__ |= FILE_IO_ERROR;
-                        return FILE_IO_ERROR;
+                        __errorFlags__ |= err_file_io;
+                        return err_file_io;
                     }                                
                 }
 
@@ -1421,28 +1421,28 @@
                                 char c = (char) __dataFile__.read (); 
                                 if (!c) break;
                                 if (!((String *) &value)->concat (c)) {
-                                    // log_e ("String value construction error BAD_ALLOC");
+                                    // log_e ("String value construction error err_bad_alloc");
                                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                                        throw BAD_ALLOC;
+                                        throw err_bad_alloc;
                                     #endif
-                                    __errorFlags__ |= BAD_ALLOC;
-                                    return BAD_ALLOC;     
+                                    __errorFlags__ |= err_bad_alloc;
+                                    return err_bad_alloc;     
                                 }
                         }
                     } else {
                         // fixed size value
                         if (__dataFile__.read ((uint8_t *) &value, sizeof (value)) != sizeof (value)) {
-                            // log_e ("read value error FILE_IO_ERROR");
+                            // log_e ("read value error err_file_io");
                             #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
-                                throw FILE_IO_ERROR;
+                                throw err_file_io;
                             #endif
-                            __errorFlags__ |= FILE_IO_ERROR;
-                            return FILE_IO_ERROR;      
+                            __errorFlags__ |= err_file_io;
+                            return err_file_io;      
                         }                                
                     }
                 }
                 // log_i ("OK");
-                return OK;
+                return err_ok;
             }
 
     };

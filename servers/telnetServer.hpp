@@ -8,7 +8,7 @@
     telnetCommandHandlerCallback function to handle some commands itself. A simple telnet client is also implemented as one of the built-in
     telnet commands but it doesn't expose an applicaton program interface.
   
-    March 12, 2024, Bojan Jurca
+    May 22, 2024, Bojan Jurca
 
     Nomenclature used here for easier understaning of the code:
 
@@ -41,7 +41,7 @@
 
     #include <WiFi.h>
     // hard reset by triggering watchdog
-    #include <esp_int_wdt.h>
+///    #include <esp_int_wdt.h>
     #include <esp_task_wdt.h>
     // fixed size strings
     #include "std/Cstring.hpp"
@@ -58,8 +58,8 @@
         #ifndef __TIME_FUNCTIONS__
             #pragma message "Compiling telnetServer.hpp without time functions (time_functions.h), some commands, like ntpdate, crontab, ... will not be available"  
         #endif
-        #ifndef __NETWORK__
-            #pragma message "Compiling telnetServer.hpp without network functions (network.h), some commands, like ifconfig, arp, ... will not be available"  
+        #ifndef __NETWK__
+            #pragma message "Compiling telnetServer.hpp without network functions (netwk.h), some commands, like ifconfig, arp, ... will not be available"  
         #endif
         #ifndef __HTTP_CLIENT__
             #pragma message "Compiling telnetServer.hpp without HTTP client (httpClient.h), curl command will not be available"  
@@ -111,7 +111,7 @@
     #include "std/vector.hpp"                               // for vi and tree commands only
 
     #include "version_of_servers.h"                         // version of this software, used in uname command
-    #define UNAME string (MACHINETYPE " (") + string ((int) ESP.getCpuFreqMHz ()) + " MHz) " HOSTNAME " SDK: " + ESP.getSdkVersion () + " " VERSION_OF_SERVERS " compiled at: " __DATE__ " " __TIME__  + " with C++: " + string ((unsigned int) __cplusplus) // + " IDF:" + String (ESP_IDF_VERSION_MAJOR) + "." + String (ESP_IDF_VERSION_MINOR) + "." + String (ESP_IDF_VERSION_PATCH)
+    #define UNAME cstring (MACHINETYPE " (") + cstring ((int) ESP.getCpuFreqMHz ()) + " MHz) " HOSTNAME " SDK: " + ESP.getSdkVersion () + " " VERSION_OF_SERVERS " compiled at: " __DATE__ " " __TIME__  + " with C++: " + cstring ((unsigned int) __cplusplus) // + " IDF:" + String (ESP_IDF_VERSION_MAJOR) + "." + String (ESP_IDF_VERSION_MINOR) + "." + String (ESP_IDF_VERSION_PATCH)
 
 
     // ----- CODE -----
@@ -164,11 +164,11 @@
 
         // telnetConnection state
         enum STATE_TYPE {
-          NOT_RUNNING = 0, 
-          RUNNING = 2        
+          NOT_RUNNING = 0,
+          RUNNING = 2
         };
-
         STATE_TYPE state () { return __state__; }
+
 
         telnetConnection ( // the following parameters will be handeled by telnetConnection instance
                          int connectionSocket,
@@ -511,7 +511,7 @@
                                 } else if (s != "") { // __telnetCommandHandlerCallback__ returned a reply                
                                   if (ths->sendTelnet (s.c_str ()) <= 0) goto endOfConnection;
                                 } else { // // __telnetCommandHandlerCallback__ returned "" - handle the command internally
-                                  string s = ths->internalTelnetCommandHandler (argc, argv, ths);
+                                  cstring s = ths->internalTelnetCommandHandler (argc, argv, ths);
                                   if (ths->__connectionSocket__ == -1) goto endOfConnection; // in case of quit - quit command closes the socket itself
                                   if (s != "") if (ths->sendTelnet (s) <= 0) goto endOfConnection;                               
                                 }
@@ -547,7 +547,7 @@
             vTaskDelete (NULL);                
         }
 
-        string internalTelnetCommandHandler (int argc, char *argv [], telnetConnection *tcn) {
+        cstring internalTelnetCommandHandler (int argc, char *argv [], telnetConnection *tcn) {
 
           #define argv0Is(X) (argc > 0 && !strcmp (argv [0], X))
           #define argv1Is(X) (argc > 1 && !strcmp (argv [1], X))
@@ -579,7 +579,7 @@
                                                 if (argc == 2) {
                                                     int n = atoi (argv [1]); if (n >= LWIP_SOCKET_OFFSET && n < LWIP_SOCKET_OFFSET + MEMP_NUM_NETCONN) return __kill__ (n);
                                                 }
-                                                return string ("Wrong syntax, use kill <socket>   (where ") + string (LWIP_SOCKET_OFFSET) + " <= socket <= " + string (LWIP_SOCKET_OFFSET + MEMP_NUM_NETCONN - 1) + ")";
+                                                return cstring ("Wrong syntax, use kill <socket>   (where ") + cstring (LWIP_SOCKET_OFFSET) + " <= socket <= " + cstring (LWIP_SOCKET_OFFSET + MEMP_NUM_NETCONN - 1) + ")";
                                               }
                                               else return "Only root may close sockets.";
                                           }
@@ -625,7 +625,7 @@
                                             return "Wrong syntax, use ping <target computer>"; 
                                         }
 
-        #ifdef __NETWORK__
+        #ifdef __NETWK__
 
             else if (argv0Is ("ifconfig"))  {
                                                   if (argc == 1) return ifconfig (__connectionSocket__);
@@ -818,7 +818,7 @@
                                               if (argc == 2)  {
                                                   unsigned long telnet_connection_time_out = __telnet_connection_time_out__;
                                                   __telnet_connection_time_out__ = 0; // infinite
-                                                  string s = __vi__ (argv [1], tcn);
+                                                  cstring s = __vi__ (argv [1], tcn);
                                                   __telnet_connection_time_out__ = telnet_connection_time_out;
                                                   return s;
                                               }
@@ -895,7 +895,7 @@
                               #endif
                                 "\r\n  network commands:"
                                 "\r\n      ping <terget computer>"
-                              #ifdef __NETWORK__
+                              #ifdef __NETWK__
                                 "\r\n      ifconfig"
                                 "\r\n      arp"
                                 "\r\n      iw"
@@ -948,7 +948,7 @@
                                   "\r\n      /etc/ntp.conf                             (contains NTP time servers names)"
                                   "\r\n      /etc/crontab                              (contains scheduled tasks)"
                                 #endif
-                                #ifdef __NETWORK__
+                                #ifdef __NETWK__
                                   "\r\n      /network/interfaces                       (contains STA(tion) configuration)"
                                   "\r\n      /etc/wpa_supplicant/wpa_supplicant.conf   (contains STA(tion) credentials)"
                                   "\r\n      /etc/dhcpcd.conf                          (contains A(ccess) P(oint) configuration)"
@@ -972,7 +972,7 @@
 
         const char *__clear__ () { return "\x1b[2J"; } // ESC[2J = clear screen
 
-        string __uname__ () { return UNAME; }
+        cstring __uname__ () { return UNAME; }
 
         const char *__free__ (unsigned long delaySeconds, telnetConnection *tcn) {
             bool firstTime = true;
@@ -1100,29 +1100,32 @@
             return "";
         }
 
-        string __kill__ (int i) { // i = socket number
+        cstring __kill__ (int i) { // i = socket number
           if (close (i) < 0) {
             #ifdef __DMESG__
                 dmesgQueue << "[telnet] close() error: " << errno << " " << strerror (errno);
             #endif
-            return string ("Error: ") + string (errno) + " " + strerror (errno);
+            return cstring ("Error: ") + cstring (errno) + " " + strerror (errno);
           }
           return "socked closed.";
         }
 
-        string __nohup__ (unsigned long timeOutSeconds) {
+        cstring __nohup__ (unsigned long timeOutSeconds) {
             __telnet_connection_time_out__ = timeOutSeconds * 1000;
-            return timeOutSeconds ? string ("Time-out set to ") + string (timeOutSeconds) + " seconds." : "Time-out set to infinite.";
+            return timeOutSeconds ? cstring ("Time-out set to ") + cstring (timeOutSeconds) + " seconds." : "Time-out set to infinite.";
         }
 
         const char *__reboot__ (bool softReboot) {
-            sendTelnet ("Rebooting ...");
-            delay (250);
             if (softReboot) {
+                sendTelnet ("(Soft) rebooting ...");
+                delay (250);
                 ESP.restart ();
             } else {
                 // cause WDT reset
-                esp_task_wdt_init (1, true);
+                sendTelnet ("(Hard) rebooting ...");
+                delay (250);
+                esp_task_wdt_config_t wdtCfg = {0, 1 << 1, true};
+                esp_task_wdt_init (&wdtCfg);
                 esp_task_wdt_add (NULL);
                 while (true);
             }
@@ -1134,17 +1137,17 @@
             return "";  
         }
   
-        string __getDateTime__ () {
+        cstring __getDateTime__ () {
             time_t t = time (NULL);
             if (t < 1687461154) return "The time has not been set yet."; // 2023/06/22 21:12:34 is the time when I'm writing this code, any valid time should be greater than this
             struct tm st;
             localtime_r (&t, &st);
-            string s;
+            cstring s;
             sprintf (s.c_str (), "%04i/%02i/%02i %02i:%02i:%02i", 1900 + st.tm_year, 1 + st.tm_mon, st.tm_mday, st.tm_hour, st.tm_min, st.tm_sec);
             return s;
         }
     
-        string __setDateTime__ (char *dt, char *tm) {
+        cstring __setDateTime__ (char *dt, char *tm) {
             int Y, M, D, h, m, s;
             if (sscanf (dt, "%i/%i/%i", &Y, &M, &D) == 3 && Y >= 1900 && M >= 1 && M <= 12 && D >= 1 && D <= 31 && sscanf (tm, "%i:%i:%i", &h, &m, &s) == 3 && h >= 0 && h <= 23 && m >= 0 && m <= 59 && s >= 0 && s <= 59) { // TO DO: we still do not catch all possible errors, for exmple 30.2.1966
                 struct tm tm;
@@ -1167,15 +1170,15 @@
 
       #ifdef __TIME_FUNCTIONS__
 
-        string __uptime__ () {
-            string s;
+        cstring __uptime__ () {
+            cstring s;
             char c [15];
             time_t t = time ();
             time_t uptime;
             if (t) { // if time is set
                 struct tm strTime = localTime (t);
                 sprintf (c, "%02i:%02i:%02i", strTime.tm_hour, strTime.tm_min, strTime.tm_sec);
-                s = string (c) + " up ";     
+                s = cstring (c) + " up ";     
             } else { // time is not set (yet), just read how far clock has come untill now
                 s = "Up ";
             }
@@ -1183,14 +1186,14 @@
             int seconds = uptime % 60; uptime /= 60;
             int minutes = uptime % 60; uptime /= 60;
             int hours = uptime % 24;   uptime /= 24; // uptime now holds days
-            if (uptime) s += string ((unsigned long) uptime) + " days, ";
+            if (uptime) s += cstring ((unsigned long) uptime) + " days, ";
             sprintf (c, "%02i:%02i:%02i", hours, minutes, seconds);
             s += c;
             return s;
         }
 
-        string __ntpdate__ (char *ntpServer = NULL) {
-            string r;
+        cstring __ntpdate__ (char *ntpServer = NULL) {
+            cstring r;
             if (ntpServer) {
                 char *p = ntpDate (ntpServer);
                 if (*p) return p; // ntpDate reported an error
@@ -1199,7 +1202,7 @@
                 if (*p) return p; // ntpDate reported an error
             }
             ascTime (localTime (time (NULL)), r.c_str ());
-            return string ("Time synchronized, currrent time is ") + r + ".";
+            return cstring ("Time synchronized, currrent time is ") + r + ".";
         }
 
         const char *__cronTab__ (telnetConnection *tcn) {
@@ -1208,7 +1211,7 @@
                     sendTelnet ("crontab is empty.");
                 } else {
                     for (int i = 0; i < __cronTabEntries__; i ++) {
-                        string s;
+                        cstring s;
                         char c [30];
                         if (__cronEntry__ [i].second == ANY)      s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].second);      s += c; }
                         if (__cronEntry__ [i].minute == ANY)      s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].minute);      s += c; }
@@ -1262,7 +1265,7 @@
                           // display intermediate results
                           char buf [100];
                           if (elapsed_time ())
-                              sprintf (buf, "\r\nReply from %s: bytes = %i time = %.3fms", target ().toString().c_str(), size (), elapsed_time ());
+                              sprintf (buf, "\r\nReply from %s: bytes = %i time = %.3f ms", target ().toString().c_str(), size (), elapsed_time ());
                           else
                               sprintf (buf, "\r\nReply from %s: time-out\n", target ().toString().c_str());
                           if (tcn->sendTelnet (buf) <= 0) stop ();
@@ -1290,7 +1293,7 @@
                                     "    Packets: Sent = %i, Received = %i, Lost = %i", tping.target ().toString ().c_str (), tping.sent (), tping.received (), tping.lost ());
                   if (tping.sent ()) {
                       sprintf (buf, " (%.2f%% loss)\r\nRound trip:\r\n"
-                                    "   Min = %.3fms, Max = %.3fms, Avg = %.3fms, Stdev = %.3fms", (float) tping.lost () / (float) tping.sent () * 100, tping.min_time (), tping.max_time (), tping.mean_time (), sqrt (tping.var_time () / tping.received ()));
+                                    "   Min = %.3f ms, Max = %.3f ms, Avg = %.3f ms, Stdev = %.3f ms", (float) tping.lost () / (float) tping.sent () * 100, tping.min_time (), tping.max_time (), tping.mean_time (), sqrt (tping.var_time () / tping.received ()));
                   }
               }
               tcn->sendTelnet (buf);
@@ -1304,7 +1307,7 @@
                   if (trueTime) return "-time option is not supported (time_functions.h is not included)";
               #endif
 
-              string s;
+              cstring s;
               bool firstRecord = true;
               dmesgQueueEntry_t *lastBack = NULL;
               for (auto e: dmesgQueue) { // scan dmesgQueue with iterator where the locking mechanism is already implemented
@@ -1377,13 +1380,13 @@
           bool clientTimeOut;
         };
         
-        string __telnet__ (char *server, int port, telnetConnection *tcn) {
+        cstring __telnet__ (char *server, int port, telnetConnection *tcn) {
           // get server address
           struct hostent *he = gethostbyname (server);
-          if (!he) return string ("gethostbyname() error: ") + string (h_errno) + " " + hstrerror (h_errno);
+          if (!he) return cstring ("gethostbyname() error: ") + cstring (h_errno) + " " + hstrerror (h_errno);
           // create socket
           int connectionSocket = socket (PF_INET, SOCK_STREAM, 0);
-          if (connectionSocket == -1) return string ("socket() error: ") + string (errno) + " " + strerror (errno);
+          if (connectionSocket == -1) return cstring ("socket() error: ") + cstring (errno) + " " + strerror (errno);
 
           // remember some information that netstat telnet command would use
           additionalSocketInformation [connectionSocket - LWIP_SOCKET_OFFSET] = { __TELNET_CLIENT_SOCKET__, 0, 0, millis (), millis () };
@@ -1391,7 +1394,7 @@
           // make the socket not-blocking so that time-out can be detected
           if (fcntl (connectionSocket, F_SETFL, O_NONBLOCK) == -1) {
               close (connectionSocket);
-              return string ("fcntl() error: ") + string (errno) + " "  + strerror (errno);
+              return cstring ("fcntl() error: ") + cstring (errno) + " "  + strerror (errno);
           }
           // connect to server
           struct sockaddr_in serverAddress;
@@ -1401,7 +1404,7 @@
           if (connect (connectionSocket, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
               if (errno != EINPROGRESS) {
                   close (connectionSocket);
-                  return string ("connect() error: ") + string (errno) + " "  + strerror (errno);
+                  return cstring ("connect() error: ") + cstring (errno) + " "  + strerror (errno);
                 }
             } // it is likely that socket is not connected yet at this point
           // send information about IP used to connect to server back to client
@@ -1514,7 +1517,7 @@
 
       #ifdef __HTTP_CLIENT__
 
-        string __curl__ (const char *method, char *url, telnetConnection *tcn) {
+        cstring __curl__ (const char *method, char *url, telnetConnection *tcn) {
             char server [65];
             char addr [128] = "/";
             int port = 80;
@@ -1535,7 +1538,7 @@
       #ifdef __FILE_SYSTEM__        
 
         bool telnetUserHasRightToAccessFile (char *fullPath) { return strstr (fullPath, __homeDir__) == fullPath; }
-        bool telnetUserHasRightToAccessDirectory (char *fullPath) { return telnetUserHasRightToAccessFile (string (fullPath) + "/"); }
+        bool telnetUserHasRightToAccessDirectory (char *fullPath) { return telnetUserHasRightToAccessFile (cstring (fullPath) + "/"); }
         
         #if (FILE_SYSTEM & FILE_SYSTEM_FAT) == FILE_SYSTEM_FAT
             const char *__mkfs__ (telnetConnection *tcn) {
@@ -1563,9 +1566,9 @@
             }
         #endif
   
-        string __fs_info__ () {
+        cstring __fs_info__ () {
             if (!fileSystem.mounted ()) return "File system not mounted. You may have to format flash disk first.";
-            string s = ""; // string = fsString<350> so we have enough space
+            cstring s = ""; // string = Ctring<300> so we have enough space
             
             #if (FILE_SYSTEM & FILE_SYSTEM_FAT) == FILE_SYSTEM_FAT
                 sprintf (s, "FAT file system --------------------\r\n"
@@ -1642,9 +1645,9 @@
             return "";
         }        
   
-        string __ls__ (char *directoryName, telnetConnection *tcn) {
+        cstring __ls__ (char *directoryName, telnetConnection *tcn) {
             if (!fileSystem.mounted ())                     return "File system not mounted. You may have to format flash disk first.";
-            string fp = fileSystem.makeFullPath (directoryName, __workingDir__);
+            cstring fp = fileSystem.makeFullPath (directoryName, __workingDir__);
             if (fp == "" || !fileSystem.isDirectory (fp))   return "Invalid directory name.";
             if (!telnetUserHasRightToAccessDirectory (fp))  return "Access denyed.";
 
@@ -1653,9 +1656,9 @@
             File d = fileSystem.open (fp); 
             if (!d) return "Out of resources";
             for (File f = d.openNextFile (); f; f = d.openNextFile ()) {
-                string fullFileName = fp;
+                cstring fullFileName = fp;
                 if (fullFileName [fullFileName.length () - 1] != '/') fullFileName += '/'; fullFileName += f.name ();
-                if (sendTelnet (firstRecord ? fileSystem.fileInformation (fullFileName) : string ("\r\n") + fileSystem.fileInformation (fullFileName)) <= 0) { d.close (); return "Out of memory"; }
+                if (sendTelnet (firstRecord ? fileSystem.fileInformation (fullFileName) : cstring ("\r\n") + fileSystem.fileInformation (fullFileName)) <= 0) { d.close (); return "Out of memory"; }
                 firstRecord = false;
             }
             d.close ();
@@ -1665,13 +1668,13 @@
         // iteratively scan directory tree, recursion takes too much stack
         const char *__tree__ (char *directoryName, telnetConnection *tcn) {
             if (!fileSystem.mounted ())                     return "File system not mounted. You may have to format flash disk first.";
-            string fp = fileSystem.makeFullPath (directoryName, __workingDir__);
+            cstring fp = fileSystem.makeFullPath (directoryName, __workingDir__);
             if (fp == "" || !fileSystem.isDirectory (fp))   return "Invalid directory name.";
             if (!telnetUserHasRightToAccessDirectory (fp))  return "Access denyed.";
 
             // keep directory names saved in vector for later recursion   
-            vector<string> dirList (5); 
-            if (dirList.push_back (fp) != OK) return "Out of memory";
+            vector<cstring> dirList (5); 
+            if (dirList.push_back (fp)) return "Out of memory";
             bool firstRecord = true;
             while (dirList.size () != 0) {
 
@@ -1680,7 +1683,7 @@
                 dirList.erase (0);
 
                 // 2. display directory info
-                 if (sendTelnet (firstRecord ? fileSystem.fileInformation (fp, true) : string ("\r\n") + fileSystem.fileInformation (fp, true)) <= 0) return "Out of memory";
+                 if (sendTelnet (firstRecord ? fileSystem.fileInformation (fp, true) : cstring ("\r\n") + fileSystem.fileInformation (fp, true)) <= 0) return "Out of memory";
                  firstRecord = false;
 
                 // 3. display information about files and remember subdirectories in dirList
@@ -1690,17 +1693,17 @@
                     if (f.isDirectory ()) {
                         // save directory name for later recursion
                         #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL (4, 4, 0) || FILE_SYSTEM == FILE_SYSTEM_LITTLEFS // f.name contains only a file name without path
-                            string dp = fp; if (dp [dp.length () - 1] != '/') dp += '/'; dp += f.name ();                          
-                            if (dirList.push_back (dp) != OK) { d.close (); return "Out of memory"; }
+                            cstring dp = fp; if (dp [dp.length () - 1] != '/') dp += '/'; dp += f.name ();                          
+                            if (dirList.push_back (dp)) { d.close (); return "Out of memory"; }
                         #else                                                                                       // f.name contains full file path
-                            if (dirList.push_back (f.name ()) != OK) { d.close (); return "Out of memory"; }
+                            if (dirList.push_back (f.name ())) { d.close (); return "Out of memory"; }
                         #endif
                     } else {
                         #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL (4, 4, 0) || FILE_SYSTEM == FILE_SYSTEM_LITTLEFS // f.name contains only a file name without path
-                            string dp = fp; if (dp [dp.length () - 1] != '/') dp += '/'; dp += f.name ();
-                            if (sendTelnet (string ("\r\n") + fileSystem.fileInformation (dp, true)) <= 0) { d.close (); return "Out of memory"; }
+                            cstring dp = fp; if (dp [dp.length () - 1] != '/') dp += '/'; dp += f.name ();
+                            if (sendTelnet (cstring ("\r\n") + fileSystem.fileInformation (dp, true)) <= 0) { d.close (); return "Out of memory"; }
                         #else                                                                                         // f.name contains full file path
-                            if (sendTelnet (string ("\r\n") + fileSystem.fileInformation (f.name (), true)) <= 0) { d.close (); return "Out of memory"; }
+                            if (sendTelnet (cstring ("\r\n") + fileSystem.fileInformation (f.name (), true)) <= 0) { d.close (); return "Out of memory"; }
                         #endif                              
                     }
                 }
@@ -1709,9 +1712,9 @@
             return "";    
         }
 
-        string __catFileToClient__ (char *fileName, telnetConnection *tcn) {
+        cstring __catFileToClient__ (char *fileName, telnetConnection *tcn) {
             if (!fileSystem.mounted ())               return "File system not mounted. You may have to format flash disk first.";
-            string fp = fileSystem.makeFullPath (fileName, __workingDir__);
+            cstring fp = fileSystem.makeFullPath (fileName, __workingDir__);
             if (fp == "" || !fileSystem.isFile (fp))  return "Invalid file name.";
             if (!telnetUserHasRightToAccessFile (fp)) return "Access denyed.";
 
@@ -1747,15 +1750,15 @@
                                                     if (sendTelnet (buff, i) <= 0) { f.close (); return ""; }
                                                 }
               } else {
-                  f.close (); return string ("Can't read ") + fp;
+                  f.close (); return cstring ("Can't read ") + fp;
               }
               f.close ();
               return "";
         }
 
-        string __catClientToFile__ (char *fileName, telnetConnection *tcn) {
+        cstring __catClientToFile__ (char *fileName, telnetConnection *tcn) {
           if (!fileSystem.mounted ())                   return "File system not mounted. You may have to format flash disk first.";
-          string fp = fileSystem.makeFullPath (fileName, __workingDir__);
+          cstring fp = fileSystem.makeFullPath (fileName, __workingDir__);
           if (fp == "" || fileSystem.isDirectory (fp))  return "Invalid file name.";
           if (!telnetUserHasRightToAccessFile (fp))     return "Access denyed.";
 
@@ -1767,12 +1770,12 @@
                 case 3: // Ctrl-C
                         f.close (); return fp + " not fully written.";
                 case 4: // Ctrl-D or Ctrl-Z
-                        f.close (); return string ("\r\n") + fp + " written.";
+                        f.close (); return cstring ("\r\n") + fp + " written.";
                 case 13: // ignore
                         break;
                 case 10: // LF -> CRLF conversion
                         if (f.write ((uint8_t *) "\r\n", 2) != 2) { 
-                          f.close (); return string ("Can't write ") + fp;
+                          f.close (); return cstring ("Can't write ") + fp;
                         } 
 
                         diskTrafficInformation.bytesWritten += 2; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
@@ -1782,7 +1785,7 @@
                         break;
                 default: // character 
                         if (f.write ((uint8_t *) &c, 1) != 1) { 
-                          f.close (); return string ("Can't write ") + fp;
+                          f.close (); return cstring ("Can't write ") + fp;
                         } 
 
                         diskTrafficInformation.bytesWritten += 1; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
@@ -1794,14 +1797,14 @@
             }
             f.close ();
           } else {
-            return string ("Can't write ") + fp;
+            return cstring ("Can't write ") + fp;
           }
           return "";
         }
 
-        string __tail__ (char *fileName, bool follow, telnetConnection *tcn) {
+        cstring __tail__ (char *fileName, bool follow, telnetConnection *tcn) {
             if (!fileSystem.mounted ())               return "File system not mounted. You may have to format flash disk first.";
-            string fp = fileSystem.makeFullPath (fileName, __workingDir__);
+            cstring fp = fileSystem.makeFullPath (fileName, __workingDir__);
             if (fp == "" || !fileSystem.isFile (fp))  return "Invalid file name.";
             if (!telnetUserHasRightToAccessFile (fp)) return "Access denyed.";
 
@@ -1845,7 +1848,7 @@
                   filePosition = f.position (); 
                   f.close ();
               } else {
-                  return string ("Can't read ") + fp;
+                  return cstring ("Can't read ") + fp;
               }
               // follow?
               if (follow) {
@@ -1866,50 +1869,50 @@
             return "";
         }
 
-        string __mkdir__ (char *directoryName) { 
+        cstring __mkdir__ (char *directoryName) { 
             if (!fileSystem.mounted ())                     return "File system not mounted. You may have to format flash disk first.";
-            string fp = fileSystem.makeFullPath (directoryName, __workingDir__);
+            cstring fp = fileSystem.makeFullPath (directoryName, __workingDir__);
             if (fp == "")                                   return "Invalid directory name.";
             if (!telnetUserHasRightToAccessDirectory (fp))  return "Access denyed.";
     
             if (fileSystem.makeDirectory (fp))              return fp + " made.";
-                                                            return string ("Can't make ") + fp;
+                                                            return cstring ("Can't make ") + fp;
         }
   
-        string __rmdir__ (char *directoryName) { 
+        cstring __rmdir__ (char *directoryName) { 
             if (!fileSystem.mounted ())                     return "File system not mounted. You may have to format flash disk first.";
-            string fp = fileSystem.makeFullPath (directoryName, __workingDir__);
+            cstring fp = fileSystem.makeFullPath (directoryName, __workingDir__);
             if (fp == "" || !fileSystem.isDirectory (fp))   return "Invalid directory name.";
             if (!telnetUserHasRightToAccessDirectory (fp))  return "Access denyed.";
             if (fp == __homeDir__)                          return "You can't remove your home directory.";
             if (fp == __workingDir__)                       return "You can't remove your working directory.";
     
             if (fileSystem.removeDirectory (fp))            return fp + " removed.";
-                                                            return string ("Can't remove ") + fp;
+                                                            return cstring ("Can't remove ") + fp;
         }      
 
-        string __cd__ (const char *directoryName) { 
+        cstring __cd__ (const char *directoryName) { 
             if (!fileSystem.mounted ())                     return "File system not mounted. You may have to format flash disk first.";
-            string fp = fileSystem.makeFullPath (directoryName, __workingDir__);
+            cstring fp = fileSystem.makeFullPath (directoryName, __workingDir__);
             if (fp == "" || !fileSystem.isDirectory (fp))   return "Invalid directory name.";
             if (!telnetUserHasRightToAccessDirectory (fp))  return "Access denyed.";
     
-            strcpy (__workingDir__, fp);                    return string ("Your working directory is ") + fp;
+            strcpy (__workingDir__, fp);                    return cstring ("Your working directory is ") + fp;
         }
 
-        string __pwd__ () { 
+        cstring __pwd__ () { 
             if (!fileSystem.mounted ()) return "File system not mounted. You may have to format flash disk first.";
             // remove extra /
-            string s (__workingDir__);
+            cstring s (__workingDir__);
             if (s [s.length () - 1] == '/') s [s.length () - 1] = 0;
             if (s == "") s = "/"; 
-            return string ("Your working directory is ") + s;
+            return cstring ("Your working directory is ") + s;
         }
 
-        string __mv__ (char *srcFileOrDirectory, char *dstFileOrDirectory) { 
+        cstring __mv__ (char *srcFileOrDirectory, char *dstFileOrDirectory) { 
             if (!fileSystem.mounted ())                       return "File system not mounted. You may have to format flash disk first.";
-            string fp1 = fileSystem.makeFullPath (srcFileOrDirectory, __workingDir__);
-            string fp2;
+            cstring fp1 = fileSystem.makeFullPath (srcFileOrDirectory, __workingDir__);
+            cstring fp2;
             if (fp1 == "")                                    return "Invalid source file or directory name.";
             if (fileSystem.isDirectory (fp1)) {
                 if (!telnetUserHasRightToAccessDirectory (fp1)) return "Access to source file or directory denyed.";
@@ -1918,32 +1921,32 @@
                 if (!telnetUserHasRightToAccessDirectory (fp1)) return "Access destination file or directory denyed.";            
             } else if (fileSystem.isFile (fp1)) {
                 if (!telnetUserHasRightToAccessFile (fp1))      return "Access to source file or directory denyed.";
-                string fp2 = fileSystem.makeFullPath (dstFileOrDirectory, __workingDir__);
+                cstring fp2 = fileSystem.makeFullPath (dstFileOrDirectory, __workingDir__);
                 if (fp2 == "")                                  return "Invalid destination file or directory name.";
                 if (!telnetUserHasRightToAccessFile (fp1))      return "Access destination file or directory denyed.";
             } else {
                                                                 return "Invalid source file or directory name.";
             }
             
-            if (fileSystem.rename (fp1, fp2))                 return string ("Renamed to ") + fp2;
-                                                              return string ("Can't rename ") + fp1;
+            if (fileSystem.rename (fp1, fp2))                 return cstring ("Renamed to ") + fp2;
+                                                              return cstring ("Can't rename ") + fp1;
         }
 
-        string __cp__ (char *srcFileName, char *dstFileName) { 
+        cstring __cp__ (char *srcFileName, char *dstFileName) { 
           if (!fileSystem.mounted ())                 return "File system not mounted. You may have to format flash disk first.";
-          string fp1 = fileSystem.makeFullPath (srcFileName, __workingDir__);
+          cstring fp1 = fileSystem.makeFullPath (srcFileName, __workingDir__);
           if (fp1 == "")                              return "Invalid source file name.";
           if (!telnetUserHasRightToAccessFile (fp1))  return "Access to source file denyed.";
-          string fp2 = fileSystem.makeFullPath (dstFileName, __workingDir__);
+          cstring fp2 = fileSystem.makeFullPath (dstFileName, __workingDir__);
           if (fp2 == "")                              return "Invalid destination file name.";
           if (!telnetUserHasRightToAccessFile (fp1))  return "Access destination file denyed.";
 
           File f1, f2;
-          string retVal = "File copied.";
+          cstring retVal = "File copied.";
           
-          if (!(bool) (f1 = fileSystem.open (fp1, "r"))) { return string ("Can't read ") + fp1; }
-          if (f1.isDirectory ()) { f1.close (); return  string ("Can't read ") + fp1; }
-          if (!(bool) (f2 = fileSystem.open (fp2, "w"))) { f1.close (); return string ("Can't write ") + fp2; }
+          if (!(bool) (f1 = fileSystem.open (fp1, "r"))) { return cstring ("Can't read ") + fp1; }
+          if (f1.isDirectory ()) { f1.close (); return cstring ("Can't read ") + fp1; }
+          if (!(bool) (f2 = fileSystem.open (fp2, "w"))) { f1.close (); return cstring ("Can't write ") + fp2; }
 
           int bytesReadTotal = 0;
           int bytesWrittenTotal = 0;
@@ -1961,7 +1964,7 @@
 
               diskTrafficInformation.bytesWritten += bytesWrittenThisTime; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
-              if (bytesWrittenThisTime != bytesReadThisTime) { retVal = string ("Can't write ") + fp2; break; } 
+              if (bytesWrittenThisTime != bytesReadThisTime) { retVal = cstring ("Can't write ") + fp2; break; } 
           } while (true);
           
           f2.close ();
@@ -1969,24 +1972,24 @@
           return retVal;
         }
 
-        string __rm__ (char *fileName) {
+        cstring __rm__ (char *fileName) {
             if (!fileSystem.mounted ())               return "File system not mounted. You may have to format flash disk first.";
-            string fp = fileSystem.makeFullPath (fileName, __workingDir__);
+            cstring fp = fileSystem.makeFullPath (fileName, __workingDir__);
             if (fp == "" || !fileSystem.isFile (fp))  return "Invalid file name.";
             if (!telnetUserHasRightToAccessFile (fp)) return "Access denyed.";
 
             if (fileSystem.deleteFile (fp))           return fp + " deleted.";
-            else                                      return string ("Can't delete ") + fp;
+            else                                      return cstring ("Can't delete ") + fp;
         }
 
         // not really a vi but small and simple text editor
-        string __vi__ (char *fileName, telnetConnection *tcn) {
+        cstring __vi__ (char *fileName, telnetConnection *tcn) {
           // a good reference for telnet ESC codes: https://en.wikipedia.org/wiki/ANSI_escape_code
           // and: https://docs.microsoft.com/en-us/windows/console/console-virtual-terminal-sequences
           if (!fileSystem.mounted ())               return "File system not mounted. You may have to format flash disk first.";
 
           if (!fileSystem.mounted ())               return "File system not mounted. You may have to format flash disk first.";
-          string fp = fileSystem.makeFullPath (fileName, __workingDir__);
+          cstring fp = fileSystem.makeFullPath (fileName, __workingDir__);
           if (fp == "")                             return "Invalid file name.";
           if (!telnetUserHasRightToAccessFile (fp)) return "Access denyed.";
   
@@ -1994,7 +1997,7 @@
           if (!fileSystem.isFile (fp)) {
             File f = fileSystem.open (fp, "w");
             if (f) { f.close (); if (sendTelnet ("\r\nFile created.") <= 0) return ""; }
-            else return string ("Can't create ") + fp;
+            else return cstring ("Can't create ") + fp;
           }
   
           // 2. read the file content into internal vi data structure (lines of Strings)
@@ -2018,7 +2021,7 @@
 
                   switch (c) {
                     case '\r':  break; // ignore
-                    case '\n':  if (ESP.getFreeHeap () < LEAVE_FREE_HEAP || lines.push_back ("") != OK) { // always leave at least 32 KB free for other things that may be running on ESP32
+                    case '\n':  if (ESP.getFreeHeap () < LEAVE_FREE_HEAP || lines.push_back ("")) { // always leave at least 32 KB free for other things that may be running on ESP32
                                   f.close (); 
                                   return fp + " is too long. Out of memory"; 
                                 }
@@ -2027,10 +2030,10 @@
                                   return fp + " has too many lines for this simple text editor."; 
                                 }
                                 break; 
-                    case '\t':  if (!lines.size ()) if (lines.push_back ("") != OK) return "Out of memory"; // vi editor (the code below) needs at least 1 (empty) line where text can be entered
+                    case '\t':  if (!lines.size ()) if (lines.push_back ("")) return "Out of memory"; // vi editor (the code below) needs at least 1 (empty) line where text can be entered
                                 if (!lines [lines.size () - 1].concat ("    ")) return "Out of memory"; // treat tab as 4 spaces, check success of concatenation
                                 break;
-                    default:    if (!lines.size ()) if (lines.push_back ("") != OK) return "Out of memory"; // vi editor (the code below) needs at least 1 (empty) line where text can be entered
+                    default:    if (!lines.size ()) if (lines.push_back ("")) return "Out of memory"; // vi editor (the code below) needs at least 1 (empty) line where text can be entered
                                 if (!lines [lines.size () - 1].concat (c)) return "Out of memory"; // check success of concatenation
                                 break;
                   }
@@ -2038,9 +2041,9 @@
                 f.close ();
               } else return "Can't edit a directory.";
               f.close ();
-            } else return string ("Can't read ") + fp;
+            } else return cstring ("Can't read ") + fp;
           }    
-          if (!lines.size ()) if (lines.push_back ("") != OK) return "Out of memory"; // vi editor (the code below) needs at least 1 (empty) line where text can be entered
+          if (!lines.size ()) if (lines.push_back ("")) return "Out of memory"; // vi editor (the code below) needs at least 1 (empty) line where text can be entered
   
           // 3. discard any already pending characters from client
           while (recvTelnetChar (true)) recvTelnetChar (false);
@@ -2066,14 +2069,14 @@
           bool redrawAllLines = true;
           bool redrawLineAtCursor = false; 
           bool redrawFooter = true;
-          string message = string (" ") + string (lines.size ()) + " lines ";
+          cstring message = cstring (" ") + cstring (lines.size ()) + " lines ";
   
                                 // clear screen
                                 if (sendTelnet ("\x1b[2J") <= 0) return "";  // ESC[2J = clear screen
   
           while (true) {
             // a. redraw screen 
-            string s;
+            cstring s;
          
             if (redrawHeader)   { 
                                   s = "\x1b[H----+"; s.rPad (__clientWindowWidth__ - 26, '-'); s += " Save: Ctrl-S, Exit: Ctrl-X -"; // ESC[H = move cursor home
@@ -2154,7 +2157,7 @@
             switch (c) {
               case 24:  // Ctrl-X
                         if (dirty) {
-                          string tmp = string ("\x1b[") + string (__clientWindowHeight__) + ";2H Save changes (y/n)? ";
+                          cstring tmp = cstring ("\x1b[") + cstring (__clientWindowHeight__) + ";2H Save changes (y/n)? ";
                           if (sendTelnet (tmp) <= 0) return ""; 
                           redrawFooter = true; // overwrite this question at next redraw
                           while (true) {                                                     
@@ -2164,7 +2167,7 @@
                           }
                         } 
                         {
-                          string tmp = string ("\x1b[") + string (__clientWindowHeight__) + ";2H Share and Enjoy ----\r\n";
+                          cstring tmp = cstring ("\x1b[") + cstring (__clientWindowHeight__) + ";2H Share and Enjoy ----\r\n";
                           if (sendTelnet (tmp) <= 0) return "";
                         }                        
                         return ""; 
@@ -2282,7 +2285,7 @@
                         break;
               case '\n': // enter
                         // split current line at cursor into textCursorY + 1 and textCursorY
-                        if (lines.size () >= MAX_LINES || ESP.getFreeHeap () < LEAVE_FREE_HEAP || lines.insert (textCursorY + 1, lines [textCursorY].substring (textCursorX)) != OK) { 
+                        if (lines.size () >= MAX_LINES || ESP.getFreeHeap () < LEAVE_FREE_HEAP || lines.insert (textCursorY + 1, lines [textCursorY].substring (textCursorX))) { 
                           message = " Out of memory or too many lines ";
                         } else {
                           lines [textCursorY] = lines [textCursorY].substring (0, textCursorX);
@@ -2299,7 +2302,7 @@
                         if (ESP.getFreeHeap () < LEAVE_FREE_HEAP) { 
                           message = " Out of memory ";
                         } else {
-                          if (c == '\t') s = "    "; else s = string (c); // treat tab as 4 spaces
+                          if (c == '\t') s = "    "; else s = cstring (c); // treat tab as 4 spaces
                             int l1 = lines [textCursorY].length (); 
                           lines [textCursorY] = lines [textCursorY].substring (0, textCursorX) + s + lines [textCursorY].substring (textCursorX); // inser character into line textCurrorY at textCursorX position
                             int l2 = lines [textCursorY].length (); if (l2 <= l1) return "Out of memory"; // check success of insertion of characters
@@ -2333,17 +2336,17 @@
         }
           
         #ifdef __FTP_CLIENT__
-          string __ftpPut__ (char *localFileName, char *remoteFileName, char *password, char *userName, int ftpPort, char *ftpServer) {
+          cstring __ftpPut__ (char *localFileName, char *remoteFileName, char *password, char *userName, int ftpPort, char *ftpServer) {
             if (!fileSystem.mounted ())                   return "File system not mounted. You may have to format flash disk first.";
-            string fp = fileSystem.makeFullPath (localFileName, __workingDir__);
+            cstring fp = fileSystem.makeFullPath (localFileName, __workingDir__);
             if (fp == "" || fileSystem.isDirectory (fp))  return "Invalid local file name.";
             if (!telnetUserHasRightToAccessFile (fp))     return "Access to local file denyed.";
             return ftpPut (fp, remoteFileName, password, userName, ftpPort, ftpServer);
           }
   
-          string __ftpGet__ (char *localFileName, char *remoteFileName, char *password, char *userName, int ftpPort, char *ftpServer) {
+          cstring __ftpGet__ (char *localFileName, char *remoteFileName, char *password, char *userName, int ftpPort, char *ftpServer) {
             if (!fileSystem.mounted ())                   return "File system not mounted. You may have to format flash disk first.";
-            string fp = fileSystem.makeFullPath (localFileName, __workingDir__);
+            cstring fp = fileSystem.makeFullPath (localFileName, __workingDir__);
             if (fp == "" || fileSystem.isDirectory (fp))  return "Invalid local file name.";
             if (!telnetUserHasRightToAccessFile (fp))     return "Access to local file denyed.";
             return ftpGet (fp, remoteFileName, password, userName, ftpPort, ftpServer);

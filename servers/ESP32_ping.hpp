@@ -13,7 +13,7 @@
     This is the reason for creating ESP32_ping.hpp
 
 
-    April 24, 2024, Bojan Jurca
+    May 22, 2024, Bojan Jurca
     
 */
 
@@ -22,10 +22,11 @@
     #define __ESP32_ping_HPP__
 
     #include <WiFi.h>
+    #include <lwip/netdb.h>
 
 
     #ifndef PING_DEFAULT_COUNT
-        #define PING_DEFAULT_COUNT     4
+        #define PING_DEFAULT_COUNT     10
     #endif
     #ifndef PING_DEFAULT_INTERVAL
         #define PING_DEFAULT_INTERVAL  1
@@ -60,7 +61,7 @@
             esp32_ping () {}
             esp32_ping (const char *pingTarget) {
                 // Resolve name            
-                hostent *he = gethostbyname(pingTarget);
+                hostent *he = gethostbyname (pingTarget);
                 if (he == NULL || he->h_length == 0) {
                     __errno__ = h_errno;
                     return;
@@ -109,7 +110,7 @@
 
                 // Create socket
                 int s;
-                if ((s = socket(AF_INET, SOCK_RAW, IP_PROTO_ICMP)) < 0)
+                if ((s = socket (AF_INET, SOCK_RAW, IP_PROTO_ICMP)) < 0)
                     return __errno__ = errno;
 
                 // Make the socket non-blocking, so we can detect time-out later     
@@ -121,7 +122,7 @@
                 // Begin ping ...
                 char ipa [INET_ADDRSTRLEN]; 
 
-                strcpy (ipa, inet_ntoa(__target__));
+                strcpy (ipa, inet_ntoa (__target__));
                 log_i ("PING %s: %d data bytes", ipa, size);
                                 
                 while ((__seqno__ < count || count == 0) && (!__stopped__)) {
@@ -130,7 +131,8 @@
                     err_t err = __ping_send__ (s, &__target__, size);
                     if (err == ERR_OK) {
                         __sent__ ++;
-                        __ping_recv__ (s, 1000000 * timeout);
+                        int bytesReceived;
+                        __ping_recv__ (s, &bytesReceived, 1000000 * timeout);
                         if (pingReplies [s - LWIP_SOCKET_OFFSET].__elapsed_time__) { // > 0, meaning that echo reply packet has been received
                             __received__++;
 
@@ -158,7 +160,7 @@
                         }
 
                         // Reporting of intermediate results 
-                        onReceive ();
+                        onReceive (bytesReceived);
                     } else {
                         __errno__ = err;
                         log_e ("__ping_send__ error %i", err);
@@ -206,7 +208,7 @@
             inline err_t error () __attribute__((always_inline)) { return __errno__; }
 
             // Reporting intermediate results - override (use) these functions if needed
-            virtual void onReceive () {}
+            virtual void onReceive (int bytes) {}
             virtual void onWait () {}
 
 
@@ -287,13 +289,13 @@
             }
 
 
-            err_t __ping_recv__ (int s, unsigned long timeoutMicros) {
+            err_t __ping_recv__ (int s, int *bytes, unsigned long timeoutMicros) {
                 char buf [64];
-                int fromlen, len;
+                int fromlen;
                 struct sockaddr_in from;
                 struct ip_hdr *iphdr;
                 struct icmp_echo_hdr *iecho = NULL;
-                char ipa[INET_ADDRSTRLEN]; 
+                char ipa [INET_ADDRSTRLEN]; 
                 float __elapsed_time__;
                 float last_mean_time;
 
@@ -309,13 +311,13 @@
                     }
 
                     // Read echo packet without waiting
-                    if ((len = recvfrom (s, buf, sizeof (buf), 0, (struct sockaddr*) &from, (socklen_t*) &fromlen)) <= 0) {
+                    if ((*bytes = recvfrom (s, buf, sizeof (buf), 0, (struct sockaddr*) &from, (socklen_t*) &fromlen)) <= 0) {
                         yield ();
                         if ((errno == EAGAIN || errno == ENAVAIL) && (micros () - startMicros < timeoutMicros)) continue; // not time-out yet 
                         return errno; // time-out
                     }
 
-                    if (len < (int) (sizeof(struct ip_hdr) + sizeof (struct icmp_echo_hdr))) {
+                    if (*bytes < (int) (sizeof(struct ip_hdr) + sizeof (struct icmp_echo_hdr))) {
                         log_i ("Echo packet received from %s is too short", ipa);
                         continue;
                     }

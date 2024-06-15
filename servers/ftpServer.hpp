@@ -6,7 +6,7 @@
   
     FTP server reads and executes FTP commands. The transfer of files in active in passive mode is supported but some of the commands may 
 
-    March 12, 2024, Bojan Jurca
+    May 22, 2024, Bojan Jurca
 
     Nomenclature used here for easier understaning of the code:
 
@@ -257,7 +257,7 @@
               // process command line
               if (*ftpCommand) {
 
-                string s = ths->internalFtpCommandHandler (ftpCommand, ftpArgument);
+                cstring s = ths->internalFtpCommandHandler (ftpCommand, ftpArgument);
                 if (ths->__controlConnectionSocket__ == -1) goto endOfConnection; // in case of quit
                 // write the reply
                 if (s != "" && ths->sendFtp (s) <= 0) goto endOfConnection;
@@ -277,7 +277,7 @@
           vTaskDelete (NULL);                
         }
 
-        string internalFtpCommandHandler (char *ftpCommand, char *ftpArgument) {
+        cstring internalFtpCommandHandler (char *ftpCommand, char *ftpArgument) {
 
             #define ftpCommandIs(X) (!strcmp (ftpCommand, X))
 
@@ -301,10 +301,10 @@
             else if (ftpCommandIs ("RNFR"))                                                   return __RNFR__ (ftpArgument);
             else if (ftpCommandIs ("RNTO"))                                                   return __RNTO__ (ftpArgument);
 
-            else return string ("502 command ") + ftpCommand + " not implemented\r\n";
+            else return cstring ("502 command ") + ftpCommand + " not implemented\r\n";
         }
 
-        string __QUIT__ ()  {
+        cstring __QUIT__ ()  {
             // report client we are closing connection(s)
             sendFtp ((char *) "221 closing connection\r\n");
             closeControlConnection ();
@@ -312,17 +312,17 @@
             return "";
         }
 
-        string __OPTS__ (char *opts) { // enable UTF8
+        cstring __OPTS__ (char *opts) { // enable UTF8
             if (!strcmp (opts, "UTF8 ON"))  return "200 UTF8 enabled\r\n"; // by default, we don't have to do anything, just report to the client that it is ok to use UTF-8
                                             return "502 OPTS arguments not supported\r\n";
         }
 
-        string __USER__ (char *userName) { // save user name and require password
+        cstring __USER__ (char *userName) { // save user name and require password
             if (strlen (userName) < sizeof (__userName__)) strcpy (__userName__, userName);
             return "331 enter password\r\n";
         }
 
-        string __PASS__ (char *password) { // login
+        cstring __PASS__ (char *password) { // login
           if (!userManagement.checkUserNameAndPassword (__userName__, password)) { 
               #ifdef __DMESG__
                   dmesgQueue << "[ftpControlConnection] user failed login attempt: " << __userName__;
@@ -336,14 +336,14 @@
               strcpy (__workingDir__, __homeDir__);
 
               // remove extra /
-              string s (__homeDir__);
+              cstring s (__homeDir__);
               if (s [s.length () - 1] == '/') s [s.length () - 1] = 0; 
               if (!s [0]) s = "/"; 
 
               #ifdef __DMESG__
                   dmesgQueue << "[ftpControlConnection] user logged in: " << __userName__;
               #endif
-              return string ("230 logged on, your home directory is \"") + s + "\"\r\n";
+              return cstring ("230 logged on, your home directory is \"") + s + "\"\r\n";
           } else { 
               #ifdef __DMESG__
                   dmesgQueue << "[ftpControlConnection] user does not have a home directory: " << __userName__;
@@ -353,28 +353,28 @@
         }
 
         bool ftpUserHasRightToAccessFile (char *fullPath) { return strstr (fullPath, __homeDir__) == fullPath; }
-        bool ftpUserHasRightToAccessDirectory (char *fullPath) { return ftpUserHasRightToAccessFile (string (fullPath) + "/"); }
+        bool ftpUserHasRightToAccessDirectory (char *fullPath) { return ftpUserHasRightToAccessFile (cstring (fullPath) + "/"); }
 
-        string __CWD__ (char *directoryName) { 
+        cstring __CWD__ (char *directoryName) { 
             if (!*__homeDir__)                                                              return "530 not logged in\r\n";
             if (!fileSystem.mounted ())                                                     return "421 file system not mounted\r\n";
-            string fp = fileSystem.makeFullPath (directoryName, __workingDir__);
+            cstring fp = fileSystem.makeFullPath (directoryName, __workingDir__);
             if (fp == "" || !fileSystem.isDirectory (fp))                                   return "501 invalid directory name\r\n";
             if (!ftpUserHasRightToAccessDirectory (fp))                                     return "550 access denyed\r\n";
 
             // shoud be OK but check anyway:
-            if (fp.length () < sizeof (__workingDir__)) strcpy (__workingDir__, fp);        return string ("250 your working directory is ") + fp + "\r\n";
+            if (fp.length () < sizeof (__workingDir__)) strcpy (__workingDir__, fp);        return cstring ("250 your working directory is ") + fp + "\r\n";
         }
 
-        string __XPWD__ () { 
+        cstring __XPWD__ () { 
             if (!*__homeDir__)                                                              return "530 not logged in\r\n";
             if (!fileSystem.mounted ())                                                     return "421 file system not mounted\r\n";
 
             // remove extra /
-            string s (__workingDir__);
+            cstring s (__workingDir__);
             if (s [s.length () - 1] == '/') s [s.length () - 1] = 0; 
             if (!s [0]) s = "/"; 
-                                                                                            return string ("257 \"") + s + "\"\r\n";
+                                                                                            return cstring ("257 \"") + s + "\"\r\n";
         }
   
         const char *__TYPE__ (char *ftpType) {                                              return "200 ok\r\n"; } // just say OK to whatever type it is
@@ -383,17 +383,17 @@
 
         const char *__SYST__ () {                                                           return "215 UNIX Type: L8\r\n"; } // just say this is UNIX OS
 
-        string __SIZE__ (char *fileName) { 
+        cstring __SIZE__ (char *fileName) { 
             if (!*__homeDir__)                                                              return "530 not logged in\r\n";
             if (!fileSystem.mounted ())                                                     return "421 file system not mounted\r\n";
-            string fp = fileSystem.makeFullPath (fileName, __workingDir__);
+            cstring fp = fileSystem.makeFullPath (fileName, __workingDir__);
             if (fp == "" || !fileSystem.isFile (fp))                                        return "501 invalid file name\r\n";
             if (!ftpUserHasRightToAccessFile (fp))                                          return "550 access denyed\r\n";
 
             unsigned long fSize = 0;
             File f = fileSystem.open (fp, "r");
             if (f) { fSize = f.size (); f.close (); }
-                                                                                            return string ("213 ") + string (fSize) + "\r\n";
+                                                                                            return cstring ("213 ") + cstring (fSize) + "\r\n";
         }
 
         const char *__PORT__ (char *dataConnectionInfo) { 
@@ -518,7 +518,7 @@
 
           // everything is ready now to accept a connection from FTP client, we have to tell it how to connect
               
-          string s;
+          cstring s;
           s +="227 entering passive mode (";
           s += ip1;
           s += ",";
@@ -576,7 +576,7 @@
         const char *__NLST__ (char *directoryName) { 
             if (!*__homeDir__)                            { closeDataConnection ();         return "530 not logged in\r\n"; }
             if (!fileSystem.mounted ())                   { closeDataConnection ();         return "421 file system not mounted\r\n"; }
-            string fp = fileSystem.makeFullPath (directoryName, __workingDir__);
+            cstring fp = fileSystem.makeFullPath (directoryName, __workingDir__);
             if (fp == "" || !fileSystem.isDirectory (fp)) { closeDataConnection ();         return "501 invalid directory name\r\n"; }
             if (!ftpUserHasRightToAccessDirectory (fp))   { closeDataConnection ();         return "550 access denyed\r\n"; }
 
@@ -588,7 +588,7 @@
                 File d = fileSystem.open (fp); 
                 if (d) {
                     for (File f = d.openNextFile (); f; f = d.openNextFile ()) {
-                        string fullFileName = fp;
+                        cstring fullFileName = fp;
                         if (fullFileName [fullFileName.length () - 1] != '/') fullFileName += '/'; fullFileName += f.name ();
                         int i = sendAll (__dataConnectionSocket__, fileSystem.fileInformation (fullFileName) + "\r\n", FTP_DATA_CONNECTION_TIME_OUT);
                         if (i <= 0) { bytesWritten = -1; break; } // remember the error
@@ -605,7 +605,7 @@
         const char * __RETR__ (char *fileName) { 
             if (!*__homeDir__)                          { closeDataConnection ();           return "530 not logged in\r\n"; }
             if (!fileSystem.mounted ())                 { closeDataConnection ();           return "421 file system not mounted\r\n"; }
-            string fp = fileSystem.makeFullPath (fileName, __workingDir__);
+            cstring fp = fileSystem.makeFullPath (fileName, __workingDir__);
             if (fp == "" || !fileSystem.isFile (fp))    { closeDataConnection ();           return "501 invalid file name\r\n"; }
             if (!ftpUserHasRightToAccessFile (fp))      { closeDataConnection ();           return "550 access denyed\r\n"; }
 
@@ -642,7 +642,7 @@
         const char *__STOR__ (char *fileName) { 
           if (!*__homeDir__)                           { closeDataConnection ();            return "530 not logged in\r\n"; }
           if (!fileSystem.mounted ())                  { closeDataConnection ();            return "421 file system not mounted\r\n"; }
-          string fp = fileSystem.makeFullPath (fileName, __workingDir__);
+          cstring fp = fileSystem.makeFullPath (fileName, __workingDir__);
           if (fp == "" || fileSystem.isDirectory (fp)) { closeDataConnection ();            return "501 invalid file name\r\n"; }
           if (!ftpUserHasRightToAccessFile (fp))       { closeDataConnection ();            return "550 access denyed\r\n"; }
 
@@ -680,7 +680,7 @@
         const char *__XMKD__ (char *directoryName) { 
             if (!*__homeDir__)                                                              return "530 not logged in\r\n";
             if (!fileSystem.mounted ())                                                     return "421 file system not mounted\r\n"; 
-            string fp = fileSystem.makeFullPath (directoryName, __workingDir__);
+            cstring fp = fileSystem.makeFullPath (directoryName, __workingDir__);
             if (fp == "")                                                                   return "501 invalid directory name\r\n"; 
             if (!ftpUserHasRightToAccessDirectory (fp))                                     return "550 access denyed\r\n"; 
     
@@ -691,7 +691,7 @@
         const char *__XRMD__ (char *fileOrDirName) { 
             if (!*__homeDir__)                                                              return "530 not logged in\r\n";
             if (!fileSystem.mounted ())                                                     return "421 file system not mounted\r\n"; 
-            string fp = fileSystem.makeFullPath (fileOrDirName, __workingDir__);
+            cstring fp = fileSystem.makeFullPath (fileOrDirName, __workingDir__);
             if (fp == "")                                                                   return "501 invalid file or directory name\r\n"; 
             if (!ftpUserHasRightToAccessDirectory (fp))                                     return "550 access denyed\r\n"; 
 
@@ -714,7 +714,7 @@
             __rnfrIs__ = ' ';
             if (!*__homeDir__)                                                              return "530 not logged in\r\n";
             if (!fileSystem.mounted ())                                                     return "421 file system not mounted\r\n"; 
-            string fp = fileSystem.makeFullPath (fileOrDirName, __workingDir__);
+            cstring fp = fileSystem.makeFullPath (fileOrDirName, __workingDir__);
             if (fp == "")                                                                   return "501 invalid file or directory name\r\n"; 
             if (fileSystem.isDirectory (fp)) {
                 if (!ftpUserHasRightToAccessDirectory (fp))                                 return "550 access denyed\r\n"; 
@@ -736,7 +736,7 @@
         const char *__RNTO__ (char *fileOrDirName) { 
           if (!*__homeDir__)                                                                return "530 not logged in\r\n";
           if (!fileSystem.mounted ())                                                       return "421 file system not mounted\r\n"; 
-          string fp = fileSystem.makeFullPath (fileOrDirName, __workingDir__);
+          cstring fp = fileSystem.makeFullPath (fileOrDirName, __workingDir__);
           if (fp == "")                                                                     return "501 invalid file or directory name\r\n"; 
           if (__rnfrIs__ == 'd') {
             if (!ftpUserHasRightToAccessDirectory (fp))                                     return "550 access denyed\r\n"; 

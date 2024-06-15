@@ -4,7 +4,7 @@
     
     This file is part of Multitasking Esp32 HTTP FTP Telnet servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
     
-    March 12, 2024, Bojan Jurca
+    May 22, 2024, Bojan Jurca
 
     FFAT or LittleFS for ESP32 built-in flash disk
 
@@ -516,10 +516,10 @@
 
             // makes the full path out of relative path and working directory, for example if working directory is /usr and relative patj is a.txt then full path is /usr/a.txt
 
-            string makeFullPath (const char *relativePath, const char *workingDirectory) { 
+            cstring makeFullPath (const char *relativePath, const char *workingDirectory) { 
                 char *p = relativePath [0] ? (char *) relativePath : (char *) "/"; // relativePath should never be empty
 
-                string s;
+                cstring s;
                 if (p [0] == '/') { // if path begins with / then it is already supposed to be fullPath
                     s = p; 
                 } else if (!strcmp (p, ".")) { // . means the working directory
@@ -579,15 +579,15 @@
 
             // returns information about file or directory in UNIX like text line
 
-            string fileInformation (const char *fileOrDirectory, bool showFullPath = false) { // returns UNIX like text with file information
-                string s;
+            cstring fileInformation (const char *fileOrDirectory, bool showFullPath = false) { // returns UNIX like text with file information
+                cstring s;
                 File f = open (fileOrDirectory, "r");
                 if (f) { 
                     unsigned long fSize = 0;
                     struct tm fTime = {};
                     time_t lTime = f.getLastWrite ();
                     localtime_r (&lTime, &fTime);
-                    sprintf (s.c_str (), "%crw-rw-rw-   1 root     root          %7lu ", f.isDirectory () ? 'd' : '-', f.size ());  // string = Cstring<350> so we have enough space
+                    sprintf (s.c_str (), "%crw-rw-rw-   1 root     root          %7lu ", f.isDirectory () ? 'd' : '-', f.size ());  // cstring = Cstring<350> so we have enough space
                     strftime (s.c_str () + strlen (s.c_str ()), 25, " %b %d %H:%M      ", &fTime);  
                     if (showFullPath || !strcmp (fileOrDirectory, "/")) {
                         s += fileOrDirectory;

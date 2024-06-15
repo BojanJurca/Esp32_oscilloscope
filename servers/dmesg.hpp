@@ -8,7 +8,7 @@
 
       - Use dmesg telnet command to display messages in the dmesg message queue.
 
-    March 12, 2024, Bojan Jurca
+    May 22, 2024, Bojan Jurca
     
 */
 
@@ -66,7 +66,7 @@
         public:
 
             // constructor - insert the first entries
-            dmesgQueue_t<maxSize> () : threadSafeCircularQueue<dmesgQueueEntry_t, maxSize> () { 
+            dmesgQueue_t () : threadSafeCircularQueue<dmesgQueueEntry_t, maxSize> () { 
 
                 #if CONFIG_FREERTOS_UNICORE // CONFIG_FREERTOS_UNICORE == 1 => 1 core ESP32
                     this->operator<< ("[ESP32] CPU0 reset reason: ") << __resetReason__ (rtc_get_reset_reason (0));

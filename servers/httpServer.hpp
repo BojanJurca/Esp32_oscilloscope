@@ -9,7 +9,7 @@
     a small "database" to keep valid web session tokens in order to support web login. Text and binary WebSocket straming is
     also supported.
   
-    March 12, 2024, Bojan Jurca
+    May 22, 2024, Bojan Jurca
 
     Nomenclature used here for easier understaning of the code:
 
@@ -118,7 +118,7 @@
 
     #endif
 
-    // please note that the limit for getHttpRequestHeaderField and getHttpRequestCookie return values are defined by string #definition in fsString.h
+    // please note that the limit for getHttpRequestHeaderField and getHttpRequestCookie return values are defined by cstring #definition in Cstring.h
 
     #define reply400 "HTTP/1.0 400 Bad request\r\nConnection: close\r\nContent-Length:34\r\n\r\nFormat of HTTP request is invalid."
     #define reply404 "HTTP/1.0 404 Not found\r\nConnection: close\r\nContent-Length:10\r\n\r\nNot found."
@@ -402,14 +402,14 @@
           return NOT_AVAILABLE;
         }
 
-        string readString () { // reads String that arrived from browser (it is a calling program responsibility to check if data type is text)
+        cstring readString () { // reads string that arrived from browser (it is a calling program responsibility to check if data type is text)
                                // returns "" in case of communication error
           while (true) {
             switch (available ()) {
               case WebSocket::NOT_AVAILABLE:  delay (1);
                                               break;
               case WebSocket::STRING:         { 
-                                                string s ((char *) __readBuffer__); 
+                                                cstring s ((char *) __readBuffer__); 
                                                 __readFrameState__ = EMPTY;
                                                 return s;
                                               }
@@ -610,39 +610,39 @@
 
         char *getHttpRequest () { return __httpRequestAndReplyBuffer__; }
 
-        string getHttpRequestHeaderField (const char *fieldName) { // HTTP header fields are in format \r\nfieldName: fieldValue\r\n
-          char *p = stristr (__httpRequestAndReplyBuffer__, fieldName); 
-          if (p && p != __httpRequestAndReplyBuffer__ && *(p - 1) == '\n' && *(p + strlen (fieldName)) == ':') { // p points to fieldName in HTTP request
-            p += strlen (fieldName) + 1; while (*p == ' ') p++; // p points to field value in HTTP request
-            string s; while (*p >= ' ') s += *(p ++);
-            return s;
-          }
-          return "";
+        cstring getHttpRequestHeaderField (const char *fieldName) { // HTTP header fields are in format \r\nfieldName: fieldValue\r\n
+            char *p = stristr (__httpRequestAndReplyBuffer__, fieldName); 
+            if (p && p != __httpRequestAndReplyBuffer__ && *(p - 1) == '\n' && *(p + strlen (fieldName)) == ':') { // p points to fieldName in HTTP request
+                p += strlen (fieldName) + 1; while (*p == ' ') p++; // p points to field value in HTTP request
+                cstring s; while (*p >= ' ') s += *(p ++);
+                return s;
+            }
+            return "";
         }
 
-        string getHttpRequestCookie (const char *cookieName) { // cookies are passed from browser to http server in "cookie" HTTP header field
-          char *p = stristr (__httpRequestAndReplyBuffer__, (char *) "\nCookie:"); // find cookie field name in HTTP header          
-          if (p) {
-            p = strstr (p, cookieName); // find cookie name in HTTP header
-            if (p && p != __httpRequestAndReplyBuffer__ && *(p - 1) == ' ' && *(p + strlen (cookieName)) == '=') {
-              p += strlen (cookieName) + 1; while (*p == ' ' || *p == '=' ) p++; // p points to cookie value in HTTP request
-              string s; while (*p > ' ' && *p != ';') s += *(p ++);
-              return s;
+        cstring getHttpRequestCookie (const char *cookieName) { // cookies are passed from browser to http server in "cookie" HTTP header field
+            char *p = stristr (__httpRequestAndReplyBuffer__, (char *) "\nCookie:"); // find cookie field name in HTTP header          
+            if (p) {
+                p = strstr (p, cookieName); // find cookie name in HTTP header
+                if (p && p != __httpRequestAndReplyBuffer__ && *(p - 1) == ' ' && *(p + strlen (cookieName)) == '=') {
+                    p += strlen (cookieName) + 1; while (*p == ' ' || *p == '=' ) p++; // p points to cookie value in HTTP request
+                    cstring s; while (*p > ' ' && *p != ';') s += *(p ++);
+                    return s;
+                }
             }
-          }
-          return "";
+            return "";
         }
 
         void setHttpReplyStatus (const char *status) { strncpy (__httpReplyStatus__, status, HTTP_REPLY_STATUS_MAX_LENGTH); __httpReplyStatus__ [HTTP_REPLY_STATUS_MAX_LENGTH - 1] = 0; }
         
-        void setHttpReplyHeaderField (string fieldName, string fieldValue) { 
+        void setHttpReplyHeaderField (cstring fieldName, cstring fieldValue) { 
             __httpReplyHeader__ += fieldName;
             __httpReplyHeader__ +=  + ": ";
             __httpReplyHeader__ += fieldValue;
             __httpReplyHeader__ += "\r\n"; 
         }
 
-        void setHttpReplyCookie (string cookieName, string cookieValue, time_t expires = 0, string path = "/") { 
+        void setHttpReplyCookie (cstring cookieName, cstring cookieValue, time_t expires = 0, cstring path = "/") { 
           char e [50] = "";
           if (expires) {
               if (!time ()) { // time not set
@@ -693,11 +693,11 @@
                 webSessionTokenInformation_t webSessionTokenInformation;
                 signed char e = webSessionTokenDatabase.FindValue (webSessionToken, &webSessionTokenInformation);
                 switch (e) {
-                    case OK:        if ((time () && webSessionTokenInformation.expires <= time ()) || webSessionTokenInformation.expires == 0)  
-                                        return "";
-                                    else
-                                        return webSessionTokenInformation.userName;
-                    case            NOT_FOUND: return "";
+                    case err_ok:        if ((time () && webSessionTokenInformation.expires <= time ()) || webSessionTokenInformation.expires == 0)  
+                                            return "";
+                                        else
+                                            return webSessionTokenInformation.userName;
+                    case err_not_found: return "";
                     default:                                
                                     #ifdef __DMESG__
                                         dmesgQueue << "[httpConnection] webSessionTokenDatabase.FindValue error: " << e; 
@@ -738,7 +738,7 @@
         Cstring<HTTP_BUFFER_SIZE> __httpRequestAndReplyBuffer__;
 
         char  __httpReplyStatus__ [HTTP_REPLY_STATUS_MAX_LENGTH] = "200 OK"; // by default
-        string __httpReplyHeader__ = ""; // by default
+        cstring __httpReplyHeader__ = ""; // by default
 
         static void __connectionTask__ (void *pvParameters) {
           // get "this" pointer
@@ -871,9 +871,9 @@
                       if (p) {
                         *p = 0;
                         // get file name from HTTP request
-                        string fileName (ths->__httpRequestAndReplyBuffer__.c_str () + 4);
+                        cstring fileName (ths->__httpRequestAndReplyBuffer__.c_str () + 4);
                         if (fileName == "" || fileName == "/") fileName = "/index.html";
-                        fileName = string (ths->__httpServerHomeDirectory__) + (fileName.c_str () + 1); // __httpServerHomeDirectory__ always ends with /
+                        fileName = cstring (ths->__httpServerHomeDirectory__) + (fileName.c_str () + 1); // __httpServerHomeDirectory__ always ends with /
 
                         // if Content-type was not provided during __httpRequestHandlerCallback__ try guessing what it is
                         if (!stristr ((char *) ths->__httpReplyHeader__.c_str (), (char *) "CONTENT-TYPE")) { 

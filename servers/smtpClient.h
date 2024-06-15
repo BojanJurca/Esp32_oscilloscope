@@ -4,7 +4,7 @@
  
     This file is part of Multitasking Esp32 HTTP FTP Telnet servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
   
-    March 12, 2024, Bojan Jurca
+    May 22, 2024, Bojan Jurca
 
 */
 
@@ -12,6 +12,7 @@
     // ----- includes, definitions and supporting functions -----
 
     #include <WiFi.h>
+    #include <lwip/netdb.h>
     // base64 encoding
     #include <mbedtls/base64.h>
     // fixed size strings
@@ -23,7 +24,7 @@
 
     // ----- functions and variables in this modul -----
 
-    string sendMail (const char *, const char *, const char *, const char *, const char *, const char *, int, const char *);
+    cstring sendMail (const char *, const char *, const char *, const char *, const char *, const char *, int, const char *);
     
     
     // TUNNING PARAMETERS
@@ -43,7 +44,7 @@
 
 
     // sends message, returns error or success text (from SMTP server)
-    string __sendMail__ (const char *message, const char *subject, const char *to, const char *from, const char *password, const char *userName, int smtpPort, const char *smtpServer) {
+    cstring __sendMail__ (const char *message, const char *subject, const char *to, const char *from, const char *password, const char *userName, int smtpPort, const char *smtpServer) {
 
       // get server address
       struct hostent *he = gethostbyname (smtpServer);
@@ -334,7 +335,7 @@
   }
 
   // sends message, returns error or success text, fills empty parameters with the ones from configuration file /etc/mail/sendmail.cf
-  string sendMail (const char *message = "", const char *subject = "", const char *to = "", const char *from = "", const char *password = "", const char *userName = "", int smtpPort = 0, const char *smtpServer = "") {
+  cstring sendMail (const char *message = "", const char *subject = "", const char *to = "", const char *from = "", const char *password = "", const char *userName = "", int smtpPort = 0, const char *smtpServer = "") {
 
     #ifdef __FILE_SYSTEM__
         if (fileSystem.mounted ()) { 

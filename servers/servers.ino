@@ -12,14 +12,33 @@
 #define TZ "CET-1CEST,M3.5.0,M10.5.0/3" // default: Europe/Ljubljana or choose another (POSIX) time zone from: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
 
 // uncomment one of the tests at a time
+// #define DBG
 // #define TEST_DMESG
- // #define TEST_FS
+// #define TEST_FS
 // #define TEST_FTP
 // #define TEST_TELNET
 // #define TEST_SMTP_CLIENT
 // #define TEST_USER_MANAGEMENT
 // #define TEST_TIME_FUNCTIONS
- #define TEST_HTTP_SERVER_AND_CLIENT
+#define TEST_HTTP_SERVER_AND_CLIENT
+
+
+#ifdef DBG
+
+    void setup () {
+        Serial.begin (115200);
+        delay (3000);
+        Serial.println ("DBG ...");
+
+    }
+
+    void loop () {
+      
+    }
+
+#endif 
+
+
 
 
 #ifdef TEST_DMESG // TEST_DMESG TEST_DMESG TEST_DMESG TEST_DMESG TEST_DMESG TEST_DMESG TEST_DMESG TEST_DMESG TEST_DMESG TEST_DMESG 
@@ -68,7 +87,7 @@
     // #define FILE_SYSTEM (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD) // FILE_SYSTEM_FAT or FILE_SYSTEM_LITTLEFS optionally bitwise combined with FILE_SYSTEM_SD_CARD
     #define FILE_SYSTEM FILE_SYSTEM_LITTLEFS
     #include "fileSystem.hpp"
-    #include "network.h"
+    #include "netwk.h"
     #include "telnetServer.hpp"
     #include "ftpServer.hpp"
     #include "httpServer.hpp"
@@ -105,9 +124,8 @@
     #include "dmesg.hpp"
     #include "fileSystem.hpp"
     #include "time_functions.h"
-    #include "network.h"
+    #include "netwk.h"
     #include "userManagement.hpp"
-  
     #include "ftpServer.hpp"
     #include "ftpClient.h"
 
@@ -152,16 +170,16 @@
   
       #define FILE_SYSTEM FILE_SYSTEM_LITTLEFS // FILE_SYSTEM_FAT or FILE_SYSTEM_LITTLEFS optionally bitwise combined with FILE_SYSTEM_SD_CARD: (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD) 
  
+      #include "std/console.hpp"
       #include "dmesg.hpp"
       #include "fileSystem.hpp"
-      #include "network.h"
+      #include "netwk.h"
       #include "time_functions.h"
       #include "httpClient.h"
       #include "ftpClient.h"
       #include "smtpClient.h"
       #define USER_MANAGEMENT NO_USER_MANAGEMENT // NO_USER_MANAGEMENT // UNIX_LIKE_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
       #include "userManagement.hpp"
-
       #include "telnetServer.hpp"
 
   String telnetCommandHandlerCallback (int argc, char *argv [], telnetConnection *tcn) {
@@ -192,8 +210,7 @@
   telnetServer *myTelnetServer; 
 
   void setup () {
-    delay (3000);
-    Serial.begin (115200); Serial.printf ("\r\n\r\n\r\n\r\n");
+    cinit ();
 
     // fileSystem.formatFAT ();
     fileSystem.mountLittleFs (true); // fileSystem.mountFAT (true);
@@ -206,16 +223,15 @@
     startCronDaemon (NULL);
 
     myTelnetServer = new telnetServer (telnetCommandHandlerCallback, "0.0.0.0", 23, firewall);
-    if (myTelnetServer->state () != telnetServer::RUNNING) {
-      Serial.printf (":(\n");
-    } else {
-      Serial.printf (":)\n");
-    }
-    
+    if (myTelnetServer && myTelnetServer->state () == telnetServer::RUNNING) // check if server instance creation succeded && the server is running as it should
+        cout << ":)\n";
+    else
+        cout << ":(\n";
   }
 
   void loop () {
-
+      // cout << ".\n";
+      // delay (1000);
   }
 
 #endif // TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET 
@@ -227,7 +243,7 @@
 #ifdef TEST_SMTP_CLIENT // TEST_SMTP_CLIENT TEST_SMTP_CLIENT TEST_SMTP_CLIENT TEST_SMTP_CLIENT TEST_SMTP_CLIENT TEST_SMTP_CLIENT TEST_SMTP_CLIENT 
 
   #include "fileSystem.hpp"
-  #include "network.h"
+  #include "netwk.h"
   #include "smtpClient.h"
   
   void setup () {
@@ -294,8 +310,7 @@
     #define TIMEZONE "CET-1CEST,M3.5.0,M10.5.0/3" // Europe/Ljubljana, all time zones: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
 
     #include "fileSystem.hpp" // include fileSystem.hpp if you want cronDaemon to access /etc/ntp.conf and /etc/crontab
-    #include "network.h"
-
+    #include "netwk.h"
     #include "time_functions.h"
 
 
@@ -394,7 +409,7 @@
 
   #include "dmesg.hpp"
   #include "fileSystem.hpp" // include fileSystem.hpp if you want httpServer to server .html and other files as well
-  #include "network.h"
+  #include "netwk.h"
   #include "httpServer.hpp"
   #include "httpClient.h"
   #include "oscilloscope.h"
@@ -420,9 +435,9 @@
 
     if (httpRequestStartsWith ("GET / ")) {
                                             // play with cookies
-                                            string s = hcn->getHttpRequestCookie ((char *) "refreshCount");
+                                            cstring s = hcn->getHttpRequestCookie ((char *) "refreshCount");
                                             Serial.printf ("This page has been refreshed %s times\n", s);
-                                            hcn->setHttpReplyCookie ("refreshCount", string (atoi (s) + 1));
+                                            hcn->setHttpReplyCookie ("refreshCount", cstring (atoi (s) + 1));
                                             // return large HTML reply from memory (9 KB in this case)
                                             return F("<html>\n"
                                                      "  <head>\n"

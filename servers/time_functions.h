@@ -6,7 +6,7 @@
 
     Cron daemon synchronizes the time with NTP server accessible from internet once a day.
 
-    March 12, 2024, Bojan Jurca
+    May 22, 2024, Bojan Jurca
 
     Nomenclature used in time_functions.h - for easier understaning of the code:
 
@@ -23,11 +23,12 @@
     // ----- includes, definitions and supporting functions -----
 
     #include <WiFi.h>
+    #include <lwip/netdb.h>
     #include <time.h>
     #include <lwip/netdb.h>
     #include "std/Cstring.hpp"
     #include "std/console.hpp"
-    #include "network.h"
+    #include "netwk.h"
 
 
 #ifndef __TIME_FUNCTIONS__
@@ -59,7 +60,7 @@
     struct tm localTime (time_t);
     char *ascTime (const struct tm, char *);
     time_t getUptime ();
-    char *ntpDate (char *);
+    char *ntpDate (const char *);
     char *ntpDate ();
     bool cronTabAdd (uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, const char *, bool);
     bool cronTabAdd (const char *, bool);
@@ -111,7 +112,7 @@
     char __ntpServer3__ [255] = DEFAULT_NTP_SERVER_3; // DNS host name may have max 253 characters 
   
     // synchronizes time with NTP server, returns error message
-    char *ntpDate (char *ntpServer) {
+    char *ntpDate (const char *ntpServer) {
         if (WiFi.localIP ().toString () == "0.0.0.0") {
             #ifdef __DMESG__
                 dmesgQueue << "[NTP] not connected to WiFi";

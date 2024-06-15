@@ -3,7 +3,7 @@
  * 
  * This file is part of Multitasking Esp32 HTTP FTP Telnet servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
  * 
- *  Bojan Jurca, May 1, 2024
+ *  May 22, 2024, Bojan Jurca
  * 
  */
 

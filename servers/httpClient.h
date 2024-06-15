@@ -6,7 +6,7 @@
   
     HTTP client combines a HTTP request from server, page and method and returns a HTTP reply or "" if there is none.
   
-    March 12, 2024, Bojan Jurca
+    May 22, 2024, Bojan Jurca
 
 */
 
@@ -14,6 +14,7 @@
     // ----- includes, definitions and supporting functions -----
 
     #include <WiFi.h>
+    #include <lwip/netdb.h>
     // fixed size strings
     #include "std/Cstring.hpp"
     
@@ -68,7 +69,7 @@
       // construct and send minimal HTTP request (or almost minimal, IIS for example, requires Host field)
       char serverIP [46];
       inet_ntoa_r (serverAddress.sin_addr, serverIP, sizeof (serverIP));
-      string httpRequest;
+      cstring httpRequest;
       httpRequest += httpMethod;
       httpRequest += " ";
       httpRequest += httpAddress;
