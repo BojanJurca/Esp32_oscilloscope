@@ -414,10 +414,10 @@ void setup () {
 
     // disable watchdog if you can afford it - watchdog gets occasionally triggered when loaded heavily
     #if CONFIG_FREERTOS_UNICORE // CONFIG_FREERTOS_UNICORE == 1 => 1 core ESP32
-        disableCore0WDT ();     
+        // disableCore0WDT ();     
     #else // CONFIG_FREERTOS_UNICORE == 0 => 2 core ESP32
-        disableCore0WDT ();     
-        disableCore1WDT (); 
+        // disableCore0WDT ();     
+        // disableCore1WDT (); 
     #endif
 
 
