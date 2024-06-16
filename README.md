@@ -3,7 +3,7 @@
 
 ## The latest changes
 
-The latest changes are support for ESP32-S2, ESP32-S3 and ESP32-C3 boards (beside already supported ESP32, but most of ESP32 boards should also just work). The prefered method for analog sampling still remains the I2S interface, if it exists.
+The latest changes are mainly about porting the code to IDF 5.x. If you are looking for code that runs on IDF 4.x please, download the release v2.04.
 
 
 **Demo ESP32 oscilloscope is available at [http://jurca.dyn.ts.si/oscilloscope.html](http://jurca.dyn.ts.si/oscilloscope.html).**
@@ -15,11 +15,6 @@ The latest changes are support for ESP32-S2, ESP32-S3 and ESP32-C3 boards (besid
 Esp32 oscilloscope takes up to 736 samples per screen but the sampling rate may not be completely constant all the time since there are other processes, (beside the sampling process itself, especially if you are using Esp32 oscilloscope as a part of other projects) running at the same time. ESP32 may also not always be able to keep up with the desired sampling frequency.
 
 Esp32 oscilloscope displays the samples as they are taken which may not be exatly the signal as it is on its input GPIO. The samples are represented by digital values 0 and 1 or analog values from 0 to 4095 which corresponds to 0 V to 3.3 V.
-
-
-Thanks to [gin66](https://github.com/BojanJurca/Esp32_oscilloscope/issues/19) you can even monitor signals on GPIOs that were configured for OUTPUT or PWM.
-
-
 
 You are welcome to modify oscilloscope.html to match your needs, meaning, specify which GPIOs are actually used as digital inputs and which as analog inputs, to make some sense of what signals you are about to monitor.
 
@@ -33,13 +28,13 @@ ESP32 oscilloscope was first meant to be just a demonstration of the Multitaskin
 
 2. Open Esp32_oscilloscope.ino with Arduino IDE.
 
-3. Find and change YOUR-STA-SSID to your WiFi SSID and YOUR-STA-PASSWORD to your WiFi password.
+3. Find and change YOUR-STA-SSID to your WiFi SSID and YOUR-STA-PASSWORD in Esp32_servers_config.h file to your WiFi SSID and password.
 
-4. Oscilloscope uses FAT file system so select one of FATFS partition schemas (Tools | Partition scheme | ...).
+4. Oscilloscope uses LittleFS file system so select one of SPIFFS partition schemas (Tools | Partition scheme | ...).
 
-Some ESP32 boards do not have a flash disk. In this case just comment out the line #define FILE_SYSTEM  FILE_SYSTEM_FAT and ESP32 oscilloscope will use progmem instead of the file system to store the oscilloscope.html file.
+Some ESP32 boards do not have a flash disk. In this case just comment out the line #define FILE_SYSTEM FILE_SYSTEM_LITTLEFS and ESP32 oscilloscope will use progmem instead of the file system to store the oscilloscope.html file.
 
-5. Compile the sketch and run it on your ESP32 for the first time. Doing this, ESP32 flash memory will be formatted with the FAT file system. WARNING: every information you have stored into ESP32s flash memory will be lost.
+5. Compile the sketch and run it on your ESP32 for the first time. Doing this, ESP32 flash disk will be formatted with the LittleFS file system. WARNING: every information you have stored into ESP32s flash memory will be lost.
 
 6. FTP to your ESP32 (By using ftp command line utility or Windows explorer. User name and password are not required) and upload the following files to /var/www/html directory:
 
