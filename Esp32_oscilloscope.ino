@@ -1,132 +1,226 @@
 /*
 
-  Esp32_oscilloscope.ino
+    Esp32_oscilloscope.ino
 
-   This file is part of Esp32_oscilloscope project: https://github.com/BojanJurca/Esp32_oscilloscope
-   Esp32 oscilloscope is also fully included in Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
-  
-   Esp32 oscilloscope is built upon Esp32_web_ftp_telnet_server_template. As a stand-alone project it uses only those 
-   parts of Esp32_web_ftp_telnet_sfileserver_template that are necessary to run Esp32 oscilloscope.
+    This file is part of the Esp32_oscilloscope project:
+    https://github.com/BojanJurca/Esp32_oscilloscope
 
-   See https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template for details on how the servers work.
+    The ESP32 oscilloscope is also fully included in the
+    Esp32_web_ftp_telnet_server_template project:
+    https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
 
-   Copy all files in the package into Esp32_oscilloscope directory, compile them with Arduino (with FAT partition scheme) and run on ESP32.
-   
-  May 22, 2024, Bojan Jurca
+    The oscilloscope is built on top of the Esp32_web_ftp_telnet_server_template.
+    When used as a stand‑alone project, it includes only the components required
+    for running the oscilloscope functionality.
+
+    For details on how the servers operate, see:
+    https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+
+
+    The oscilloscope uses the ESP32_Multitasking_Network_Suite Arduino library:
+    https://github.com/BojanJurca/Multitasking-Http-Ftp-Telnet-Ntp-Smtp-Servers-and-clients-for-ESP32-Arduino-Library
+
+    and its dependencies:
+        - ThreadSafeFS
+          https://github.com/BojanJurca/Thread-safe-file-sytem-wrapper-Arduino-library-for-ESP32
+        - LightweightSTL
+          https://github.com/BojanJurca/Lightweight-Standard-Template-Library-STL-for-Arduino
+
+    The library can be installed through the Arduino IDE or directly from GitHub.
+    If you intend to use the HTTPS server instead of the HTTP server,
+    you will also need the WolfSSL library.
+
+
+    May 22, 2026, Bojan Jurca
 
 */
 
-// Compile this code with Arduino for one of ESP32 boards (Tools | Board) and one of FAT partition schemes (Tools | Partition scheme)!
+
+#define USE_FILE_SYSTEM // comment-out this definition if you don't have a file system, in this case oscilloscope.html page will be served from memory  
+
 
 #include <WiFi.h>
 
-#include "servers/std/Cstring.hpp"
-//#include "servers/std/Map.hpp"
-#include "servers/std/console.hpp"
 
-#include "Esp32_servers_config.h"
-
- 
-// ----- HTTP request handler example - if you don't want to handle HTTP requests just delete this function and pass NULL to httpSrv instead of its address -----
-//       normally httpRequest is HTTP request, function returns a reply in HTML, json, ... formats or "" if request is unhandeled by httpRequestHandler
-//       httpRequestHandler is supposed to be used with smaller replies,
-//       if you want to reply with larger pages you may consider FTP-ing .html files onto the file system (into /var/www/html/ directory)
+// Configure the servers you want to use in server_config.h before including their header files.
+#include "server_config.h" // first inclusion - configuration part
 
 
-#ifndef FILE_SYSTEM
-    #include "oscilloscope_amber.h" // use RAM version
+#include <ostream.hpp>          // convenience wrapper for using cout instead of Serial.print
+#include <Cstring.hpp>          // C-style strings with C++ operators that reside on the stack (no heap allocation)
+
+
+#ifdef USE_FILE_SYSTEM
+    // Arduino library: ThreadSafeFS
+    // https://github.com/BojanJurca/Thread-safe-file-sytem-wrapper-Arduino-library-for-ESP32
+    #include <LittleFS.h>               // or SPIFFS or FFat, ...
+    #include <threadSafeFS.h>           // thread-safe wrapper file system wrapper
+    threadSafeFS::FS TSFS (LittleFS);   // use thread-safe wrapper arround selected LittleFS
+    using File = threadSafeFS::File;    // use thread-safe wrapper for all file operations in your code from now on
+#else
+    #include "amber_oscilloscope_html.h"     // use RAM version
 #endif
 
-String httpRequestHandler (char *httpRequest, httpConnection *hcn) { 
 
-    #define httpRequestStartsWith(X) (strstr(httpRequest,X)==httpRequest)
+// Create the default configuration files and read from them
+#include "server_config.h" // second inclusion - implementation part
 
 
-    #ifdef __OSCILLOSCOPE__
+#include <httpServer.h>
+    httpServer_t *httpServer = NULL;
 
-        #ifdef __FILE_SYSTEM__
+// Include oscilloscope
+// #define USE_I2S_INTERFACE             // I2S interface improves web based oscilloscope analog sampling (of a single signal) if ESP32 board has one
+// check INVERT_ADC1_GET_RAW and INVERT_I2S_READ #definitions in oscilloscope.h if the signals are inverted
+#include "oscilloscope.h"
 
-            // if HTTP request is GET /oscilloscope.html HTTP server will fetch the file but let us redirect GET / and GET /index.html to it as well
-            if (httpRequestStartsWith ("GET / ") || httpRequestStartsWith ("GET /index.html ")) {
-                hcn->setHttpReplyHeaderField ("Location", "/oscilloscope.html");
-                hcn->setHttpReplyStatus ((char *) "307 temporary redirect"); // change reply status to 307 and set Location so client browser will know where to go next
-                return "Redirecting ..."; // whatever
-            }
 
-        #else
+#ifdef USE_FILE_SYSTEM
+    #include <ftpServer.h>
+        ftpServer_t *ftpServer = NULL;
+#endif
 
-            if (httpRequestStartsWith ("GET / ") || httpRequestStartsWith ("GET /index.html ") || httpRequestStartsWith ("GET /oscilloscope.html ")) {
-                return F (oscilloscope_amber);  
-            }
 
-        #endif
+#ifdef USE_mDNS
+    #include <ESPmDNS.h>
+#endif
 
+
+// ----- handle HTTP requests -----
+
+String httpRequestHandlerCallback (const char *httpRequest, httpServer_t::httpConnection_t *hcn) { 
+
+    // Must be reentrant !!!
+
+
+    #define httpRequestIs(X) (strstr(httpRequest,X)==httpRequest)
+
+    #ifdef USE_FILE_SYSTEM
+        // if HTTP request is GET /oscilloscope.html HTTP server will fetch the file but let us redirect GET / and GET /index.html to it as well
+        if (httpRequestIs ("GET / ") || httpRequestIs ("GET /index.html ")) {
+            hcn->setHttpReplyHeaderField ("Location", "/oscilloscope.html");
+            hcn->setHttpReplyStatus ("307 temporary redirect"); // change reply status to 307 and set Location so client browser will know where to go next
+            return "Redirecting ..."; // whatever
+        }
+    #else
+        if (httpRequestIs ("GET / ") || httpRequestIs ("GET /index.html ") || httpRequestIs ("GET /oscilloscope.html ")) {
+            return amber_oscilloscope_html;
+        }
     #endif
-                                                                    
 
     return ""; // httpRequestHandler did not handle the request - tell httpServer to handle it internally by returning "" reply
 }
 
 
-void wsRequestHandler (char *wsRequest, WebSocket *webSocket) {
-  
-    #define wsRequestStartsWith(X) (strstr(wsRequest,X)==wsRequest)
-    
-    #ifdef __OSCILLOSCOPE__
-          if (wsRequestStartsWith ("GET /runOscilloscope"))      runOscilloscope (webSocket);      // used by oscilloscope.html
-    #endif
+void wsRequestHandlerCallback (const char *httpRequest, httpServer_t::webSocket_t *webSocket) {
 
+    // Must be reentrant !!!
+    
+
+    #define httpRequestIs(X) (strstr(httpRequest,X)==httpRequest)
+    
+    if (httpRequestIs ("GET /runOscilloscope"))      
+        runOscilloscope (webSocket);
 }
 
 
 void setup () {
 
+    // Initialize console output.
+    // Optional arguments: waitForSerial=false, waitAfterSerial=100 ms, serialSpeed=115200.
     cinit ();
-  
-    #ifdef FILE_SYSTEM
-        fileSystem.mountLittleFs (true);                                // this is the first thing to do - all configuration files are on file system
-        // fileSystem.formatLittleFs ();        
+
+    #ifdef USE_FILE_SYSTEM
+        // If a file system is used, mount it now.
+        LittleFS.begin (true);
+        // LittleFS.format (); // start from scratch
     #endif
 
-    // deleteFile ("/etc/ntp.conf");                                    // contains ntp server names for time sync - deleting this file would cause creating default one
-    // deleteFile ("/etc/crontab");                                     // contains cheduled tasks                 - deleting this file would cause creating empty one
-    // startCronDaemon (cronHandler);                                      // creates /etc/ntp.conf with default NTP server names and syncronize ESP32 time with them once a day
-                                                                        // creates empty /etc/crontab, reads it at startup and executes cronHandler when the time is right
-                                                                        // 3 KB stack size is minimal requirement for NTP time synchronization, add more if your cronHandler requires more
-
-    // deleteFile ("/etc/passwd");                                      // contains users' accounts information    - deleting this file would cause creating default one
-    // deleteFile ("/etc/shadow");                                      // contains users' passwords               - deleting this file would cause creating default one
-    // userManagement.initialize ();                                       // creates user management files with root, webadmin, webserver and telnetserver users, if they don't exist
-
-    // deleteFile ("/network/interfaces");                              // contation STA(tion) configuration       - deleting this file would cause creating default one
-    // deleteFile ("/etc/wpa_supplicant/wpa_supplicant.conf");          // contation STA(tion) credentials         - deleting this file would cause creating default one
-    // deleteFile ("/etc/dhcpcd.conf");                                 // contains A(ccess) P(oint) configuration - deleting this file would cause creating default one
-    // deleteFile ("/etc/hostapd/hostapd.conf");                        // contains A(ccess) P(oint) credentials   - deleting this file would cause creating default one
-    startWiFi ();                                                       // starts WiFi according to configuration files, creates configuration files if they don't exist
-
-    // start web server 
-    httpServer *httpSrv = new httpServer (httpRequestHandler,           // a callback function that will handle HTTP requests that are not handled by webServer itself
-                                          wsRequestHandler);            // a callback function that will handle WS requests, NULL to ignore WS requests
-    if (!httpSrv || httpSrv->state () != httpServer::RUNNING) {
-        #ifdef __DMESG__
-            dmesgQueue << "[httpServer] did not start";
-        #endif
-        cout << "[httpServer] did not start";
-    }
-
-    #ifdef FILE_SYSTEM
-        // start FTP server
-        ftpServer *ftpSrv = new ftpServer ();
-        if (!ftpSrv || ftpSrv->state () != ftpServer::RUNNING) {
-            #ifdef __DMESG__
-                dmesgQueue << "[ftpServer] did not start";
+    // Connect to the WiFi router.
+    WiFi.onEvent ([] (WiFiEvent_t event, WiFiEventInfo_t info) {
+        if (event == ARDUINO_EVENT_WIFI_STA_CONNECTED) {
+            cout << "[WiFi][STA] " "connected";
+            #ifdef POWER_SAVING
+                esp_err_t err = esp_wifi_set_ps (POWER_SAVING);
+                if (err == ESP_OK)
+                    cout << "[power saving] " "is on";
+                else
+                    cout << "[power saving] " "couldn't set power saving";
             #endif
-            cout << "[ftpServer] did not start";
+        } else if (event == ARDUINO_EVENT_WIFI_STA_GOT_IP) {
+            cout << "[WiFi][STA] " "got IP address: " << WiFi.localIP ();
+
+            #ifdef USE_mDNS
+                if (MDNS.begin (HOSTNAME))
+                    cout << "[mDNS] started for " << HOSTNAME;
+                else
+                    cout << "[mDNS] did not start";
+                #ifdef USE_FILE_SYSTEM
+                    MDNS.addService ("ftp", "tcp", 21);            
+                #endif
+                MDNS.addService ("http", "tcp", 80);
+            #endif            
         }
+    });
+    // read WiFi settings from configuration files which are stored on TSFS
+    #ifdef USE_FILE_SYSTEM
+        WiFi_start (TSFS); // if not file system is used skip TSFS argument
+    #else
+        WiFi_start ();
+    #endif
+    // if no file system is used call WiFi_start () with no arguments which uses DEFAULT_ ... definitions instead,
+    // or simply call WiFi.begin ("YOUR STA SSID", "YOUR STA PASSWORD");
+
+
+    // Start the HTTP server. To save ~3 KB of RAM, the listener can run inside the
+    // setup/loop task instead of its own task.
+    // In this mode you must call httpServer->accept() manually from loop().
+    #ifdef USE_FILE_SYSTEM
+        httpServer = new (std::nothrow) httpServer_t (TSFS,                         // threadSafeFS::FS& fileSystem,
+                                                      httpRequestHandlerCallback,   // String httpRequestHandlerCallback (const char *httpRequest, httpServer_t::httpConnection_t *hcn) = NULL,
+                                                      wsRequestHandlerCallback);    // void (*wsRequestHandlerCallback) (const char *httpRequest, httpServer_t::webSocket_t *webSck) = NULL,
+                                                                                    // int serverPort = 80,
+                                                                                    // bool (*firewallCallback) (char *clientIP, char *serverIP) = NULL,
+                                                                                    // bool runListenerInItsOwnTask = true
+    #else
+        httpServer = new (std::nothrow) httpServer_t (httpRequestHandlerCallback,   // String httpRequestHandlerCallback (const char *httpRequest, httpServer_t::httpConnection_t *hcn) = NULL,
+                                                      wsRequestHandlerCallback);    // void (*wsRequestHandlerCallback) (const char *httpRequest, httpServer_t::webSocket_t *webSck) = NULL,
+                                                                                    // int serverPort = 80,
+                                                                                    // bool (*firewallCallback) (char *clientIP, char *serverIP) = NULL,
+                                                                                    // bool runListenerInItsOwnTask = true
     #endif
 
+    if (httpServer && *httpServer)
+        cout << "[httpServer] " "started";
+    else
+        cout << "[httpServer] " "did not start";
+
+
+    #ifdef USE_FILE_SYSTEM
+        // Start the FTP server. To save ~3 KB of RAM, the listener can run inside the
+        // setup/loop task instead of its own task.
+        // In this mode you must call ftpServer->accept() manually from loop().
+        ftpServer = new (std::nothrow) ftpServer_t (TSFS);  // threadSafeFS::FS& fileSystem,
+                                                            // Optional arguments:
+                                                            // Cstring<255> (*getUserHomeDirectory) (const Cstring<64>& userName, const Cstring<64>& password) = NULL
+                                                            // int serverPort = 21
+                                                            // bool (*firewallCallback) (char *clientIP, char *serverIP) = NULL
+                                                            // bool runListenerInItsOwnTask = true
+
+        if (ftpServer && *ftpServer)
+            cout << "[ftpServer] " "started";
+        else
+            cout << "[ftpServer] " "did not start";
+    #endif
 }
 
 void loop () {
+    #ifdef USE_FILE_SYSTEM
+        // ftpServer has its own listening task, so accept() is not called here.
+        // if (ftpServer) ftpServer->accept ();
+    #endif
+    // httpServer has its own listening task, so accept() is not called here.
+    // if (httpServer) httpServer->accept ();
+
 
 }

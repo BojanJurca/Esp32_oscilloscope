@@ -1,15 +1,39 @@
-# ESP32 oscilloscope with Web user interface - see the signals the way ESP32 sees them
+# ESP32 Oscilloscope with Web User Interface
+
+
+**Demo ESP32 oscilloscope:**
+
+ - [http://jurca.dyn.ts.si/oscilloscope.html](http://jurca.dyn.ts.si/oscilloscope.html) 
+
+ - [https://jurca.dyn.ts.si/oscilloscope.html](https://jurca.dyn.ts.si/oscilloscope.html)
+
 
 
 ## The latest changes
 
-The latest changes are mainly about porting the code to IDF 5.x. If you are looking for code that runs on IDF 4.x please, download the release v2.04.
+
+The latest release works more smoothly, is more stable, and provides an improved user experience — especially on smartphones.
+
+It no longer includes the HTTP server directly. It now depends on the separate Arduino library **ESP32_Multitasking_Network_Suite**.
+
+You can install the library through the Arduino IDE or download it from GitHub:
 
 
-**Demo ESP32 oscilloscope is available at [http://jurca.dyn.ts.si/oscilloscope.html](http://jurca.dyn.ts.si/oscilloscope.html).**
+- **ESP32_Multitasking_Network_Suite**  
+  https://github.com/BojanJurca/Multitasking-Http-Ftp-Telnet-Ntp-Smtp-Servers-and-clients-for-ESP32-Arduino-Library
+
+  - **ThreadSafeFS**  
+    https://github.com/BojanJurca/Thread-safe-file-sytem-wrapper-Arduino-library-for-ESP32
+
+  - **LightweightSTL**  
+    https://github.com/BojanJurca/Lightweight-Standard-Template-Library-STL-for-Arduino
+
+- **WolfSSL (if HTTPS server is beeing used)**  
+  https://github.com/wolfSSL/Arduino-wolfSSL
 
 
-![Screenshot](oscilloscope.png)
+
+## About the ESP32 oscilloscope
 
 
 Esp32 oscilloscope takes up to 736 samples per screen but the sampling rate may not be completely constant all the time since there are other processes, (beside the sampling process itself, especially if you are using Esp32 oscilloscope as a part of other projects) running at the same time. ESP32 may also not always be able to keep up with the desired sampling frequency.
@@ -22,7 +46,12 @@ You are welcome to modify oscilloscope.html to match your needs, meaning, specif
 ESP32 oscilloscope was first meant to be just a demonstration of the Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino (https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino) capabilities and is still fully included there, but it seems to be better off on its own. Only functionalities necessary for an oscilloscope to work are used here.
 
 
+![Screenshot](oscilloscope.png)
+
+
+
 ## Setup instructions
+
 
 1. Copy all files in this package to the Esp32_oscilloscope directory.
 
@@ -62,6 +91,7 @@ ftp>
 7. Open http://YOUR-ESP32-IP/oscilloscope.html with your browser.
 
 8. If you're getting inverse analog signals, as it happens on some of ESP32 boards, comment or uncomment compiler directives INVERT_ADC1_GET_RAW and/or INVERT_I2S_READ in oscilloscope.h respectively. If your ESP32 board supports i2s interface (like ESP32 DevKitC, NodeMCU-32S, ...) you can also decide if you want to use it (or not). The benefit of using i2s interface is higher sampling frequency and quality of a single analog signal. The drawback, on the other hand, is that you can not use more than one analog oscilloscope at a time.
+
 
 
 ## Things to consider when analogReading GPIOs
